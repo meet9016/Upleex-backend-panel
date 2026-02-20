@@ -68,22 +68,7 @@ if (!fs.existsSync(uploadsDir)) {
 // enable files upload
 
 app.use(express.static(path.resolve("./public")));
-// app.use(express.static(path.resolve("./images")));
-// app.use(uploader({
-//   safeFileNames: true,
-//   preserveExtension: true,
-//   limits: {
-//     fileSize: 2 * 1024 * 1024,
-//   },
-//   abortOnLimit: true,
-//   responseOnLimit: 'File size limit has been reached',
-//   httpErrorCode: 400,
-//   useDateFolder: true,
-//   createParentPath: true
-// }));
 
-// SERVE STATIC FILES - Profile Photos
-// This must come BEFORE routes to handle static files properly
 app.use(
   '/uploads',
   express.static(path.join(process.cwd(), 'uploads'), {
