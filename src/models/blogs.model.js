@@ -3,18 +3,9 @@ const { toJSON } = require('./plugins');
 
 const blogsSchema = mongoose.Schema(
   {
-    exam_name: {
-      type: String,
-      required: true,
-    },
     title: {
       type: String,
       required: true,
-    },
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
     },
     sort_description: {
       type: String,
@@ -31,11 +22,6 @@ const blogsSchema = mongoose.Schema(
     image: {
       type: String,
       // required: true,
-    },
-    status: {
-      type: String,
-      enum: ['Active', 'Inactive'],
-      default: 'Active',
     },
   },
   {

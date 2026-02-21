@@ -8,29 +8,27 @@ const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExte
 const createBlogs = {
     validation: {
         body: Joi.object().keys({
-            exam_name: Joi.string().trim().required(),
             title: Joi.string().trim().required(),
-            slug: Joi.string().trim().required(),
             sort_description: Joi.string().trim().required(),
             long_description: Joi.string().trim().required(),
             date: Joi.date().required(),
             image: Joi.string().allow(),
-            status: Joi.string().valid('Active', 'Inactive').optional(),
         }),
     },
     handler: async (req, res) => {
         try {
-            const { exam_name, slug } = req.body;
+            const { title } = req.body;
 
-            const blogsExist = await Blogs.findOne({ $or: [{ exam_name }, { slug }] });
+            const blogsExist = await Blogs.findOne({ $or: [{ title }] });
 
             if (blogsExist) {
-                return res.status(httpStatus.BAD_REQUEST).json({ message: 'Blog with this name or slug already exists' });
+                return res.status(httpStatus.BAD_REQUEST).json({ message: 'Blog this name already exists' });
             }
 
             let imageUrl = '';
             if (req.file) {
-                imageUrl = await uploadToExternalService(req.file, 'blogs');
+                imageUrl = "";
+                // imageUrl = await uploadToExternalService(req.file, 'blogs');
             }
 
             const blogs = await Blogs.create({
@@ -47,7 +45,6 @@ const createBlogs = {
             res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
         }
     }
-
 }
 
 const getAllBlogs = {
