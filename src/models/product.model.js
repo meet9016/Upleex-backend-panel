@@ -3,8 +3,9 @@ const { toJSON } = require('./plugins');
 
 const monthPriceSchema = new mongoose.Schema(
   {
-    month_price: String,
-    month_cancel_price: String,
+    month_name: String,
+    price: String,
+    cancel_price: String,
     months_id: String,
     product_months_id: String,
   },
@@ -82,15 +83,15 @@ const productSchema = new mongoose.Schema(
     product_listing_type_name: {
       type: String,
     },
-    vendor_id: {
-      type: String,
-    },
-    vendor_name: {
-      type: String,
-    },
-    vendor_image: {
-      type: String,
-    },
+    // vendor_id: {
+    //   type: String,
+    // },
+    // vendor_name: {
+    //   type: String,
+    // },
+    // vendor_image: {
+    //   type: String,
+    // },
     month_arr: {
       type: [monthPriceSchema],
       default: [],

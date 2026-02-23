@@ -1,9 +1,24 @@
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const Joi = require('joi');
+const mongoose = require('mongoose');
 const { Blogs } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExternalService } = require('../utils/fileUpload');
+
+const formatBlogDate = (date) => {
+  if (!date) {
+    return '';
+  }
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) {
+    return '';
+  }
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+};
 
 const createBlogs = {
     validation: {
@@ -25,10 +40,9 @@ const createBlogs = {
                 return res.status(httpStatus.BAD_REQUEST).json({ message: 'Blog this name already exists' });
             }
 
-            let imageUrl = '';
+            let imageUrl = req.body.image || '';
             if (req.file) {
-                imageUrl = "";
-                // imageUrl = await uploadToExternalService(req.file, 'blogs');
+                imageUrl = await uploadToExternalService(req.file, 'blogs_image');
             }
 
             const blogs = await Blogs.create({
@@ -55,7 +69,22 @@ const getAllBlogs = {
         if (status) query.status = status;
         if (search) query.title = { $regex: search, $options: "i" };
 
-        await handlePagination(Blogs, req, res, query);
+        const originalJson = res.json.bind(res);
+
+        res.json = (payload) => {
+            if (payload && Array.isArray(payload.data)) {
+                payload.data = payload.data.map((item) => ({
+                    id: item.id,
+                    title: item.title,
+                    image: item.image,
+                    description: item.sort_description,
+                    blog_date: formatBlogDate(item.date),
+                }));
+            }
+            return originalJson(payload);
+        };
+
+        await handlePagination(Blogs, req, res, query, { date: -1, createdAt: -1 });
     },
 };
 
@@ -65,19 +94,41 @@ const getBlogById = {
         try {
             const { _id } = req.params;
 
-            // 🔍 Find blog by MongoDB ID or Slug
-            let blog;
-            if (_id.match(/^[0-9a-fA-F]{24}$/)) {
-                blog = await Blogs.findById(_id);
-            } else {
-                blog = await Blogs.findOne({ slug: _id });
+            if (!mongoose.Types.ObjectId.isValid(_id)) {
+                return res.status(httpStatus.BAD_REQUEST).json({ message: "Invalid blog id" });
             }
+
+            const blog = await Blogs.findById(_id);
 
             if (!blog) {
                 return res.status(404).json({ message: "Blog not found" });
             }
 
-            res.status(200).json(blog);
+            const related = await Blogs.find({ _id: { $ne: _id } })
+                .sort({ date: -1, createdAt: -1 })
+                .limit(5);
+
+            const blogData = {
+                id: blog.id,
+                title: blog.title,
+                image: blog.image,
+                description: blog.sort_description,
+                long_description: blog.long_description,
+                blog_date: formatBlogDate(blog.date),
+            };
+
+            const relatedBlogs = related.map((item) => ({
+                id: item.id,
+                title: item.title,
+                image: item.image,
+                description: item.sort_description,
+                blog_date: formatBlogDate(item.date),
+            }));
+
+            res.status(200).json({
+                blog_data: blogData,
+                related_blogs: relatedBlogs,
+            });
         } catch (error) {
             console.error("Error fetching blog by ID/Slug:", error);
             res.status(500).json({ message: "Internal Server Error" });
@@ -88,14 +139,11 @@ const getBlogById = {
 const updateBlogs = {
     validation: {
         body: Joi.object().keys({
-            exam_name: Joi.string().trim().required(),
             title: Joi.string().trim().required(),
-            slug: Joi.string().trim().required(),
             sort_description: Joi.string().trim().required(),
             long_description: Joi.string().trim().required(),
             date: Joi.date().required(),
             image: Joi.string().allow(),
-            status: Joi.string().valid('Active', 'Inactive').optional(),
         })
             .prefs({ convert: true }),
     },
@@ -109,18 +157,13 @@ const updateBlogs = {
             throw new ApiError(httpStatus.BAD_REQUEST, 'Blogs not exist');
         }
 
-        // Check if slug is being changed and if new slug already exists
-        if (req.body.slug && req.body.slug !== blogsExist.slug) {
-            const slugExist = await Blogs.findOne({ slug: req.body.slug, _id: { $ne: _id } });
-            if (slugExist) {
-                return res.status(httpStatus.BAD_REQUEST).json({ message: 'Blog with this slug already exists' });
-            }
-        }
+        let imageUrl = req.body.image || blogsExist.image || '';
+
         if (req.file) {
             if (blogsExist.image) {
                 imageUrl = await updateFileOnExternalService(blogsExist.image, req.file);
             } else {
-                imageUrl = await uploadToExternalService(req.file, 'blogs');
+                imageUrl = await uploadToExternalService(req.file, 'blogs_image');
             }
         }
 

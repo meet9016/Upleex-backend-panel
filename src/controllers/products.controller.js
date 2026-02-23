@@ -21,8 +21,9 @@ const productImageSchema = Joi.object().keys({
 });
 
 const monthPriceSchema = Joi.object().keys({
-  month_price: Joi.string().allow(''),
-  month_cancel_price: Joi.string().allow(''),
+  month_name:Joi.string().allow(''),
+  price: Joi.string().allow(''),
+  cancel_price: Joi.string().allow(''),
   months_id: Joi.string().allow(''),
   product_months_id: Joi.string().allow(''),
 });
@@ -72,9 +73,9 @@ const createProduct = {
       no: Joi.string().allow(''),
       product_type_name: Joi.string().allow(''),
       product_listing_type_name: Joi.string().allow(''),
-      vendor_id: Joi.string().allow(''),
-      vendor_name: Joi.string().allow(''),
-      vendor_image: Joi.string().allow(''),
+      // vendor_id: Joi.string().allow(''),
+      // vendor_name: Joi.string().allow(''),
+      // vendor_image: Joi.string().allow(''),
       month_arr: Joi.array().items(monthPriceSchema).default([]),
       images: Joi.array().items(productImageSchema).default([]),
       product_details: Joi.array().items(productDetailSchema).default([]),
@@ -83,7 +84,43 @@ const createProduct = {
   handler: async (req, res) => {
     try {
       const data = req.body;
+      if (data.month_arr && data.month_arr.length) {
 
+        const monthIds = data.month_arr.map(m => m.months_id);
+
+        const monthDocs = await ProductMonth.find({
+          _id: { $in: monthIds }
+        });
+
+        const monthMap = {};
+        monthDocs.forEach(m => {
+          monthMap[m._id.toString()] = m.month_name;
+        });
+
+        data.month_arr = data.month_arr.map(m => ({
+          month_name: monthMap[m.months_id] || '',
+          price: m.price,
+          cancel_price: m.cancel_price,
+          months_id: m.months_id,
+          product_months_id: m.months_id
+        }));
+      }
+
+      if (data.product_type_id) {
+        const typeDoc = await ProductType.findById(data.product_type_id);
+        if (typeDoc) {
+          data.product_type_name = typeDoc.product_type;
+        }
+      }
+
+      if (data.product_listing_type_id) {
+        const listingDoc = await ProductListingType.findById(
+          data.product_listing_type_id
+        );
+        if (listingDoc) {
+          data.product_listing_type_name = listingDoc.name;
+        }
+      }
       const existing = await Product.findOne({
         product_name: data.product_name,
         category_id: data.category_id,
@@ -118,21 +155,33 @@ const createProduct = {
 
 const getAllProducts = {
   handler: async (req, res) => {
-    const { category_id, sub_category_id, product_type_id, product_listing_type_id } =
-      req.query;
+    const {
+      category_id,
+      sub_category_id,
+      filter_rent_sell,
+      filter_tenure,
+    } = req.query;
+
     const query = {};
 
     if (category_id) {
       query.category_id = category_id;
     }
-    if (sub_category_id) {
+
+    if (sub_category_id && sub_category_id !== 'all') {
       query.sub_category_id = sub_category_id;
     }
-    if (product_type_id) {
-      query.product_type_id = product_type_id;
+
+    // Rent / Sell filter - filter_rent_sell: 1 = Rent, 2 = Sell
+    if (filter_rent_sell === '1') {
+      query.product_type_name = 'Rent';
+    } else if (filter_rent_sell === '2') {
+      query.product_type_name = 'Sell';
     }
-    if (product_listing_type_id) {
-      query.product_listing_type_id = product_listing_type_id;
+
+    // Tenure filter (Daily / Monthly / Hourly) - expects listing type id
+    if (filter_tenure && filter_tenure !== '0') {
+      query.product_listing_type_id = filter_tenure;
     }
 
     await handlePagination(Product, req, res, query, { createdAt: -1 });
@@ -184,9 +233,9 @@ const updateProduct = {
         no: Joi.string().allow(''),
         product_type_name: Joi.string().allow(''),
         product_listing_type_name: Joi.string().allow(''),
-        vendor_id: Joi.string().allow(''),
-        vendor_name: Joi.string().allow(''),
-        vendor_image: Joi.string().allow(''),
+        // vendor_id: Joi.string().allow(''),
+        // vendor_name: Joi.string().allow(''),
+        // vendor_image: Joi.string().allow(''),
         month_arr: Joi.array().items(monthPriceSchema).default([]),
         images: Joi.array().items(productImageSchema).default([]),
         product_details: Joi.array().items(productDetailSchema).default([]),
@@ -209,11 +258,50 @@ const updateProduct = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
+      const body = req.body;
+
+      if (body.month_arr && body.month_arr.length) {
+        const monthIds = body.month_arr.map((m) => m.months_id);
+
+        const monthDocs = await ProductMonth.find({
+          _id: { $in: monthIds },
+        });
+
+        const monthMap = {};
+        monthDocs.forEach((m) => {
+          monthMap[m._id.toString()] = m.month_name;
+        });
+
+        body.month_arr = body.month_arr.map((m) => ({
+          month_name: monthMap[m.months_id] || '',
+          price: m.price,
+          cancel_price: m.cancel_price,
+          months_id: m.months_id,
+          product_months_id: m.months_id,
+        }));
+      }
+
+      if (body.product_type_id) {
+        const typeDoc = await ProductType.findById(body.product_type_id);
+        if (typeDoc) {
+          body.product_type_name = typeDoc.product_type;
+        }
+      }
+
+      if (body.product_listing_type_id) {
+        const listingDoc = await ProductListingType.findById(
+          body.product_listing_type_id
+        );
+        if (listingDoc) {
+          body.product_listing_type_name = listingDoc.name;
+        }
+      }
+
       const duplicate = await Product.findOne({
         _id: { $ne: _id },
-        product_name: req.body.product_name,
-        category_id: req.body.category_id,
-        sub_category_id: req.body.sub_category_id,
+        product_name: body.product_name,
+        category_id: body.category_id,
+        sub_category_id: body.sub_category_id,
       });
 
       if (duplicate) {
@@ -223,7 +311,7 @@ const updateProduct = {
       }
 
       const updateData = {
-        ...req.body,
+        ...body,
       };
 
       const product = await Product.findByIdAndUpdate(_id, updateData, {
