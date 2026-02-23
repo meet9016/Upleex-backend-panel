@@ -33,6 +33,8 @@ const defaultRoutes = [
   {
     path: '/dropdowns',
     route: dropdownsRoute,
+  },
+  {  
     path: '/vendor/auth',
     route: vendorAuthRoute,
   },

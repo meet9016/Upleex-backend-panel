@@ -12,20 +12,20 @@ const {
 const createCategory = {
   validation: {
     body: Joi.object().keys({
-      name: Joi.string().trim().required(),
+      categories_name: Joi.string().trim().required(),
       image: Joi.string().allow(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { name } = req.body;
+      const { categories_name } = req.body;
 
-      const categoryExist = await Category.findOne({ name: name.trim() });
+      const categoryExist = await Category.findOne({ categories_name: categories_name.trim() });
 
       if (categoryExist) {
         return res
           .status(httpStatus.BAD_REQUEST)
-          .json({ message: 'Category with this name already exists' });
+          .json({ message: 'Category with this categories_name already exists' });
       }
 
       let imageUrl = req.body.image || '';
@@ -81,7 +81,7 @@ const updateCategory = {
   validation: {
     body: Joi.object()
       .keys({
-        name: Joi.string().trim().required(),
+        categories_name: Joi.string().trim().required(),
         image: Joi.string().allow(),
       })
       .prefs({ convert: true }),
@@ -95,15 +95,15 @@ const updateCategory = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Category does not exist');
     }
 
-    if (req.body.name && req.body.name !== categoryExist.name) {
-      const sameNameCategory = await Category.findOne({
-        name: req.body.name.trim(),
+    if (req.body.categories_name && req.body.categories_name !== categoryExist.categories_name) {
+      const samecategories_nameCategory = await Category.findOne({
+        categories_name: req.body.categories_name.trim(),
         _id: { $ne: _id },
       });
-      if (sameNameCategory) {
+      if (samecategories_nameCategory) {
         return res
           .status(httpStatus.BAD_REQUEST)
-          .json({ message: 'Category with this name already exists' });
+          .json({ message: 'Category with this categories_name already exists' });
       }
     }
 

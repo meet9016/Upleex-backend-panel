@@ -47,7 +47,7 @@ const productSchema = new mongoose.Schema(
     },
     product_listing_type_id: {
       type: String,
-      required: true,
+      // required: true,
     },
     product_name: {
       type: String,

@@ -3,7 +3,7 @@ const { toJSON } = require('./plugins');
 
 const categorySchema = mongoose.Schema(
   {
-    name: {
+    categories_name: {
       type: String,
       required: true,
       trim: true,
