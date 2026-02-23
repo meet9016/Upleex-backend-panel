@@ -5,6 +5,7 @@ const categoriesRoute = require('./categories.route');
 const subCategoriesRoute = require('./subcategories.route');
 const productsRoute = require('./products.route');
 const dropdownsRoute = require('./dropdowns.route');
+const vendorAuthRoute = require('../../routes/vendor/auth.route');
 
 const router = express.Router();
 
@@ -32,6 +33,8 @@ const defaultRoutes = [
   {
     path: '/dropdowns',
     route: dropdownsRoute,
+    path: '/vendor/auth',
+    route: vendorAuthRoute,
   },
 ];
 
