@@ -22,9 +22,9 @@ const imageSchema = new mongoose.Schema(
 
 const productDetailSchema = new mongoose.Schema(
   {
-    specification_id: String,
-    specification: String,
-    detail: String,
+    specification_id: { type: String, default: '' },
+    specification: { type: String, default: '' },
+    detail: { type: String, default: '' },
   },
   { _id: false }
 );
