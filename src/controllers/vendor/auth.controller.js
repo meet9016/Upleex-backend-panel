@@ -20,6 +20,14 @@ const businessRegister = catchAsync(async (req, res) => {
     }
   }
 
+  if (!otp) {
+    return res.status(httpStatus.OK).json({
+      status: 200,
+      message: 'OTP sent successfully',
+      data: [],
+    });
+  }
+
   if (otp !== '123456') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP');
   }
@@ -35,6 +43,7 @@ const businessRegister = catchAsync(async (req, res) => {
   });
 
   res.status(httpStatus.CREATED).json({
+    status: 200,
     success: true,
     message: 'Business registered successfully',
     data: vendor,

@@ -1,62 +1,53 @@
 const httpStatus = require('http-status');
+const Joi = require('joi');
+const mongoose = require('mongoose');
+const { FAQ } = require('../models');
+
+const faqSchema = Joi.object().keys({
+  question: Joi.string().trim().required(),
+  answer: Joi.string().trim().required(),
+});
+
+const createFaq = {
+  validation: {
+    body: faqSchema,
+  },
+  handler: async (req, res) => {
+    try {
+      const { question } = req.body;
+
+      const exists = await FAQ.findOne({ question: question.trim() });
+      if (exists) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json({ message: 'FAQ with this question already exists' });
+      }
+
+      const faq = await FAQ.create({
+        question: req.body.question,
+        answer: req.body.answer,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'FAQ created successfully!',
+        data: faq,
+      });
+    } catch (error) {
+      res
+        .status(httpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: error.message });
+    }
+  },
+};
 
 const getAllFaqs = {
   handler: async (req, res) => {
     try {
-      const faqs = [
-        {
-          id: '9',
-          question: 'What if my KYC verification fails?',
-          answer:
-            'If KYC verification fails, our team will contact you to request additional documents or clarify the issue. Your order will be processed once KYC is approved.',
-        },
-        {
-          id: '8',
-          question: ' What happens if I return the product early?',
-          answer:
-            'Early returns are possible. However, the rental charges may be recalculated based on the actual tenure of usage.',
-        },
-        {
-          id: '7',
-          question: 'Can I cancel my rental order?',
-          answer:
-            'Yes, you can cancel your rental order before delivery. Cancellation policies may apply based on the timing of your request.',
-        },
-        {
-          id: '6',
-          question: 'What things can I Rent from Upleex?',
-          answer:
-            "You can rent furniture, home appliances, electronics, fitness equipment, laptops, and more.",
-        },
-        {
-          id: '5',
-          question:
-            'How to Take a Product on rent (Take On Rent) from Upleex?',
-          answer:
-            'You can rent products by visiting our website or app, selecting the desired category, choosing the product, completing the KYC process, and making the payment.',
-        },
-        {
-          id: '4',
-          question: ' How does Upleex work?',
-          answer:
-            "Simply browse our catalog, select the products you need, choose your rental tenure, and place an order. We'll deliver and install the products at your doorstep.",
-        },
-        {
-          id: '3',
-          question: 'Why Upleex?',
-          answer:
-            'Upleex offers a wide range of premium products at affordable rental rates. We ensure quality checks, free maintenance, and flexible tenure options to suit your needs.',
-        },
-        {
-          id: '2',
-          question: 'Can I cancel my uplix order?',
-          answer:
-            'If delivery is scheduled more than 48 hours later – Full refund (minus 2%–5% transaction fee).',
-        },
-      ];
+      const faqs = await FAQ.find().sort({ createdAt: -1 });
 
       res.status(httpStatus.OK).json({
-        status: 1,
+        success: true,
         message: 'FAQ list fetched successfully',
         data: faqs,
       });
@@ -68,7 +59,94 @@ const getAllFaqs = {
   },
 };
 
+const updateFaq = {
+  validation: {
+    body: faqSchema,
+  },
+  handler: async (req, res) => {
+    try {
+      const { _id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(_id)) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json({ message: 'Invalid FAQ id' });
+      }
+
+      const existing = await FAQ.findById(_id);
+
+      if (!existing) {
+        return res
+          .status(httpStatus.NOT_FOUND)
+          .json({ message: 'FAQ not found' });
+      }
+
+      const duplicate = await FAQ.findOne({
+        _id: { $ne: _id },
+        question: req.body.question.trim(),
+      });
+
+      if (duplicate) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json({ message: 'FAQ with this question already exists' });
+      }
+
+      existing.question = req.body.question;
+      existing.answer = req.body.answer;
+
+      await existing.save();
+
+      return res.send({
+        success: true,
+        message: 'FAQ updated successfully!',
+        data: existing,
+      });
+    } catch (error) {
+      res
+        .status(httpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: error.message });
+    }
+  },
+};
+
+const deleteFaq = {
+  handler: async (req, res) => {
+    try {
+      const { _id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(_id)) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json({ message: 'Invalid FAQ id' });
+      }
+
+      const existing = await FAQ.findById(_id);
+
+      if (!existing) {
+        return res
+          .status(httpStatus.NOT_FOUND)
+          .json({ message: 'FAQ not found' });
+      }
+
+      await FAQ.findByIdAndDelete(_id);
+
+      res.send({
+        success: true,
+        message: 'FAQ deleted successfully',
+      });
+    } catch (error) {
+      res
+        .status(httpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: error.message });
+    }
+  },
+};
+
 module.exports = {
+  createFaq,
   getAllFaqs,
+  updateFaq,
+  deleteFaq,
 };
 

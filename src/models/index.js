@@ -6,3 +6,4 @@ module.exports.Product = require('./product.model');
 module.exports.ProductType = require('./productType.model');
 module.exports.ProductListingType = require('./productListingType.model');
 module.exports.ProductMonth = require('./productMonth.model');
+module.exports.FAQ = require('./faq.model');
