@@ -13,7 +13,7 @@ const validate = (schema) => (req, res, next) => {
       abortEarly: false
     })
     .validate(object, {
-      allowUnknown: false,
+      allowUnknown: true,
       stripUnknown: false,
       convert: true,
       presence: 'optional'

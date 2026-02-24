@@ -57,7 +57,6 @@ const productSchema = new mongoose.Schema(
     },
     price: {
       type: String,
-      required: true,
     },
     cancel_price: {
       type: String,
@@ -115,4 +114,3 @@ productSchema.plugin(toJSON);
 const Product = mongoose.model('Product', productSchema);
 
 module.exports = Product;
-
