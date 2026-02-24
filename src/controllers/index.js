@@ -5,3 +5,4 @@ module.exports.subCategoriesController = require('./subcategories.controller');
 module.exports.productsController = require('./products.controller');
 module.exports.dropdownsController = require('./dropdowns.controller');
 module.exports.faqsController = require('./faqs.controller');
+module.exports.getQuoteController = require('./getQuote.controller');

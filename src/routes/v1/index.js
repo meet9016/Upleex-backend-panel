@@ -6,6 +6,7 @@ const subCategoriesRoute = require('./subcategories.route');
 const productsRoute = require('./products.route');
 const dropdownsRoute = require('./dropdowns.route');
 const faqsRoute = require('./faqs.route');
+const getQuoteRoute = require('./getquote.route');
 const vendorAuthRoute = require('../../routes/vendor/auth.route');
 
 const router = express.Router();
@@ -42,6 +43,10 @@ const defaultRoutes = [
   {  
     path: '/vendor/auth',
     route: vendorAuthRoute,
+  },
+  {  
+    path: '/quote',
+    route: getQuoteRoute,
   },
 ];
 
