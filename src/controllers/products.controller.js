@@ -1,11 +1,14 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
 const mongoose = require('mongoose');
+const path = require('path');
 const {
   Product,
   ProductType,
   ProductListingType,
   ProductMonth,
+  Category,
+  SubCategory,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 
@@ -64,7 +67,7 @@ const createProduct = {
       product_type_id: Joi.string().required(),
       product_listing_type_id: Joi.string().allow(''),
       product_name: Joi.string().trim().required(),
-      price: Joi.string().required(),
+      price: Joi.string().allow(''),
       cancel_price: Joi.string().allow(''),
       description: Joi.string().allow(''),
       product_main_image: Joi.string().allow(''),
@@ -79,11 +82,97 @@ const createProduct = {
       month_arr: Joi.array().items(monthPriceSchema).default([]),
       images: Joi.array().items(productImageSchema).default([]),
       product_details: Joi.array().items(productDetailSchema).default([]),
-    }),
+      specification: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      detail: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      months_id: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      month_price: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      month_cancel_price: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      product_months_id: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+    }).prefs({ convert: true }),
   },
   handler: async (req, res) => {
     try {
       const data = req.body;
+
+      const extractIndexedArray = (body, baseKey) => {
+        const regex = new RegExp(`^${baseKey}\\[(\\d+)\\]$`);
+        const result = [];
+        Object.keys(body).forEach((k) => {
+          const m = k.match(regex);
+          if (m) {
+            const idx = parseInt(m[1], 10);
+            result[idx] = body[k];
+          }
+        });
+        if (!result.length && body[baseKey]) {
+          return Array.isArray(body[baseKey]) ? body[baseKey] : [body[baseKey]];
+        }
+        return result.filter((v) => v !== undefined);
+      };
+
+      if (!data.month_arr || !Array.isArray(data.month_arr) || !data.month_arr.length) {
+        const monthsIds = extractIndexedArray(data, 'months_id');
+        const monthPrices = extractIndexedArray(data, 'month_price');
+        const monthCancelPrices = extractIndexedArray(data, 'month_cancel_price');
+        const productMonthsIds = extractIndexedArray(data, 'product_months_id');
+
+        if (monthsIds.length || monthPrices.length || monthCancelPrices.length) {
+          data.month_arr = (monthsIds.length ? monthsIds : new Array(Math.max(monthPrices.length, monthCancelPrices.length)).fill(''))
+            .map((mid, i) => ({
+              months_id: String(mid || ''),
+              price: String(monthPrices[i] || ''),
+              cancel_price: String(monthCancelPrices[i] || ''),
+              product_months_id: String(productMonthsIds[i] || ''),
+            }))
+            .filter((m) => m.months_id || (m.price && m.cancel_price));
+        }
+      }
+
+      if (!data.product_details || !Array.isArray(data.product_details) || !data.product_details.length) {
+        const specs = extractIndexedArray(data, 'specification');
+        const details = extractIndexedArray(data, 'detail');
+        const specIds = extractIndexedArray(data, 'specification_id');
+        if (specs.length || details.length) {
+          data.product_details = (specs.length ? specs : new Array(details.length).fill(''))
+            .map((spec, i) => ({
+              specification_id: String(specIds[i] || ''),
+              specification: String(spec || ''),
+              detail: String(details[i] || ''),
+            }))
+            .filter((d) => d.specification || d.detail);
+        }
+      }
+      const files = req.files || {};
+      const mainFile = files['product_main_image'] && files['product_main_image'][0];
+      if (mainFile && mainFile.filename) {
+        data.product_main_image = path.posix.join('uploads', 'products', mainFile.filename);
+      }
+      const subFiles = files['image[]'] || [];
+      if (subFiles.length) {
+        const newImages = subFiles.map((f) => ({
+          product_image_id: f.filename || '',
+          image: path.posix.join('uploads', 'products', f.filename || ''),
+        }));
+        data.images = Array.isArray(data.images) ? [...data.images, ...newImages] : newImages;
+      }
       if (data.month_arr && data.month_arr.length) {
 
         const monthIds = data.month_arr.map(m => m.months_id);
@@ -121,6 +210,42 @@ const createProduct = {
           data.product_listing_type_name = listingDoc.name;
         }
       }
+      if (data.category_id) {
+        const catDoc = await Category.findById(data.category_id);
+        if (catDoc) {
+          data.category_name = catDoc.categories_name;
+        }
+      }
+      if (data.sub_category_id) {
+        const subDoc = await SubCategory.findById(data.sub_category_id);
+        if (subDoc) {
+          data.sub_category_name = subDoc.name;
+        }
+      }
+
+      const isRent = data.product_type_name === 'Rent';
+      const tenure = (data.product_listing_type_name || '').toLowerCase();
+      const hasMonthlyRows =
+        Array.isArray(data.month_arr) &&
+        data.month_arr.some(
+          (m) => (m.months_id && (m.price || m.cancel_price))
+        );
+      const isMonthly = tenure === 'monthly' || hasMonthlyRows;
+      if (isRent) {
+        if (isMonthly) {
+          if (!data.month_arr || !data.month_arr.length) {
+            return res.status(httpStatus.BAD_REQUEST).json({ message: 'Provide monthly prices (month_arr) for Monthly rent' });
+          }
+        } else {
+          if (!data.price || !String(data.price).trim()) {
+            return res.status(httpStatus.BAD_REQUEST).json({ message: 'Price is required for Day/Hourly rent' });
+          }
+        }
+      } else {
+        if (!data.price || !String(data.price).trim()) {
+          return res.status(httpStatus.BAD_REQUEST).json({ message: 'Price is required for Sell' });
+        }
+      }
       const existing = await Product.findOne({
         product_name: data.product_name,
         category_id: data.category_id,
@@ -140,10 +265,10 @@ const createProduct = {
         await product.save();
       }
 
-      return res.status(201).json({
-        success: true,
+      return res.status(200).json({
+        status: 200,
         message: 'Product created successfully',
-        product,
+        data: product,
       });
     } catch (error) {
       res
@@ -184,7 +309,54 @@ const getAllProducts = {
       query.product_listing_type_id = filter_tenure;
     }
 
-    await handlePagination(Product, req, res, query, { createdAt: -1 });
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = req.query.limit ? parseInt(req.query.limit) : null;
+      const skip = limit ? (page - 1) * limit : 0;
+      const total = await Product.countDocuments(query);
+      let dataQuery = Product.find(query).sort({ createdAt: -1 });
+      if (limit) {
+        dataQuery = dataQuery.skip(skip).limit(limit);
+      }
+      const data = await dataQuery;
+      const catIds = [
+        ...new Set(
+          data.map((p) => p.category_id).filter((id) => !!id)
+        ),
+      ];
+      const subIds = [
+        ...new Set(
+          data.map((p) => p.sub_category_id).filter((id) => !!id)
+        ),
+      ];
+      const [cats, subs] = await Promise.all([
+        catIds.length ? Category.find({ _id: { $in: catIds } }) : [],
+        subIds.length ? SubCategory.find({ _id: { $in: subIds } }) : [],
+      ]);
+      const catMap = {};
+      cats.forEach((c) => {
+        catMap[c._id.toString()] = c.categories_name;
+      });
+      const subMap = {};
+      subs.forEach((s) => {
+        subMap[s._id.toString()] = s.name;
+      });
+      const normalized = data.map((p) => ({
+        ...p.toObject(),
+        category_name: p.category_name || catMap[p.category_id] || '',
+        sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+      }));
+      res.status(200).json({
+        success: true,
+        total,
+        page: limit ? page : 1,
+        limit: limit || total,
+        totalPages: limit ? Math.ceil(total / limit) : 1,
+        data: normalized,
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
   },
 };
 
@@ -205,7 +377,7 @@ const getProductById = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
-      res.status(200).json(product);
+      res.status(200).json({ status: 200, data: product });
     } catch (error) {
       res
         .status(httpStatus.INTERNAL_SERVER_ERROR)
@@ -224,7 +396,7 @@ const updateProduct = {
         product_type_id: Joi.string().required(),
         product_listing_type_id: Joi.string().allow(''),
         product_name: Joi.string().trim().required(),
-        price: Joi.string().required(),
+        price: Joi.string().allow(''),
         cancel_price: Joi.string().allow(''),
         description: Joi.string().allow(''),
         product_main_image: Joi.string().allow(''),
@@ -239,6 +411,30 @@ const updateProduct = {
         month_arr: Joi.array().items(monthPriceSchema).default([]),
         images: Joi.array().items(productImageSchema).default([]),
         product_details: Joi.array().items(productDetailSchema).default([]),
+        specification: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        detail: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        months_id: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        month_price: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        month_cancel_price: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        product_months_id: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
       })
       .prefs({ convert: true }),
   },
@@ -259,6 +455,68 @@ const updateProduct = {
       }
 
       const body = req.body;
+
+      const extractIndexedArray = (body, baseKey) => {
+        const regex = new RegExp(`^${baseKey}\\[(\\d+)\\]$`);
+        const result = [];
+        Object.keys(body).forEach((k) => {
+          const m = k.match(regex);
+          if (m) {
+            const idx = parseInt(m[1], 10);
+            result[idx] = body[k];
+          }
+        });
+        if (!result.length && body[baseKey]) {
+          return Array.isArray(body[baseKey]) ? body[baseKey] : [body[baseKey]];
+        }
+        return result.filter((v) => v !== undefined);
+      };
+
+      if (!body.month_arr || !Array.isArray(body.month_arr) || !body.month_arr.length) {
+        const monthsIds = extractIndexedArray(body, 'months_id');
+        const monthPrices = extractIndexedArray(body, 'month_price');
+        const monthCancelPrices = extractIndexedArray(body, 'month_cancel_price');
+        const productMonthsIds = extractIndexedArray(body, 'product_months_id');
+
+        if (monthsIds.length || monthPrices.length || monthCancelPrices.length) {
+          body.month_arr = (monthsIds.length ? monthsIds : new Array(Math.max(monthPrices.length, monthCancelPrices.length)).fill(''))
+            .map((mid, i) => ({
+              months_id: String(mid || ''),
+              price: String(monthPrices[i] || ''),
+              cancel_price: String(monthCancelPrices[i] || ''),
+              product_months_id: String(productMonthsIds[i] || ''),
+            }))
+            .filter((m) => m.months_id || (m.price && m.cancel_price));
+        }
+      }
+
+      if (!body.product_details || !Array.isArray(body.product_details) || !body.product_details.length) {
+        const specs = extractIndexedArray(body, 'specification');
+        const details = extractIndexedArray(body, 'detail');
+        const specIds = extractIndexedArray(body, 'specification_id');
+        if (specs.length || details.length) {
+          body.product_details = (specs.length ? specs : new Array(details.length).fill(''))
+            .map((spec, i) => ({
+              specification_id: String(specIds[i] || ''),
+              specification: String(spec || ''),
+              detail: String(details[i] || ''),
+            }))
+            .filter((d) => d.specification || d.detail);
+        }
+      }
+      const files = req.files || {};
+      const mainFile = files['product_main_image'] && files['product_main_image'][0];
+      if (mainFile && mainFile.filename) {
+        body.product_main_image = path.posix.join('uploads', 'products', mainFile.filename);
+      }
+      const subFiles = files['image[]'] || [];
+      if (subFiles.length) {
+        const newImages = subFiles.map((f) => ({
+          product_image_id: f.filename || '',
+          image: path.posix.join('uploads', 'products', f.filename || ''),
+        }));
+        body.images = Array.isArray(body.images) ? [...body.images, ...newImages] : newImages;
+      }
 
       if (body.month_arr && body.month_arr.length) {
         const monthIds = body.month_arr.map((m) => m.months_id);
@@ -296,6 +554,42 @@ const updateProduct = {
           body.product_listing_type_name = listingDoc.name;
         }
       }
+      if (body.category_id) {
+        const catDoc = await Category.findById(body.category_id);
+        if (catDoc) {
+          body.category_name = catDoc.categories_name;
+        }
+      }
+      if (body.sub_category_id) {
+        const subDoc = await SubCategory.findById(body.sub_category_id);
+        if (subDoc) {
+          body.sub_category_name = subDoc.name;
+        }
+      }
+
+      const isRent = body.product_type_name === 'Rent';
+      const tenure = (body.product_listing_type_name || '').toLowerCase();
+      const hasMonthlyRows =
+        Array.isArray(body.month_arr) &&
+        body.month_arr.some(
+          (m) => (m.months_id && (m.price || m.cancel_price))
+        );
+      const isMonthly = tenure === 'monthly' || hasMonthlyRows;
+      if (isRent) {
+        if (isMonthly) {
+          if (!body.month_arr || !body.month_arr.length) {
+            return res.status(httpStatus.BAD_REQUEST).json({ message: 'Provide monthly prices (month_arr) for Monthly rent' });
+          }
+        } else {
+          if (!body.price || !String(body.price).trim()) {
+            return res.status(httpStatus.BAD_REQUEST).json({ message: 'Price is required for Day/Hourly rent' });
+          }
+        }
+      } else {
+        if (!body.price || !String(body.price).trim()) {
+          return res.status(httpStatus.BAD_REQUEST).json({ message: 'Price is required for Sell' });
+        }
+      }
 
       const duplicate = await Product.findOne({
         _id: { $ne: _id },
@@ -318,8 +612,8 @@ const updateProduct = {
         new: true,
       });
 
-      return res.send({
-        success: true,
+      return res.status(200).json({
+        status: 200,
         message: 'Product updated successfully',
         data: product,
       });
