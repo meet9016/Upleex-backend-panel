@@ -1,85 +1,98 @@
-const fs = require('fs');
-const path = require('path');
-const config = require('../config/config');
+const axios = require('axios');
+const FormData = require('form-data');
 
-const ensureDir = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
+const PROJECT_NAME = 'upleex';
+const BASE_URL = 'https://service.digitalks.co.in';
 
-const buildPublicUrl = (relativePath) => {
-  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
-  if (config.backendUrl) {
-    return `${config.backendUrl.replace(/\/+$/, '')}/${normalized}`;
-  }
-  return `/${normalized}`;
-};
-
-const extractUploadsRelativePath = (fileUrl) => {
-  if (!fileUrl) return null;
-
-  const uploadsIndex = fileUrl.indexOf('/uploads/');
-  if (uploadsIndex !== -1) {
-    return fileUrl.substring(uploadsIndex + 1); // remove leading '/'
-  }
-
-  if (fileUrl.startsWith('uploads/')) {
-    return fileUrl;
-  }
-
-  if (fileUrl.startsWith('/')) {
-    return `uploads${fileUrl}`;
-  }
-
-  return `uploads/${fileUrl}`;
-};
-
-const uploadToExternalService = async (file, folderName = 'general') => {
-  const uploadsRoot = path.join(process.cwd(), 'uploads');
-  const targetDir = path.join(uploadsRoot, folderName);
-  ensureDir(targetDir);
-
-  const ext = path.extname(file.originalname) || '.png';
-  const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-  const filePath = path.join(targetDir, uniqueName);
-
-  await fs.promises.writeFile(filePath, file.buffer);
-
-  const relativePath = path.join('uploads', folderName, uniqueName);
-  return buildPublicUrl(relativePath);
-};
-
-const deleteFileFromExternalService = async (fileUrl) => {
-  const relativePath = extractUploadsRelativePath(fileUrl);
-  if (!relativePath) return;
-
-  const fullPath = path.join(process.cwd(), relativePath);
-
+/**
+ * Upload a file to the external Digitalks service
+ * @param {Object} file - The file object from multer (req.file)
+ * @param {string} folderName - The folder structure name
+ * @returns {Promise<string>} - The uploaded file URL
+ */
+const uploadToExternalService = async (file, folderName = 'sample') => {
   try {
-    await fs.promises.unlink(fullPath);
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      throw err;
+    const formData = new FormData();
+    formData.append('project', PROJECT_NAME);
+    formData.append('folder_structure', folderName);
+    formData.append('file', file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    });
+
+    const response = await axios.post(`${BASE_URL}/upload-file`, formData, {
+      headers: {
+        ...formData.getHeaders(),
+        accept: 'application/json',
+      },
+    });
+
+    if (response.data && response.data.status === 'success') {
+      return response.data.file_url;
     }
+    throw new Error(response.data.message || 'Upload failed');
+  } catch (error) {
+    console.error('External Upload Error:', error.response?.data || error.message);
+    throw new Error('Failed to upload file to external service');
   }
 };
 
+/**
+ * Update an existing file on the external Digitalks service
+ * @param {string} oldFileUrl - The URL of the file to be replaced
+ * @param {Object} newFile - The new file object from multer
+ * @returns {Promise<string>} - The new uploaded file URL
+ */
 const updateFileOnExternalService = async (oldFileUrl, newFile) => {
-  let folderName = 'general';
+  try {
+    const formData = new FormData();
+    formData.append('file_url', oldFileUrl);
+    formData.append('new_file', newFile.buffer, {
+      filename: newFile.originalname,
+      contentType: newFile.mimetype,
+    });
 
-  const relativePath = extractUploadsRelativePath(oldFileUrl);
-  if (relativePath) {
-    const parts = relativePath.split('/');
-    if (parts.length > 1) {
-      folderName = parts[1];
+    const response = await axios.put(`${BASE_URL}/update-file-by-url`, formData, {
+      headers: {
+        ...formData.getHeaders(),
+        accept: 'application/json',
+      },
+    });
+
+    if (response.data && response.data.status === 'success') {
+      return response.data.new_file_url;
     }
+    throw new Error(response.data.message || 'Update failed');
+  } catch (error) {
+    console.error('External Update Error:', error.response?.data || error.message);
+    throw new Error('Failed to update file on external service');
   }
+};
 
-  const newFileUrl = await uploadToExternalService(newFile, folderName);
-  await deleteFileFromExternalService(oldFileUrl);
+/**
+ * Delete a file from the external Digitalks service
+ * @param {string} fileUrl - The URL of the file to be deleted
+ * @returns {Promise<void>}
+ */
+const deleteFileFromExternalService = async (fileUrl) => {
+  try {
+    if (!fileUrl) return;
 
-  return newFileUrl;
+    const response = await axios.delete(`${BASE_URL}/delete-file-by-url`, {
+      data: { file_url: fileUrl },
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.data && response.data.status !== 'success') {
+      console.warn('External Delete Warning:', response.data.message);
+    }
+  } catch (error) {
+    console.error('External Delete Error:', error.response?.data || error.message);
+    // We don't necessarily want to throw here to avoid breaking the main flow if delete fails
+  }
 };
 
 module.exports = {

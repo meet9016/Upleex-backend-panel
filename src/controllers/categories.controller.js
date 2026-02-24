@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const Joi = require('joi');
-const { Category } = require('../models');
+const { Category, SubCategory, Product } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const {
   uploadToExternalService,
@@ -53,7 +53,49 @@ const createCategory = {
 
 const getAllCategories = {
   handler: async (req, res) => {
-    await handlePagination(Category, req, res);
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = req.query.limit ? parseInt(req.query.limit) : 100;
+      const skip = (page - 1) * limit;
+
+      const total = await Category.countDocuments();
+      const categories = await Category.find().sort({ createdAt: -1 }).skip(skip).limit(limit);
+
+      const transformedData = await Promise.all(
+        categories.map(async (cat) => {
+          const catId = cat.id || cat._id;
+
+          // Fetch product count for this category
+          const productCount = await Product.countDocuments({ category_id: String(catId) });
+
+          // Fetch subcategories for this category
+          const subcategories = await SubCategory.find({ categoryId: catId });
+
+          return {
+            categories_id: String(catId),
+            categories_name: cat.categories_name || cat.name || '',
+            image: cat.image || '',
+            product_count: String(productCount),
+            subcategories: subcategories.map((sub) => ({
+              subcategory_id: String(sub.id || sub._id),
+              subcategory_name: sub.name || sub.subcategory_name || '',
+              image: sub.image || '',
+            })),
+          };
+        })
+      );
+
+      res.status(200).json({
+        success: true,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        data: transformedData,
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
   },
 };
 
@@ -68,11 +110,27 @@ const getCategoryById = {
         return res.status(404).json({ message: 'Category not found' });
       }
 
-      res.status(200).json(category);
+      const catId = category.id || category._id;
+
+      // Fetch product count for this category
+      const productCount = await Product.countDocuments({ category_id: String(catId) });
+
+      // Fetch subcategories for this category
+      const subcategories = await SubCategory.find({ categoryId: catId });
+
+      res.status(200).json({
+        categories_id: String(catId),
+        categories_name: category.categories_name || category.name || '',
+        image: category.image || '',
+        product_count: String(productCount),
+        subcategories: subcategories.map((sub) => ({
+          subcategory_id: String(sub.id || sub._id),
+          subcategory_name: sub.name || sub.subcategory_name || '',
+          image: sub.image || '',
+        })),
+      });
     } catch (error) {
-      res
-        .status(httpStatus.INTERNAL_SERVER_ERROR)
-        .json({ message: error.message });
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   },
 };

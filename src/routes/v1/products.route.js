@@ -10,7 +10,7 @@ router.post(
   '/create-product',
   upload.fields([
     { name: 'product_main_image', maxCount: 1 },
-    { name: 'image[]', maxCount: 4 }
+    { name: 'image', maxCount: 4 }
   ]),
   validate(productsController.createProduct.validation),
   catchAsync(productsController.createProduct.handler)
@@ -30,7 +30,7 @@ router.put(
   '/update/:_id',
   upload.fields([
     { name: 'product_main_image', maxCount: 1 },
-    { name: 'image[]', maxCount: 4 }
+    { name: 'image', maxCount: 4 }
   ]),
   validate(productsController.updateProduct.validation),
   catchAsync(productsController.updateProduct.handler)

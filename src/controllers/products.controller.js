@@ -11,6 +11,11 @@ const {
   SubCategory,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
+const {
+  uploadToExternalService,
+  updateFileOnExternalService,
+  deleteFileFromExternalService,
+} = require('../utils/fileUpload');
 
 const productDetailSchema = Joi.object().keys({
   specification_id: Joi.string().allow(''),
@@ -162,15 +167,19 @@ const createProduct = {
       }
       const files = req.files || {};
       const mainFile = files['product_main_image'] && files['product_main_image'][0];
-      if (mainFile && mainFile.filename) {
-        data.product_main_image = path.posix.join('uploads', 'products', mainFile.filename);
+      if (mainFile) {
+        data.product_main_image = await uploadToExternalService(mainFile, 'product_main_images');
       }
-      const subFiles = files['image[]'] || [];
+      const subFiles = files['image'] || [];
       if (subFiles.length) {
-        const newImages = subFiles.map((f) => ({
-          product_image_id: f.filename || '',
-          image: path.posix.join('uploads', 'products', f.filename || ''),
-        }));
+        const newImages = [];
+        for (const f of subFiles) {
+          const url = await uploadToExternalService(f, 'product_images');
+          newImages.push({
+            product_image_id: String(Date.now()),
+            image: url,
+          });
+        }
         data.images = Array.isArray(data.images) ? [...data.images, ...newImages] : newImages;
       }
       if (data.month_arr && data.month_arr.length) {
@@ -506,15 +515,23 @@ const updateProduct = {
       }
       const files = req.files || {};
       const mainFile = files['product_main_image'] && files['product_main_image'][0];
-      if (mainFile && mainFile.filename) {
-        body.product_main_image = path.posix.join('uploads', 'products', mainFile.filename);
+      if (mainFile) {
+        if (existing.product_main_image) {
+          body.product_main_image = await updateFileOnExternalService(existing.product_main_image, mainFile);
+        } else {
+          body.product_main_image = await uploadToExternalService(mainFile, 'product_main_images');
+        }
       }
-      const subFiles = files['image[]'] || [];
+      const subFiles = files['image'] || [];
       if (subFiles.length) {
-        const newImages = subFiles.map((f) => ({
-          product_image_id: f.filename || '',
-          image: path.posix.join('uploads', 'products', f.filename || ''),
-        }));
+        const newImages = [];
+        for (const f of subFiles) {
+          const url = await uploadToExternalService(f, 'product_images');
+          newImages.push({
+            product_image_id: String(Date.now()),
+            image: url,
+          });
+        }
         body.images = Array.isArray(body.images) ? [...body.images, ...newImages] : newImages;
       }
 
@@ -640,6 +657,17 @@ const deleteProduct = {
 
       if (!existing) {
         return res.status(404).json({ message: 'Product not found' });
+      }
+
+      if (existing.product_main_image) {
+        await deleteFileFromExternalService(existing.product_main_image);
+      }
+      if (existing.images && existing.images.length) {
+        for (const img of existing.images) {
+          if (img.image) {
+            await deleteFileFromExternalService(img.image);
+          }
+        }
       }
 
       await Product.findByIdAndDelete(_id);
