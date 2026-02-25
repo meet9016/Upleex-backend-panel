@@ -37,7 +37,7 @@ const removeFile = (file_name) => {
     })
 }
 
-const handlePagination = async (Model, req, res, query = {}, sort = { createdAt: -1 }) => {
+const handlePagination = async (Model, req, res, query = {}, sort = { createdAt: -1 }, populate = null) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = req.query.limit ? parseInt(req.query.limit) : null;
@@ -46,6 +46,10 @@ const handlePagination = async (Model, req, res, query = {}, sort = { createdAt:
         const total = await Model.countDocuments(query);
 
         let dataQuery = Model.find(query).sort(sort);
+
+        if (populate) {
+            dataQuery = dataQuery.populate(populate);
+        }
 
         if (limit) {
             dataQuery = dataQuery.skip(skip).limit(limit);

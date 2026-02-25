@@ -8,4 +8,5 @@ module.exports.ProductListingType = require('./productListingType.model');
 module.exports.ProductMonth = require('./productMonth.model');
 module.exports.FAQ = require('./faq.model');
 module.exports.GetQuote = require('./getQuote.model');
+module.exports.AccountType = require('./accountType.model');
 

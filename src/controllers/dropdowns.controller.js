@@ -1,10 +1,15 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
-const { ProductType, ProductListingType, ProductMonth } = require('../models');
+const { ProductType, ProductListingType, ProductMonth, AccountType } = require('../models');
 
 const productTypeDropdownSchema = Joi.object().keys({
   id: Joi.string().allow(''),
   product_type: Joi.string().trim().required(),
+});
+
+const accountTypeDropdownSchema = Joi.object().keys({
+  id: Joi.string().allow(''),
+  type_name: Joi.string().trim().required(),
 });
 
 const productListingTypeDropdownSchema = Joi.object().keys({
@@ -29,11 +34,16 @@ const productMonthIdSchema = Joi.object().keys({
   id: Joi.string().required(),
 });
 
+const accountTypeIdSchema = Joi.object().keys({
+  id: Joi.string().required(),
+});
+
 const buildDropdownResponse = async () => {
-  const [types, listingTypes, months] = await Promise.all([
+  const [types, listingTypes, months, accountTypes] = await Promise.all([
     ProductType.find().sort({ createdAt: 1 }),
     ProductListingType.find().sort({ createdAt: 1 }),
     ProductMonth.find().sort({ createdAt: 1 }),
+    AccountType.find().sort({ createdAt: 1 }),
   ]);
 
   return {
@@ -48,6 +58,10 @@ const buildDropdownResponse = async () => {
     products_months: months.map((m) => ({
       id: m.id,
       month_name: m.month_name,
+    })),
+    account_type: accountTypes.map((at) => ({
+      id: at.id,
+      type_name: at.type_name,
     })),
   };
 };
@@ -77,6 +91,9 @@ const createDropdowns = {
       products_months: Joi.array()
         .items(productMonthDropdownSchema)
         .default([]),
+      account_type: Joi.array()
+        .items(accountTypeDropdownSchema)
+        .default([]),
     }),
   },
   handler: async (req, res) => {
@@ -85,6 +102,7 @@ const createDropdowns = {
         products_type: productsType,
         products_listing_type: productsListingType,
         products_months: productsMonths,
+        account_type: accountTypes,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -106,6 +124,13 @@ const createDropdowns = {
           month_name: m.month_name.trim(),
         }));
         await ProductMonth.insertMany(docs);
+      }
+
+      if (accountTypes && accountTypes.length) {
+        const docs = accountTypes.map((at) => ({
+          type_name: at.type_name.trim(),
+        }));
+        await AccountType.insertMany(docs);
       }
 
       const data = await buildDropdownResponse();
@@ -136,6 +161,9 @@ const updateDropdowns = {
         products_months: Joi.array()
           .items(productMonthDropdownSchema)
           .default([]),
+        account_type: Joi.array()
+          .items(accountTypeDropdownSchema)
+          .default([]),
       })
       .prefs({ convert: true }),
   },
@@ -145,6 +173,7 @@ const updateDropdowns = {
         products_type: productsType,
         products_listing_type: productsListingType,
         products_months: productsMonths,
+        account_type: accountTypes,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -195,6 +224,22 @@ const updateDropdowns = {
         }
       }
 
+      if (accountTypes && accountTypes.length) {
+        for (const at of accountTypes) {
+          if (at.id) {
+            await AccountType.findByIdAndUpdate(
+              at.id,
+              { type_name: at.type_name.trim() },
+              { new: true }
+            );
+          } else {
+            await AccountType.create({
+              type_name: at.type_name.trim(),
+            });
+          }
+        }
+      }
+
       const data = await buildDropdownResponse();
 
       return res.send({
@@ -218,6 +263,7 @@ const deleteDropdowns = {
         .items(productListingTypeIdSchema)
         .default([]),
       products_months: Joi.array().items(productMonthIdSchema).default([]),
+      account_type: Joi.array().items(accountTypeIdSchema).default([]),
     }),
   },
   handler: async (req, res) => {
@@ -226,6 +272,7 @@ const deleteDropdowns = {
         products_type: productsType,
         products_listing_type: productsListingType,
         products_months: productsMonths,
+        account_type: accountTypes,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -241,6 +288,11 @@ const deleteDropdowns = {
       if (productsMonths && productsMonths.length) {
         const ids = productsMonths.map((m) => m.id);
         await ProductMonth.deleteMany({ _id: { $in: ids } });
+      }
+
+      if (accountTypes && accountTypes.length) {
+        const ids = accountTypes.map((at) => at.id);
+        await AccountType.deleteMany({ _id: { $in: ids } });
       }
 
       const data = await buildDropdownResponse();
