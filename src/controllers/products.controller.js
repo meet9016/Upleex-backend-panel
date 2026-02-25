@@ -294,9 +294,26 @@ const getAllProducts = {
       sub_category_id,
       filter_rent_sell,
       filter_tenure,
+      search, // Add search parameter
     } = req.query;
 
     const query = {};
+
+    // Add search functionality
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i'); // Case-insensitive search
+      query.$or = [
+        { product_name: searchRegex },
+        { description: searchRegex },
+        { product_type_name: searchRegex },
+        { category_name: searchRegex },
+        { sub_category_name: searchRegex },
+        { brand: searchRegex },
+        { model: searchRegex },
+        { sku: searchRegex },
+        { tags: { $in: [searchRegex] } } // Search in tags array if exists
+      ];
+    }
 
     if (category_id) {
       query.category_id = category_id;
@@ -322,12 +339,18 @@ const getAllProducts = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : null;
       const skip = limit ? (page - 1) * limit : 0;
+      
+      console.log("Product query:", JSON.stringify(query, null, 2)); // Debug log
+      
       const total = await Product.countDocuments(query);
       let dataQuery = Product.find(query).sort({ createdAt: -1 });
+      
       if (limit) {
         dataQuery = dataQuery.skip(skip).limit(limit);
       }
+      
       const data = await dataQuery;
+      
       const catIds = [
         ...new Set(
           data.map((p) => p.category_id).filter((id) => !!id)
@@ -338,23 +361,28 @@ const getAllProducts = {
           data.map((p) => p.sub_category_id).filter((id) => !!id)
         ),
       ];
+      
       const [cats, subs] = await Promise.all([
         catIds.length ? Category.find({ _id: { $in: catIds } }) : [],
         subIds.length ? SubCategory.find({ _id: { $in: subIds } }) : [],
       ]);
+      
       const catMap = {};
       cats.forEach((c) => {
         catMap[c._id.toString()] = c.categories_name;
       });
+      
       const subMap = {};
       subs.forEach((s) => {
         subMap[s._id.toString()] = s.name;
       });
+      
       const normalized = data.map((p) => ({
         ...p.toObject(),
         category_name: p.category_name || catMap[p.category_id] || '',
         sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
       }));
+      
       res.status(200).json({
         success: true,
         total,
@@ -364,11 +392,14 @@ const getAllProducts = {
         data: normalized,
       });
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      console.error("Error in getAllProducts:", error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
+        success: false,
+        message: error.message 
+      });
     }
   },
 };
-
 const getProductById = {
   handler: async (req, res) => {
     try {
