@@ -7,6 +7,7 @@ const productsRoute = require('./products.route');
 const dropdownsRoute = require('./dropdowns.route');
 const faqsRoute = require('./faqs.route');
 const getQuoteRoute = require('./getquote.route');
+const vendorKycRoute = require('./vendorKyc.route');
 const vendorAuthRoute = require('../../routes/vendor/auth.route');
 
 const router = express.Router();
@@ -39,6 +40,10 @@ const defaultRoutes = [
   {
     path: '/faqs',
     route: faqsRoute,
+  },
+  {
+    path: '/',
+    route: vendorKycRoute,
   },
   {  
     path: '/vendor/auth',
