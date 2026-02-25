@@ -1,31 +1,38 @@
-const passport = require('passport');
+const jwt = require('jsonwebtoken');
 const httpStatus = require('http-status');
-const ApiError = require('../utils/ApiError');
-const { roleRights } = require('../config/roles');
+const config = require('../config/config');
 
-const verifyCallback = (req, resolve, reject, requiredRights) => async (err, user, info) => {
-  if (err || info || !user) {
-    return reject(new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate'));
-  }
-  req.user = user;
-
-  if (requiredRights.length) {
-    const userRights = roleRights.get(user.role);
-    const hasRequiredRights = requiredRights.every((requiredRight) => userRights.includes(requiredRight));
-    if (!hasRequiredRights && req.params.userId !== user.id) {
-      return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden'));
+const auth = (isOptional = false) => async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      if (isOptional) return next();
+      return res.status(httpStatus.UNAUTHORIZED).json({ 
+        message: 'Authentication required' 
+      });
     }
+
+    // Verify and decode the token
+    const decoded = jwt.verify(token, config.jwt.secret);
+    
+    // Attach user info to request object
+    req.user = {
+      id: decoded.sub,
+      _id: decoded.sub,
+      name: decoded.name || '',
+      userType: decoded.userType || 'user'
+    };
+    
+    console.log('User authenticated via manual JWT:', req.user);
+    next();
+  } catch (error) {
+    if (isOptional) return next();
+    console.error('Auth error:', error.message);
+    return res.status(httpStatus.UNAUTHORIZED).json({ 
+      message: 'Invalid or expired token' 
+    });
   }
-
-  resolve();
 };
-const auth = (...requiredRights) => async (req, res, next) => {
-  return new Promise((resolve, reject) => {
-    passport.authenticate('jwt', { session: false }, verifyCallback(req, resolve, reject, requiredRights))(req, res, next);
-  })
-    .then(() => next())
-    .catch((err) => next(err));
-};
-
 
 module.exports = auth;

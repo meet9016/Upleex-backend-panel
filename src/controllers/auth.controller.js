@@ -80,7 +80,7 @@ const register = {
       const newUser = await new User(req.body).save();
 
       // 3️⃣ Generate auth token
-      const token = await tokenService.generateAuthTokens(newUser);
+      const token = await tokenService.generateAuthTokens(newUser, 'user');
 
       // 4️⃣ Send welcome email
       // await sendWelcomeEmail(newUser.email, newUser.first_name);
@@ -97,7 +97,7 @@ const register = {
           phone: newUser.phone,
           profile_photo: newUser.profile_photo,
         },
-        token,
+        token: token.access,
       });
 
     } catch (error) {
@@ -128,9 +128,9 @@ const login = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
     }
 
-    const token = await tokenService.generateAuthTokens(user);
+    const token = await tokenService.generateAuthTokens(user, 'user');
     return res.status(httpStatus.OK).send({
-      token,
+      token: token.access,
       user: {
         _id: user._id,
         first_name: user.first_name,
@@ -325,7 +325,7 @@ const webLoginRegister = {
         password: 'otp_user_no_password'
       });
 
-      const token = await tokenService.generateAuthTokens(newUser);
+      const token = await tokenService.generateAuthTokens(newUser, 'user');
 
       return res.status(200).send({
         status: 200,
@@ -346,7 +346,7 @@ const webLoginRegister = {
     // ===============================
     // EXISTING USER LOGIN
     // ===============================
-    const token = await tokenService.generateAuthTokens(user);
+    const token = await tokenService.generateAuthTokens(user, 'user');
 
     return res.status(200).send({
       status: 200,

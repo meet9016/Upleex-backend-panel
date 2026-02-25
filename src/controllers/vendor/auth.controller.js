@@ -80,13 +80,16 @@ const vendorLogin = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Vendor not found');
   }
 
-  const token = await generateAuthTokens(vendor);
+  const token = await generateAuthTokens(vendor, 'vendor');
 
   res.status(httpStatus.OK).json({
     status: 200,
     success: true,
     message: 'Login successful',
-    data: { vendor, token },
+    data: { 
+      vendor, 
+      token: token.access // return only the string
+    },
   });
 });
 

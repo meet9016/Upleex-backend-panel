@@ -82,12 +82,14 @@ const productSchema = new mongoose.Schema(
     product_listing_type_name: {
       type: String,
     },
-    // vendor_id: {
-    //   type: String,
-    // },
-    // vendor_name: {
-    //   type: String,
-    // },
+    vendor_id: {
+      type: String,
+      required: true
+    },
+    vendor_name: {
+      type: String,
+      required: true
+    },
     // vendor_image: {
     //   type: String,
     // },

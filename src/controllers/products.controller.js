@@ -117,6 +117,15 @@ const createProduct = {
     try {
       const data = req.body;
 
+      // Automatically add vendor info from the authenticated user token
+      if (req.user) {
+        data.vendor_id = req.user.id || req.user._id || '';
+        data.vendor_name = req.user.name || '';
+        // If you have a vendor model to fetch image, you could do it here, 
+        // but for now we'll just use what's in the token or leave it empty.
+        console.log('Vendor info attached to product:', { id: data.vendor_id, name: data.vendor_name });
+      }
+
       const extractIndexedArray = (body, baseKey) => {
         const regex = new RegExp(`^${baseKey}\\[(\\d+)\\]$`);
         const result = [];
@@ -176,7 +185,7 @@ const createProduct = {
         for (const f of subFiles) {
           const url = await uploadToExternalService(f, 'product_images');
           newImages.push({
-            product_image_id: String(Date.now()),
+            product_image_id: String(Date.now() + Math.floor(Math.random() * 1000)),
             image: url,
           });
         }
@@ -294,10 +303,20 @@ const getAllProducts = {
       sub_category_id,
       filter_rent_sell,
       filter_tenure,
-      search, // Add search parameter
+      search,
+      vendor_id, // New: Allow filtering by vendor_id via query
     } = req.query;
 
     const query = {};
+
+    // 1. If explicit vendor_id is passed in query, use it
+    if (vendor_id) {
+      query.vendor_id = vendor_id;
+    } 
+    // 2. If user is logged in AND it's a vendor, only show their products
+    else if (req.user && req.user.userType === 'vendor') {
+      query.vendor_id = req.user.id || req.user._id;
+    }
 
     // Add search functionality
     if (search && search.trim() !== '') {
@@ -494,7 +513,16 @@ const updateProduct = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
+      // Authorization check: Only the vendor who created the product can update it
+      if (req.user && existing.vendor_id && existing.vendor_id !== req.user.id) {
+        return res.status(httpStatus.FORBIDDEN).json({ message: 'You do not have permission to update this product' });
+      }
+
       const body = req.body;
+      
+      // Prevent changing vendor info via update
+      delete body.vendor_id;
+      delete body.vendor_name;
 
       const extractIndexedArray = (body, baseKey) => {
         const regex = new RegExp(`^${baseKey}\\[(\\d+)\\]$`);
@@ -688,6 +716,11 @@ const deleteProduct = {
 
       if (!existing) {
         return res.status(404).json({ message: 'Product not found' });
+      }
+
+      // Authorization check: Only the vendor who created the product can delete it
+      if (req.user && existing.vendor_id && existing.vendor_id !== req.user.id) {
+        return res.status(httpStatus.FORBIDDEN).json({ message: 'You do not have permission to delete this product' });
       }
 
       if (existing.product_main_image) {
