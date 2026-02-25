@@ -39,7 +39,10 @@ const upload = multer({
     }
     cb(new Error('Only image files are allowed!'));
   }
-}).single('profile_photo');
+});
+
+const uploadProfilePhoto = upload.single('profile_photo');
+const uploadNone = upload.none();
 
 const register = {
   validation: {
@@ -248,6 +251,129 @@ const verifyEmail = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const webLoginRegister = {
+  validation: {
+    body: Joi.object().keys({
+      number: Joi.string().required(),
+      country_id: Joi.string().required(),
+      otp: Joi.string().optional(),
+      name: Joi.string().optional(),
+      email: Joi.string().optional(),
+    }),
+  },
+  handler: async (req, res) => {
+  try {
+    const { number, country_id, otp, name, email } = req.body;
+
+    const user = await User.findOne({ phone: number });
+
+    // ✅ SIMPLE OTP CHECK
+    const isOtpProvided = otp && otp.trim() !== '';
+
+    // ===============================
+    // STEP 1 → SEND OTP
+    // ===============================
+    if (!isOtpProvided) {
+      const userType = user ? 'existing' : 'new';
+
+      // TODO: Generate & Send Real OTP here
+
+      return res.status(200).send({
+        status: 200,
+        success: true,
+        message: 'OTP sent successfully',
+        data: {
+          user_type: userType
+        }
+      });
+    }
+
+    // ===============================
+    // STEP 2 → VERIFY OTP
+    // ===============================
+
+    if (String(otp) !== '123456') {
+      return res.status(400).send({
+        status: 400,
+        success: false,
+        message: 'Invalid OTP'
+      });
+    }
+
+    // ===============================
+    // NEW USER REGISTRATION
+    // ===============================
+    if (!user) {
+      if (!name || !email) {
+        return res.status(400).send({
+          status: 400,
+          success: false,
+          message: 'Name and email are required for new users'
+        });
+      }
+
+      // Handle name splitting for first_name and last_name
+      const nameParts = name.trim().split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || '.';
+
+      const newUser = await User.create({
+        phone: number,
+        name: name,
+        // last_name: lastName,
+        email,
+        password: 'otp_user_no_password'
+      });
+
+      const token = await tokenService.generateAuthTokens(newUser);
+
+      return res.status(200).send({
+        status: 200,
+        success: true,
+        message: 'Registration successful',
+        data: {
+          token: token.access, // token.access is the string itself
+          user: {
+            _id: newUser._id,
+            name: newUser.name,
+            email: newUser.email,
+            phone: newUser.phone
+          }
+        }
+      });
+    }
+
+    // ===============================
+    // EXISTING USER LOGIN
+    // ===============================
+    const token = await tokenService.generateAuthTokens(user);
+
+    return res.status(200).send({
+      status: 200,
+      success: true,
+      message: 'Login successful',
+      data: {
+        token: token.access, // token.access is the string itself
+        user: {
+          _id: user._id,
+           name: user.name,
+          email: user.email,
+          phone: user.phone
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Web Login Register Error:", error);
+    return res.status(500).send({
+      status: 500,
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+}
+};
+
 module.exports = {
   register,
   login,
@@ -258,4 +384,6 @@ module.exports = {
   sendVerificationEmail,
   verifyEmail,
   getUserProfile,
+  webLoginRegister,
+  uploadNone
 };

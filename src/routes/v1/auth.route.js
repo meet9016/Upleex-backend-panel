@@ -10,6 +10,7 @@ const router = express.Router();
 // Registration and Login
 router.post('/register', validate(authController.register.validation), catchAsync(authController.register.handler));
 router.post('/login', validate(authController.login.validation), catchAsync(authController.login.handler));
+router.post('/web-login-register', authController.uploadNone, validate(authController.webLoginRegister.validation), catchAsync(authController.webLoginRegister.handler));
 
 // Profile Management
 router.get('/profile/:id', catchAsync(authController.getUserProfile.handler));
