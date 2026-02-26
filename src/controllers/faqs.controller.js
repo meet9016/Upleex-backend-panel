@@ -44,7 +44,19 @@ const createFaq = {
 const getAllFaqs = {
   handler: async (req, res) => {
     try {
-      const faqs = await FAQ.find().sort({ createdAt: -1 });
+      const { search } = req.query;
+      let query = {};
+      
+      if (search) {
+        query = {
+          $or: [
+            { question: { $regex: search, $options: 'i' } },
+            { answer: { $regex: search, $options: 'i' } }
+          ]
+        };
+      }
+      
+      const faqs = await FAQ.find(query).sort({ createdAt: -1 });
 
       res.status(httpStatus.OK).json({
         success: true,

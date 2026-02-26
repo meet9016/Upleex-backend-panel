@@ -57,9 +57,42 @@ const getAllCategories = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
+      
+      // Build search query
+      let query = {};
+      
+      // Add search functionality
+      if (req.query.search) {
+        const searchRegex = new RegExp(req.query.search, 'i');
+        query = {
+          $or: [
+            { categories_name: searchRegex },
+            { name: searchRegex }
+          ]
+        };
+      }
 
-      const total = await Category.countDocuments();
-      const categories = await Category.find().sort({ createdAt: -1 }).skip(skip).limit(limit);
+      // Add status filter if needed
+      if (req.query.status) {
+        query.status = req.query.status;
+      }
+
+      // Add date filters if needed
+      if (req.query.date_from || req.query.date_to) {
+        query.createdAt = {};
+        if (req.query.date_from) {
+          query.createdAt.$gte = new Date(req.query.date_from);
+        }
+        if (req.query.date_to) {
+          query.createdAt.$lte = new Date(req.query.date_to);
+        }
+      }
+
+      const total = await Category.countDocuments(query);
+      const categories = await Category.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
 
       const transformedData = await Promise.all(
         categories.map(async (cat) => {
@@ -76,6 +109,9 @@ const getAllCategories = {
             categories_name: cat.categories_name || cat.name || '',
             image: cat.image || '',
             product_count: String(productCount),
+            status: cat.status || 'Active',
+            created_at: cat.createdAt,
+            updated_at: cat.updatedAt,
             subcategories: subcategories.map((sub) => ({
               subcategory_id: String(sub.id || sub._id),
               subcategory_name: sub.name || sub.subcategory_name || '',
@@ -94,11 +130,13 @@ const getAllCategories = {
         data: transformedData,
       });
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      res.status(500).json({ 
+        success: false,
+        message: error.message 
+      });
     }
   },
 };
-
 const getCategoryById = {
   handler: async (req, res) => {
     try {
