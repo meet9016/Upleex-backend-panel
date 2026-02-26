@@ -73,9 +73,9 @@ const getAllCategories = {
       }
 
       // Add status filter if needed
-      if (req.query.status) {
-        query.status = req.query.status;
-      }
+      // if (req.query.status) {
+      //   query.status = req.query.status;
+      // }
 
       // Add date filters if needed
       if (req.query.date_from || req.query.date_to) {
@@ -109,7 +109,6 @@ const getAllCategories = {
             categories_name: cat.categories_name || cat.name || '',
             image: cat.image || '',
             product_count: String(productCount),
-            status: cat.status || 'Active',
             created_at: cat.createdAt,
             updated_at: cat.updatedAt,
             subcategories: subcategories.map((sub) => ({
