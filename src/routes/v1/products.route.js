@@ -48,12 +48,14 @@ router.delete(
 
 router.post(
   '/web-vendor-product-list',
+  upload.none(),
   validate(productsController.getVendorProducts.validation),
   catchAsync(productsController.getVendorProducts.handler)
 );
 
 router.post(
   '/web-vendor-products',
+  upload.none(),
   validate(productsController.getVendorProducts.validation),
   catchAsync(productsController.getVendorProducts.handler)
 );

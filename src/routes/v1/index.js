@@ -17,13 +17,6 @@ const { productsController } = require('../../controllers');
 
 const router = express.Router();
 
-// Provide v1-level alias so clients can call /api/v1/web-vendor-product-list
-router.post(
-  '/web-vendor-product-list',
-  upload.none(),
-  validate(productsController.getVendorProducts.validation),
-  catchAsync(productsController.getVendorProducts.handler)
-);
 
 const defaultRoutes = [
   {
