@@ -46,4 +46,16 @@ router.delete(
   catchAsync(productsController.deleteProduct.handler)
 );
 
+router.post(
+  '/web-vendor-product-list',
+  validate(productsController.getVendorProducts.validation),
+  catchAsync(productsController.getVendorProducts.handler)
+);
+
+router.post(
+  '/web-vendor-products',
+  validate(productsController.getVendorProducts.validation),
+  catchAsync(productsController.getVendorProducts.handler)
+);
+
 module.exports = router;

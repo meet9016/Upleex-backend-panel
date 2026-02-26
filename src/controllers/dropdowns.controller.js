@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
-const { ProductType, ProductListingType, ProductMonth, AccountType } = require('../models');
+const { ProductType, ProductListingType, ProductMonth, AccountType, GetQuoteStatus } = require('../models');
 
 const productTypeDropdownSchema = Joi.object().keys({
   id: Joi.string().allow(''),
@@ -22,6 +22,15 @@ const productMonthDropdownSchema = Joi.object().keys({
   month_name: Joi.string().trim().required(),
 });
 
+const getQuoteStatusDropdownSchema = Joi.object().keys({
+  id: Joi.string().allow(''),
+  status_name: Joi.string().trim().required(),
+});
+
+const getQuoteStatusIdSchema = Joi.object().keys({
+  id: Joi.string().required(),
+});
+
 const productTypeIdSchema = Joi.object().keys({
   id: Joi.string().required(),
 });
@@ -39,11 +48,12 @@ const accountTypeIdSchema = Joi.object().keys({
 });
 
 const buildDropdownResponse = async () => {
-  const [types, listingTypes, months, accountTypes] = await Promise.all([
+  const [types, listingTypes, months, accountTypes, quoteStatuses] = await Promise.all([
     ProductType.find().sort({ createdAt: 1 }),
     ProductListingType.find().sort({ createdAt: 1 }),
     ProductMonth.find().sort({ createdAt: 1 }),
     AccountType.find().sort({ createdAt: 1 }),
+    GetQuoteStatus.find().sort({ createdAt: 1 }),
   ]);
 
   return {
@@ -62,6 +72,10 @@ const buildDropdownResponse = async () => {
     account_type: accountTypes.map((at) => ({
       id: at.id,
       type_name: at.type_name,
+    })),
+    getquote_status: quoteStatuses.map((qs) => ({
+      id: qs.id,
+      status_name: qs.status_name,
     })),
   };
 };
@@ -94,6 +108,9 @@ const createDropdowns = {
       account_type: Joi.array()
         .items(accountTypeDropdownSchema)
         .default([]),
+      getquote_status: Joi.array()
+        .items(getQuoteStatusDropdownSchema)
+        .default([]),
     }),
   },
   handler: async (req, res) => {
@@ -103,6 +120,7 @@ const createDropdowns = {
         products_listing_type: productsListingType,
         products_months: productsMonths,
         account_type: accountTypes,
+        getquote_status: quoteStatuses,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -131,6 +149,13 @@ const createDropdowns = {
           type_name: at.type_name.trim(),
         }));
         await AccountType.insertMany(docs);
+      }
+
+      if (quoteStatuses && quoteStatuses.length) {
+        const docs = quoteStatuses.map((qs) => ({
+          status_name: qs.status_name.trim(),
+        }));
+        await GetQuoteStatus.insertMany(docs);
       }
 
       const data = await buildDropdownResponse();
@@ -164,6 +189,9 @@ const updateDropdowns = {
         account_type: Joi.array()
           .items(accountTypeDropdownSchema)
           .default([]),
+        getquote_status: Joi.array()
+          .items(getQuoteStatusDropdownSchema)
+          .default([]),
       })
       .prefs({ convert: true }),
   },
@@ -174,6 +202,7 @@ const updateDropdowns = {
         products_listing_type: productsListingType,
         products_months: productsMonths,
         account_type: accountTypes,
+        getquote_status: quoteStatuses,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -240,6 +269,24 @@ const updateDropdowns = {
         }
       }
 
+      if (quoteStatuses && quoteStatuses.length) {
+        for (const qs of quoteStatuses) {
+          if (qs.id) {
+            await GetQuoteStatus.findByIdAndUpdate(
+              qs.id,
+              { 
+                status_name: qs.status_name.trim()
+              },
+              { new: true }
+            );
+          } else {
+            await GetQuoteStatus.create({
+              status_name: qs.status_name.trim()
+            });
+          }
+        }
+      }
+
       const data = await buildDropdownResponse();
 
       return res.send({
@@ -264,6 +311,7 @@ const deleteDropdowns = {
         .default([]),
       products_months: Joi.array().items(productMonthIdSchema).default([]),
       account_type: Joi.array().items(accountTypeIdSchema).default([]),
+      getquote_status: Joi.array().items(getQuoteStatusIdSchema).default([]),
     }),
   },
   handler: async (req, res) => {
@@ -273,6 +321,7 @@ const deleteDropdowns = {
         products_listing_type: productsListingType,
         products_months: productsMonths,
         account_type: accountTypes,
+        getquote_status: quoteStatuses,
       } = req.body;
 
       if (productsType && productsType.length) {
@@ -293,6 +342,11 @@ const deleteDropdowns = {
       if (accountTypes && accountTypes.length) {
         const ids = accountTypes.map((at) => at.id);
         await AccountType.deleteMany({ _id: { $in: ids } });
+      }
+
+      if (quoteStatuses && quoteStatuses.length) {
+        const ids = quoteStatuses.map((qs) => qs.id);
+        await GetQuoteStatus.deleteMany({ _id: { $in: ids } });
       }
 
       const data = await buildDropdownResponse();

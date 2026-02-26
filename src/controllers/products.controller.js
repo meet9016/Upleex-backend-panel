@@ -304,12 +304,15 @@ const getAllProducts = {
       filter_rent_sell,
       filter_tenure,
       search,
-      vendor_id, // New: Allow filtering by vendor_id via query
+      vendor_id: queryVendorId, // Explicit vendor_id from query
     } = req.query;
+
+    const bodyVendorId = req.body.vendor_id; // Support vendor_id from POST body
+    const vendor_id = queryVendorId || bodyVendorId;
 
     const query = {};
 
-    // 1. If explicit vendor_id is passed in query, use it
+    // 1. If explicit vendor_id is passed in query or body, use it
     if (vendor_id) {
       query.vendor_id = vendor_id;
     } 
@@ -349,15 +352,23 @@ const getAllProducts = {
       query.product_type_name = 'Sell';
     }
 
-    // Tenure filter (Daily / Monthly / Hourly) - expects listing type id
     if (filter_tenure && filter_tenure !== '0') {
-      query.product_listing_type_id = filter_tenure;
+      const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
+      const tenureName = tenureMap[filter_tenure];
+      if (tenureName) {
+        const orArr = query.$or ? [...query.$or] : [];
+        orArr.push({ product_listing_type_id: filter_tenure });
+        orArr.push({ product_listing_type_name: tenureName });
+        query.$or = orArr;
+      } else {
+        query.product_listing_type_id = filter_tenure;
+      }
     }
 
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = req.query.limit ? parseInt(req.query.limit) : null;
-      const skip = limit ? (page - 1) * limit : 0;
+      const page = parseInt(req.query.page || req.body.page) || 1;
+      const limit = (req.query.limit || req.body.limit) ? parseInt(req.query.limit || req.body.limit) : 10;
+      const skip = (page - 1) * limit;
       
       console.log("Product query:", JSON.stringify(query, null, 2)); // Debug log
       
@@ -415,6 +426,118 @@ const getAllProducts = {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
         success: false,
         message: error.message 
+      });
+    }
+  },
+};
+const getVendorProducts = {
+  validation: {
+    body: Joi.object().keys({
+      vendor_id: Joi.string().required(),
+      category_id: Joi.string().allow(''),
+      sub_category_id: Joi.string().allow(''),
+      filter_rent_sell: Joi.string().valid('1', '2').allow(''),
+      filter_tenure: Joi.string().allow(''),
+      search: Joi.string().allow(''),
+      page: Joi.number().integer().min(1),
+      limit: Joi.number().integer().min(1).max(100),
+    }),
+  },
+  handler: async (req, res) => {
+    const {
+      vendor_id,
+      category_id,
+      sub_category_id,
+      filter_rent_sell,
+      filter_tenure,
+      search,
+    } = req.body;
+
+    const query = { vendor_id };
+
+    if (search && String(search).trim() !== '') {
+      const searchRegex = new RegExp(String(search).trim(), 'i');
+      query.$or = [
+        { product_name: searchRegex },
+        { description: searchRegex },
+        { product_type_name: searchRegex },
+        { category_name: searchRegex },
+        { sub_category_name: searchRegex },
+      ];
+    }
+
+    if (category_id) {
+      query.category_id = category_id;
+    }
+    if (sub_category_id && sub_category_id !== 'all') {
+      query.sub_category_id = sub_category_id;
+    }
+    if (filter_rent_sell === '1') {
+      query.product_type_name = 'Rent';
+    } else if (filter_rent_sell === '2') {
+      query.product_type_name = 'Sell';
+    }
+    if (filter_tenure && filter_tenure !== '0') {
+      const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
+      const tenureName = tenureMap[filter_tenure];
+      if (tenureName) {
+        const orArr = query.$or ? [...query.$or] : [];
+        orArr.push({ product_listing_type_id: filter_tenure });
+        orArr.push({ product_listing_type_name: tenureName });
+        query.$or = orArr;
+      } else {
+        query.product_listing_type_id = filter_tenure;
+      }
+    }
+
+    try {
+      const page = parseInt(req.body.page) || 1;
+      const limit = req.body.limit ? parseInt(req.body.limit) : 10;
+      const skip = (page - 1) * limit;
+
+      const total = await Product.countDocuments(query);
+      let dataQuery = Product.find(query).sort({ createdAt: -1 });
+      if (limit) {
+        dataQuery = dataQuery.skip(skip).limit(limit);
+      }
+      const data = await dataQuery;
+
+      const catIds = [
+        ...new Set(data.map((p) => p.category_id).filter((id) => !!id)),
+      ];
+      const subIds = [
+        ...new Set(data.map((p) => p.sub_category_id).filter((id) => !!id)),
+      ];
+      const [cats, subs] = await Promise.all([
+        catIds.length ? Category.find({ _id: { $in: catIds } }) : [],
+        subIds.length ? SubCategory.find({ _id: { $in: subIds } }) : [],
+      ]);
+      const catMap = {};
+      cats.forEach((c) => {
+        catMap[c._id.toString()] = c.categories_name;
+      });
+      const subMap = {};
+      subs.forEach((s) => {
+        subMap[s._id.toString()] = s.name;
+      });
+      const normalized = data.map((p) => ({
+        ...p.toObject(),
+        category_name: p.category_name || catMap[p.category_id] || '',
+        sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+      }));
+
+      res.status(200).json({
+        success: true,
+        total,
+        page: limit ? page : 1,
+        limit: limit || total,
+        totalPages: limit ? Math.ceil(total / limit) : 1,
+        data: normalized,
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: error.message,
       });
     }
   },
@@ -985,4 +1108,5 @@ module.exports = {
   createProductDropdowns,
   updateProductDropdowns,
   deleteProductDropdowns,
+  getVendorProducts,
 };

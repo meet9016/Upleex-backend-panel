@@ -9,4 +9,6 @@ module.exports.ProductMonth = require('./productMonth.model');
 module.exports.FAQ = require('./faq.model');
 module.exports.GetQuote = require('./getQuote.model');
 module.exports.AccountType = require('./accountType.model');
+module.exports.GetQuoteStatus = require('./getQuoteStatus.model');
+module.exports.Cart = require('./cart.model');
 

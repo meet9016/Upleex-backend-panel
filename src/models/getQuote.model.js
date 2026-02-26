@@ -4,8 +4,10 @@ const { toJSON } = require('./plugins');
 const STATUS = {
   PENDING: 'pending',
   APPROVAL: 'approval',
+  ACTIVE: 'active',
   REJECT: 'reject',
   COMPLETE: 'complete',
+  SUCCESSFUL: 'successful',
 };
 
 const getQuoteSchema = new mongoose.Schema(
@@ -46,6 +48,24 @@ const getQuoteSchema = new mongoose.Schema(
       enum: Object.values(STATUS),
       default: STATUS.PENDING,
       index: true,
+    },
+    start_date: {
+      type: Date,
+    },
+    end_date: {
+      type: Date,
+    },
+    upload_image: {
+      type: String,
+    },
+    upload_video: {
+      type: String,
+    },
+    return_image: {
+      type: String,
+    },
+    return_video: {
+      type: String,
     },
   },
   {
