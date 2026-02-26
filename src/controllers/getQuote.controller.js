@@ -4,8 +4,10 @@ const mongoose = require('mongoose');
 const {
   GetQuote,
   Product,
+  GetQuoteStatus,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
+const { uploadToExternalService } = require('../utils/fileUpload');
 
 const createGetQuote = {
   validation: {
@@ -17,8 +19,10 @@ const createGetQuote = {
       qty: Joi.number().optional(),
       note: Joi.string().allow('').optional(),
       status: Joi.string()
-        .valid('pending', 'approval', 'reject', 'complete')
+        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful')
         .optional(),
+      start_date: Joi.date().optional(),
+      end_date: Joi.date().optional(),
     }),
   },
 
@@ -262,8 +266,10 @@ const updateQuote = {
       qty: Joi.number().optional(),
       note: Joi.string().allow('').optional(),
       status: Joi.string()
-        .valid('pending', 'approval', 'reject', 'complete')
+        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful')
         .optional(),
+      start_date: Joi.date().optional(),
+      end_date: Joi.date().optional(),
     }),
   },
   handler: async (req, res) => {
@@ -274,10 +280,29 @@ const updateQuote = {
         return res.status(httpStatus.BAD_REQUEST).json({ message: 'Invalid quote id' });
       }
 
+      const updateData = { ...req.body };
+
+      // Handle optional file uploads
+      if (req.files) {
+        const f = req.files;
+        if (f.image && f.image[0]) {
+          updateData.upload_image = await uploadToExternalService(f.image[0], 'quotes/uploads');
+        }
+        if (f.video && f.video[0]) {
+          updateData.upload_video = await uploadToExternalService(f.video[0], 'quotes/uploads');
+        }
+        if (f.return_image && f.return_image[0]) {
+          updateData.return_image = await uploadToExternalService(f.return_image[0], 'quotes/returns');
+        }
+        if (f.return_video && f.return_video[0]) {
+          updateData.return_video = await uploadToExternalService(f.return_video[0], 'quotes/returns');
+        }
+      }
+
       // Update the quote and get the populated result
       const quote = await GetQuote.findByIdAndUpdate(
         _id, 
-        req.body, 
+        updateData, 
         { new: true } // Return the updated document
       )
         .populate('product_id') // Populate product details
@@ -294,6 +319,64 @@ const updateQuote = {
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  },
+};
+
+const statusDropdown = {
+  handler: async (req, res) => {
+    try {
+      const rows = await GetQuoteStatus.find().sort({ createdAt: 1 }).lean();
+      const data = rows.map((r) => ({ id: r._id.toString(), name: r.status_name }));
+      res.status(httpStatus.OK).json({ status: 200, data });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ status: 500, message: error.message });
+    }
+  },
+};
+
+const changeStatus = {
+  validation: {
+    body: Joi.object().keys({
+      quote_id: Joi.string().required(),
+      status: Joi.string().required(), // status id or name
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { quote_id, status } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(quote_id)) {
+        return res.status(httpStatus.BAD_REQUEST).json({ status: 400, message: 'Invalid quote id' });
+      }
+
+      // Resolve provided status to internal enum
+      let statusName = status;
+      if (mongoose.Types.ObjectId.isValid(status)) {
+        const row = await GetQuoteStatus.findById(status).lean();
+        if (row) statusName = row.status_name;
+      }
+      const s = (statusName || '').toLowerCase();
+      let internal = 'pending';
+      if (s.includes('active')) internal = 'active';
+      else if (s.includes('approve')) internal = 'approval';
+      else if (s.includes('reject')) internal = 'reject';
+      else if (s.includes('complete')) internal = 'complete';
+      else if (s.includes('success')) internal = 'successful';
+
+      const updated = await GetQuote.findByIdAndUpdate(
+        quote_id,
+        { status: internal },
+        { new: true }
+      ).lean();
+
+      if (!updated) {
+        return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
+      }
+
+      res.status(httpStatus.OK).json({ status: 200, message: 'Status updated', data: updated });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ status: 500, message: error.message });
     }
   },
 };
@@ -329,4 +412,6 @@ module.exports = {
   getQuoteById,
   updateQuote,
   deleteQuote,
+  statusDropdown,
+  changeStatus,
 };

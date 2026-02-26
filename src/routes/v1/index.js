@@ -7,10 +7,16 @@ const productsRoute = require('./products.route');
 const dropdownsRoute = require('./dropdowns.route');
 const faqsRoute = require('./faqs.route');
 const getQuoteRoute = require('./getquote.route');
+const cartRoute = require('./cart.route');
 const vendorKycRoute = require('./vendorKyc.route');
 const vendorAuthRoute = require('../../routes/vendor/auth.route');
+const validate = require('../../middlewares/validate');
+const catchAsync = require('../../utils/catchAsync');
+const upload = require('../../middlewares/upload');
+const { productsController } = require('../../controllers');
 
 const router = express.Router();
+
 
 const defaultRoutes = [
   {
@@ -52,6 +58,10 @@ const defaultRoutes = [
   {  
     path: '/quote',
     route: getQuoteRoute,
+  },
+  {  
+    path: '/cart',
+    route: cartRoute,
   },
 ];
 
