@@ -18,6 +18,19 @@ const { productsController } = require('../../controllers');
 
 const router = express.Router();
 
+router.post(
+  '/web-product-suggestion-list',
+  upload.none(),
+  validate(productsController.webProductSuggestionList.validation),
+  catchAsync(productsController.webProductSuggestionList.handler)
+);
+
+router.post(
+  '/web-search-product-list',
+  upload.none(),
+  validate(productsController.webSearchProductList.validation),
+  catchAsync(productsController.webSearchProductList.handler)
+);
 
 const defaultRoutes = [
   {

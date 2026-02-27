@@ -407,11 +407,31 @@ const getAllProducts = {
         subMap[s._id.toString()] = s.name;
       });
       
-      const normalized = data.map((p) => ({
-        ...p.toObject(),
-        category_name: p.category_name || catMap[p.category_id] || '',
-        sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-      }));
+      // Enrich with vendor KYC details: city_id and city_name
+      const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
+      let vendorMap = {};
+      const VendorKyc = require('../models/vendor/vendorKyc.model');
+      if (vendorIds.length) {
+        const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
+        kycs.forEach((k) => {
+          vendorMap[String(k.vendor_id)] = {
+            city_id: k.city_id || '',
+            city_name: k.city_name || '',
+            vendor_name: (k.business_name || k.full_name || ''),
+          };
+        });
+      }
+      const normalized = data.map((p) => {
+        const v = vendorMap[String(p.vendor_id)] || {};
+        return {
+          ...p.toObject(),
+          category_name: p.category_name || catMap[p.category_id] || '',
+          sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+          vendor_name: p.vendor_name || v.vendor_name || '',
+          vendor_city_id: v.city_id || '',
+          vendor_city_name: v.city_name || '',
+        };
+      });
       
       res.status(200).json({
         success: true,
@@ -520,11 +540,31 @@ const getVendorProducts = {
       subs.forEach((s) => {
         subMap[s._id.toString()] = s.name;
       });
-      const normalized = data.map((p) => ({
-        ...p.toObject(),
-        category_name: p.category_name || catMap[p.category_id] || '',
-        sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-      }));
+      // Enrich with vendor KYC details: city_id and city_name
+      const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
+      const VendorKyc = require('../models/vendor/vendorKyc.model');
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
+        kycs.forEach((k) => {
+          vendorMap[String(k.vendor_id)] = {
+            city_id: k.city_id || '',
+            city_name: k.city_name || '',
+            vendor_name: (k.business_name || k.full_name || ''),
+          };
+        });
+      }
+      const normalized = data.map((p) => {
+        const v = vendorMap[String(p.vendor_id)] || {};
+        return {
+          ...p.toObject(),
+          category_name: p.category_name || catMap[p.category_id] || '',
+          sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+          vendor_name: p.vendor_name || v.vendor_name || '',
+          vendor_city_id: v.city_id || '',
+          vendor_city_name: v.city_name || '',
+        };
+      });
 
       res.status(200).json({
         success: true,
@@ -1097,6 +1137,139 @@ const deleteProductDropdowns = {
   },
 };
 
+const VendorKyc = require('../models/vendor/vendorKyc.model');
+
+const webProductSuggestionList = {
+  validation: {
+    body: Joi.object().keys({
+      search: Joi.string().trim().required(),
+      city: Joi.string().allow(''),
+      page: Joi.number().integer().min(1),
+      limit: Joi.number().integer().min(1).max(100),
+    }),
+  },
+  handler: async (req, res) => {
+    const { search, city } = req.body;
+    const page = parseInt(req.body.page) || 1;
+    const limit = req.body.limit ? parseInt(req.body.limit) : 10;
+    const skip = (page - 1) * limit;
+    const searchRegex = new RegExp(String(search).trim(), 'i');
+    let vendorFilterIds = null;
+    if (city && String(city).trim() !== '') {
+      const raw = String(city).trim();
+      const parts = raw.split('-');
+      const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+      const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+      const vendors = await VendorKyc.find(
+        {
+          $or: [
+            { city_id: raw },
+            { city_id: { $regex: cityNameRegex } },
+            { city_name: { $regex: cityNameRegex } },
+          ],
+        },
+        { vendor_id: 1 }
+      );
+      vendorFilterIds = vendors.map(v => v.vendor_id).filter(Boolean);
+      if (vendorFilterIds.length === 0) {
+        return res.status(200).json({ status: 200, data: [] });
+      }
+    }
+    const query = vendorFilterIds && vendorFilterIds.length ? { vendor_id: { $in: vendorFilterIds }, product_name: searchRegex } : { product_name: searchRegex };
+    const products = await Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    const suggestions = products.map(p => ({ id: p._id.toString(), product_name: p.product_name })).filter((s, idx, arr) => arr.findIndex(x => x.product_name === s.product_name) === idx);
+    return res.status(200).json({ status: 200, data: suggestions });
+  },
+};
+
+const webSearchProductList = {
+  validation: {
+    body: Joi.object().keys({
+      search: Joi.string().trim().required(),
+      city: Joi.string().allow(''),
+      page: Joi.number().integer().min(1),
+      limit: Joi.number().integer().min(1).max(100),
+    }),
+  },
+  handler: async (req, res) => {
+    const { search, city } = req.body;
+    const page = parseInt(req.body.page) || 1;
+    const limit = req.body.limit ? parseInt(req.body.limit) : 12;
+    const skip = (page - 1) * limit;
+    const searchRegex = new RegExp(String(search).trim(), 'i');
+    let vendorFilterIds = null;
+    if (city && String(city).trim() !== '') {
+      const raw = String(city).trim();
+      const parts = raw.split('-');
+      const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+      const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+      const vendors = await VendorKyc.find(
+        {
+          $or: [
+            { city_id: raw },
+            { city_id: { $regex: cityNameRegex } },
+            { city_name: { $regex: cityNameRegex } },
+          ],
+        },
+        { vendor_id: 1 }
+      );
+      vendorFilterIds = vendors.map(v => v.vendor_id).filter(Boolean);
+      if (vendorFilterIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          total: 0,
+          page,
+          limit,
+          totalPages: 1,
+          data: [],
+        });
+      }
+    }
+    const query = {};
+    query.$or = [
+      { product_name: searchRegex },
+      { description: searchRegex },
+      { product_type_name: searchRegex },
+      { category_name: searchRegex },
+      { sub_category_name: searchRegex },
+    ];
+    if (vendorFilterIds && vendorFilterIds.length) {
+      query.vendor_id = { $in: vendorFilterIds };
+    }
+    const total = await Product.countDocuments(query);
+    let dataQuery = Product.find(query).sort({ createdAt: -1 });
+    dataQuery = dataQuery.skip(skip).limit(limit);
+    const data = await dataQuery;
+    const catIds = [...new Set(data.map((p) => p.category_id).filter((id) => !!id))];
+    const subIds = [...new Set(data.map((p) => p.sub_category_id).filter((id) => !!id))];
+    const [cats, subs] = await Promise.all([
+      catIds.length ? Category.find({ _id: { $in: catIds } }) : [],
+      subIds.length ? SubCategory.find({ _id: { $in: subIds } }) : [],
+    ]);
+    const catMap = {};
+    cats.forEach((c) => {
+      catMap[c._id.toString()] = c.categories_name;
+    });
+    const subMap = {};
+    subs.forEach((s) => {
+      subMap[s._id.toString()] = s.name;
+    });
+    const normalized = data.map((p) => ({
+      ...p.toObject(),
+      category_name: p.category_name || catMap[p.category_id] || '',
+      sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+    }));
+    return res.status(200).json({
+      success: true,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+      data: normalized,
+    });
+  },
+};
+
 
 module.exports = {
   createProduct,
@@ -1109,4 +1282,6 @@ module.exports = {
   updateProductDropdowns,
   deleteProductDropdowns,
   getVendorProducts,
+  webProductSuggestionList,
+  webSearchProductList,
 };
