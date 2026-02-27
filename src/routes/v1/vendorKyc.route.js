@@ -84,6 +84,13 @@ router.post(
   catchAsync(locationController.cityList.handler)
 );
 
+router.post(
+  '/vendor-india-city-list',
+  validate(locationController.indiaCityList.validation),
+  catchAsync(locationController.indiaCityList.handler)
+);
+
+
 
 
 module.exports = router;

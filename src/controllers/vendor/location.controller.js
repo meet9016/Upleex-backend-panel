@@ -104,7 +104,7 @@ const stateList = {
 const cityList = {
   validation: {
     body: Joi.object().keys({
-      state_id: Joi.string().required(),
+      state_id: Joi.string().allow(''),
       search: Joi.string().allow(''),
       page: Joi.number().integer().min(1).default(1),
       limit: Joi.number().integer().min(1).max(100).default(20),
@@ -153,9 +153,72 @@ const cityList = {
     }
   },
 };
+const indiaCityList = {
+  validation: {
+    body: Joi.object().keys({
+      search: Joi.string().allow(''),
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(100).default(20),
+    }),
+  },
 
+  handler: async (req, res) => {
+    try {
+      const { search = '', page = 1, limit = 10 } = req.body;
+      const now = Date.now();
+      if (!global.__indiaCitiesCache) {
+        global.__indiaCitiesCache = { data: [], fetchedAt: 0 };
+      }
+      const ttl = 24 * 60 * 60 * 1000;
+      let all = [];
+      if (global.__indiaCitiesCache.data.length && (now - global.__indiaCitiesCache.fetchedAt) < ttl) {
+        all = global.__indiaCitiesCache.data;
+      } else {
+        const resp = await axios.post('https://countriesnow.space/api/v0.1/countries/cities', { country: 'India' });
+        const citiesArr = Array.isArray(resp.data?.data) ? resp.data.data : [];
+        all = citiesArr.map((city) => ({
+          id: `IN-${String(city || '')}`,
+          city_name: String(city || ''),
+        }));
+        all.sort((a, b) => a.city_name.localeCompare(b.city_name));
+        global.__indiaCitiesCache = { data: all, fetchedAt: now };
+      }
+      const needle = String(search || '').toLowerCase();
+      const filtered = needle ? all.filter((c) => c.city_name.toLowerCase().includes(needle)) : all;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedData = {
+        total: filtered.length,
+        page,
+        limit,
+        totalPages: Math.ceil(filtered.length / limit) || 1,
+        data: filtered.slice(startIndex, endIndex),
+      };
+      return res.status(200).json({ status: 200, data: paginatedData });
+    } catch (error) {
+      const cache = global.__indiaCitiesCache && global.__indiaCitiesCache.data ? global.__indiaCitiesCache.data : [];
+      if (cache.length) {
+        const { search = '', page = 1, limit = 10 } = req.body || {};
+        const needle = String(search || '').toLowerCase();
+        const filtered = needle ? cache.filter((c) => c.city_name.toLowerCase().includes(needle)) : cache;
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedData = {
+          total: filtered.length,
+          page,
+          limit,
+          totalPages: Math.ceil(filtered.length / limit) || 1,
+          data: filtered.slice(startIndex, endIndex),
+        };
+        return res.status(200).json({ status: 200, data: paginatedData });
+      }
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  },
+};
 module.exports = {
   countryList,
   stateList,
   cityList,
+  indiaCityList
 };
