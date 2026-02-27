@@ -5,12 +5,14 @@ const catchAsync = require('../../utils/catchAsync');
 const kycController = require('../../controllers/vendor/kyc.controller');
 const locationController = require('../../controllers/vendor/location.controller');
 const upload = require('../../middlewares/upload');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
 // KYC Routes
 router.post(
   '/vendor-kyc',
+  auth(),
   upload.fields([
     { name: 'pancard_front_image', maxCount: 1 },
     { name: 'aadharcard_front_image', maxCount: 1 },
@@ -25,11 +27,13 @@ router.post(
 
 router.post(
   '/vendor-single-details',
+  auth(),
   catchAsync(kycController.getSingleKyc.handler)
 );
 
 router.get(
   '/vendor-single-details',
+  auth(),
   catchAsync(kycController.getSingleKyc.handler)
 );
 
@@ -52,6 +56,13 @@ router.put(
 router.delete(
   '/vendor-kyc/:_id',
   catchAsync(kycController.deleteKyc.handler)
+);
+
+// Super admin: change KYC status
+router.post(
+  '/change-status',
+  validate(kycController.changeStatus.validation),
+  catchAsync(kycController.changeStatus.handler)
 );
 
 // Location Routes

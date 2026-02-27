@@ -10,6 +10,7 @@ const getQuoteRoute = require('./getquote.route');
 const cartRoute = require('./cart.route');
 const vendorKycRoute = require('./vendorKyc.route');
 const vendorAuthRoute = require('../../routes/vendor/auth.route');
+const adminRoute = require('./admin.route');
 const validate = require('../../middlewares/validate');
 const catchAsync = require('../../utils/catchAsync');
 const upload = require('../../middlewares/upload');
@@ -62,6 +63,10 @@ const defaultRoutes = [
   {  
     path: '/cart',
     route: cartRoute,
+  },
+  {
+    path: '/admin',
+    route: adminRoute,
   },
 ];
 

@@ -30,6 +30,7 @@ const kycSchema = Joi.object().keys({
   aadharcard_front_image: Joi.string().allow(''),
   aadharcard_back_image: Joi.string().allow(''),
   gst_certificate_image: Joi.string().allow(''),
+  status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
 }).prefs({ convert: true });
 
 const saveKyc = {
@@ -39,6 +40,11 @@ const saveKyc = {
   handler: async (req, res) => {
     try {
       const body = req.body;
+
+      // Always bind vendor_id from authenticated token if available
+      if (req.user && (req.user.id || req.user._id)) {
+        body.vendor_id = String(req.user.id || req.user._id);
+      }
 
       // Attach uploaded images if provided
       if (req.files) {
@@ -68,10 +74,18 @@ const saveKyc = {
       };
       let doc = await VendorKyc.findOne(filter);
       if (doc) {
-        Object.assign(doc, body);
+        // Preserve status unless explicitly provided
+        const next = { ...body };
+        if (!('status' in next)) {
+          delete next.status;
+        }
+        Object.assign(doc, next);
         await doc.save();
       } else {
-        doc = await VendorKyc.create(body);
+        doc = await VendorKyc.create({
+          ...body,
+          status: body.status || 'pending',
+        });
       }
       return res.status(200).json({
         status: 200,
@@ -89,7 +103,11 @@ const saveKyc = {
 const getSingleKyc = {
   handler: async (req, res) => {
     try {
-      const { vendor_id, mobile, email } = { ...req.body, ...req.query };
+      let { vendor_id, mobile, email } = { ...req.body, ...req.query };
+      // Prefer authenticated vendor id
+      if (req.user && (req.user.id || req.user._id)) {
+        vendor_id = String(req.user.id || req.user._id);
+      }
       let filter = {};
       if (vendor_id || mobile || email) {
         filter = {
@@ -132,8 +150,10 @@ const listKyc = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : 10;
       const skip = (page - 1) * limit;
-      const total = await VendorKyc.countDocuments({});
-      const docs = await VendorKyc.find({})
+      const status = req.query.status;
+      const q = status ? { status } : {};
+      const total = await VendorKyc.countDocuments(q);
+      const docs = await VendorKyc.find(q)
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit);
@@ -220,3 +240,33 @@ module.exports.listKyc = listKyc;
 module.exports.getKycById = getKycById;
 module.exports.updateKyc = updateKyc;
 module.exports.deleteKyc = deleteKyc;
+
+// Admin-only: change KYC status
+module.exports.changeStatus = {
+  validation: {
+    body: Joi.object().keys({
+      kyc_id: Joi.string().allow(''),
+      vendor_id: Joi.string().allow(''),
+      status: Joi.string().valid('pending', 'approved', 'rejected').required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { kyc_id, vendor_id, status } = req.body;
+      const filter = kyc_id ? { _id: kyc_id } : vendor_id ? { vendor_id } : null;
+      if (!filter) {
+        return res.status(400).json({ status: 400, message: 'kyc_id or vendor_id is required' });
+      }
+      const doc = await VendorKyc.findOne(filter);
+      if (!doc) {
+        return res.status(404).json({ status: 404, message: 'KYC not found' });
+      }
+      doc.status = status;
+      doc.approved_at = status === 'approved' ? new Date() : undefined;
+      await doc.save();
+      return res.status(200).json({ status: 200, message: 'Status updated', data: doc.toJSON() });
+    } catch (error) {
+      res.status(500).json({ status: 500, message: error.message });
+    }
+  },
+};

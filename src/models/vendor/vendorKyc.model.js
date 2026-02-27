@@ -29,6 +29,13 @@ const vendorKycSchema = new mongoose.Schema(
     aadharcard_front_image: { type: String, default: '' },
     aadharcard_back_image: { type: String, default: '' },
     gst_certificate_image: { type: String, default: '' },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
+    approved_at: { type: Date },
   },
   {
     timestamps: true,
