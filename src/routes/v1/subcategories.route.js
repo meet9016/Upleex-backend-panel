@@ -35,6 +35,12 @@ router.delete(
   '/delete/:_id',
   catchAsync(subCategoriesController.deleteSubCategory.handler)
 );
+router.delete(
+  '/bulk-delete',
+  validate(subCategoriesController.bulkDeleteSubCategories.validation),
+  catchAsync(subCategoriesController.bulkDeleteSubCategories.handler)
+);
+
 
 module.exports = router;
 

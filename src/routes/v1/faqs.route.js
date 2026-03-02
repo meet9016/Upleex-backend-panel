@@ -26,6 +26,11 @@ router.delete(
   '/delete/:_id',
   catchAsync(faqsController.deleteFaq.handler)
 );
+router.delete(  
+  '/bulk-delete',
+  validate(faqsController.bulkDeleteFaqs.validation),
+  catchAsync(faqsController.bulkDeleteFaqs.handler)
+);
 
 module.exports = router;
 

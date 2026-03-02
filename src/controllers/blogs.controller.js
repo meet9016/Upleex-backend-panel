@@ -203,10 +203,41 @@ const deleteBlogs = {
     }
 }
 
+const bulkDeleteBlogs = {
+  validation: {
+    body: Joi.object().keys({
+      ids: Joi.array().items(Joi.string().hex().length(24)).min(1).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    const { ids } = req.body;
+
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    const blogs = await Blogs.find({ _id: { $in: objectIds } });
+
+    if (blogs.length !== ids.length) {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: 'One or more blogs do not exist' });
+    }
+
+    for (const blog of blogs) {
+      if (blog.image) {
+        await deleteFileFromExternalService(blog.image);
+      }
+    }
+
+    await Blogs.deleteMany({ _id: { $in: objectIds } });
+
+    res.send({ message: 'Blogs deleted successfully' });
+  },
+};
+
 module.exports = {
     createBlogs,
     getAllBlogs,
     getBlogById,
     updateBlogs,
-    deleteBlogs
+    deleteBlogs,
+    bulkDeleteBlogs
 };
+

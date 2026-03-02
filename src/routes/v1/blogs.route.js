@@ -12,5 +12,9 @@ router.get('/getall', catchAsync(blogsController.getAllBlogs.handler));
 router.get('/getById/:_id', catchAsync(blogsController.getBlogById.handler));
 router.put('/update/:_id', upload.single("image"), validate(blogsController.updateBlogs.validation), catchAsync(blogsController.updateBlogs.handler));
 router.delete('/delete/:_id', catchAsync(blogsController.deleteBlogs.handler));
-
+router.delete(
+  '/bulk-delete',
+  validate(blogsController.bulkDeleteBlogs.validation),
+  catchAsync(blogsController.bulkDeleteBlogs.handler)
+);
 module.exports = router;
