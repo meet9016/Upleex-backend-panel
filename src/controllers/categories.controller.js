@@ -8,7 +8,7 @@ const {
   updateFileOnExternalService,
   deleteFileFromExternalService,
 } = require('../utils/fileUpload');
-
+const mongoose = require('mongoose');
 const createCategory = {
   validation: {
     body: Joi.object().keys({
@@ -251,10 +251,33 @@ const deleteCategory = {
   },
 };
 
+const bulkDeleteCategories = {  
+  handler: async (req, res) => {
+    const { ids } = req.body;
+
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    const categories = await Category.find({ _id: { $in: objectIds } });
+
+    for (const category of categories) {
+      if (category.image) {
+        await deleteFileFromExternalService(category.image);
+      } else {
+         await deleteFileFromExternalService(category.image);
+       }
+    }
+
+    await Category.deleteMany({ _id: { $in: objectIds } });
+
+    res.send({ message: 'Categories deleted successfully' });
+  },
+};
+
 module.exports = {
   createCategory,
   getAllCategories,
   getCategoryById,
   updateCategory,
   deleteCategory,
+  bulkDeleteCategories
 };

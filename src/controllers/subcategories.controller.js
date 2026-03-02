@@ -251,6 +251,34 @@ const deleteSubCategory = {
     res.send({ message: 'Subcategory deleted successfully' });
   },
 };
+const bulkDeleteSubCategories = {
+  validation: {
+    body: Joi.object().keys({
+      ids: Joi.array().items(Joi.string()).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    const { ids } = req.body;
+
+    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+    const subCategories = await SubCategory.find({ _id: { $in: objectIds } });
+
+    if (subCategories.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'No subcategories found to delete');
+    }
+
+    for (const subCategory of subCategories) {
+      if (subCategory.image) {
+        await deleteFileFromExternalService(subCategory.image);
+      }
+    }
+
+    await SubCategory.deleteMany({ _id: { $in: objectIds } });
+
+    res.send({ message: 'Subcategories deleted successfully' });
+  },
+};
 
 module.exports = {
   createSubCategory,
@@ -258,4 +286,5 @@ module.exports = {
   getSubCategoryById,
   updateSubCategory,
   deleteSubCategory,
+  bulkDeleteSubCategories,
 };

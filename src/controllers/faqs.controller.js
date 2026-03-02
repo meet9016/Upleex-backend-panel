@@ -155,10 +155,45 @@ const deleteFaq = {
   },
 };
 
+const bulkDeleteFaqs = {
+  validation: {
+    body: Joi.object().keys({
+      ids: Joi.array().items(Joi.string()).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { ids } = req.body;
+
+      const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
+
+      const faqs = await FAQ.find({ _id: { $in: objectIds } });
+
+      if (faqs.length === 0) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          message: 'No FAQs found to delete',
+        });
+      }
+
+      await FAQ.deleteMany({ _id: { $in: objectIds } });
+
+      res.send({
+        success: true,
+        message: 'FAQs deleted successfully',
+      });
+    } catch (error) {
+      res
+        .status(httpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: error.message });
+    }
+  },
+};    
+
 module.exports = {
   createFaq,
   getAllFaqs,
   updateFaq,
   deleteFaq,
+  bulkDeleteFaqs,
 };
 
