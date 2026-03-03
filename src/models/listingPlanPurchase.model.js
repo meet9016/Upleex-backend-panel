@@ -4,7 +4,7 @@ const { toJSON } = require('./plugins');
 const listingPlanPurchaseSchema = new mongoose.Schema(
   {
     vendor_id: { type: String, required: true, index: true },
-    plan_type: { type: String, enum: ['basic', 'standard', 'premium', 'custom'], required: true },
+    plan_type: { type: String, required: true },
     months: { type: Number, required: true },
     max_products: { type: Number, required: true },
     amount: { type: Number, default: 0 },

@@ -19,6 +19,7 @@ const {
 const moment = require('moment');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
+const ListingPlan = require('../models/listingPlan.model');
 
 const productDetailSchema = Joi.object().keys({
   specification_id: Joi.string().allow(''),
@@ -1361,7 +1362,7 @@ const purchaseListingPlan = {
   validation: {
     body: Joi.object().keys({
       vendor_id: Joi.string().allow(''),
-      plan_type: Joi.string().valid('basic', 'standard', 'premium', 'custom').required(),
+      plan_type: Joi.string().trim().required(),
       months: Joi.number().integer().min(1),
       max_products: Joi.number().integer().min(1),
       amount: Joi.number().min(0),
@@ -1373,14 +1374,30 @@ const purchaseListingPlan = {
     if (!vendor_id && req.user) {
       vendor_id = req.user.id || req.user._id;
     }
-    const { plan_type, product_ids } = req.body;
+    let { plan_type, product_ids } = req.body;
+    plan_type = String(plan_type || '').trim().toLowerCase();
     let { months, max_products, amount } = req.body;
     if (plan_type !== 'custom') {
-      if (plan_type === 'basic') { months = 2; max_products = 1; amount = 39; }
-      if (plan_type === 'standard') { months = 5; max_products = 3; amount = 59; }
-      if (plan_type === 'premium') { months = 12; max_products = 7; amount = 109; }
+      let def = null;
+      try {
+        def = await ListingPlan.findOne({ plan_type, status: 'active' });
+      } catch (e) {}
+      if (!def) {
+        const fallback = [
+          { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },
+          { plan_type: 'standard', months: 5, max_products: 3, amount: 59 },
+          { plan_type: 'premium', months: 12, max_products: 7, amount: 109 },
+        ].find((p) => p.plan_type === plan_type);
+        if (fallback) def = fallback;
+      }
+      if (!def) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Invalid plan_type' });
+      }
+      months = def.months;
+      max_products = def.max_products;
+      amount = def.amount;
     }
-    const assignIds = product_ids.slice(0, max_products);
+    const assignIds = product_ids.slice(0, max_products || product_ids.length);
     const start = new Date();
     const expire = new Date(start);
     expire.setMonth(expire.getMonth() + months);

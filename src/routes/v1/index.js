@@ -15,6 +15,8 @@ const validate = require('../../middlewares/validate');
 const catchAsync = require('../../utils/catchAsync');
 const upload = require('../../middlewares/upload');
 const { productsController } = require('../../controllers');
+const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
+const listingPlanRoute = require('./listingPlan.route');
 
 const router = express.Router();
 
@@ -80,6 +82,14 @@ const defaultRoutes = [
   {
     path: '/admin',
     route: adminRoute,
+  },
+  {
+    path: '/listing-plans',
+    route: listingPlanPurchaseRoute,
+  },
+  {
+    path: '/plans',
+    route: listingPlanRoute,
   },
 ];
 

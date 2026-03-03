@@ -62,13 +62,13 @@ router.post(
   catchAsync(productsController.bulkDeleteProducts.handler)
 );
 
-router.post(
-  '/purchase-plan',
-  auth(),
-  upload.none(),
-  validate(productsController.purchaseListingPlan.validation),
-  catchAsync(productsController.purchaseListingPlan.handler)
-);
+// router.post(
+//   '/purchase-plan',
+//   auth(),
+//   upload.none(),
+//   validate(productsController.purchaseListingPlan.validation),
+//   catchAsync(productsController.purchaseListingPlan.handler)
+// );
 router.post(
   '/web-vendor-product-list',
   upload.none(),
