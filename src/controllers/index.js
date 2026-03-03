@@ -7,3 +7,4 @@ module.exports.dropdownsController = require('./dropdowns.controller');
 module.exports.faqsController = require('./faqs.controller');
 module.exports.getQuoteController = require('./getQuote.controller');
 module.exports.cartController = require('./cart.controller');
+module.exports.listingPlanPurchaseController = require('./listingPlanPurchase.controller');

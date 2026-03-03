@@ -16,6 +16,10 @@ const {
   updateFileOnExternalService,
   deleteFileFromExternalService,
 } = require('../utils/fileUpload');
+const moment = require('moment');
+const VendorKyc = require('../models/vendor/vendorKyc.model');
+const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
+const ListingPlan = require('../models/listingPlan.model');
 
 const productDetailSchema = Joi.object().keys({
   specification_id: Joi.string().allow(''),
@@ -276,6 +280,31 @@ const createProduct = {
           .json({ message: 'Product with this name already exists' });
       }
 
+      // Free listing policy enforcement (strict)
+      let limit = 1;
+      if (data.vendor_id) {
+        const kyc = await VendorKyc.findOne({ vendor_id: String(data.vendor_id) });
+        const hasGST = !!(kyc && String(kyc.gst_number || '').trim());
+        limit = hasGST ? 3 : 1;
+      }
+      const startOfMonth = moment().startOf('month').toDate();
+      const endOfMonth = moment().endOf('month').toDate();
+      const activeCount = await Product.countDocuments({
+        vendor_id: data.vendor_id,
+        status: 'active',
+        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+      });
+      if (activeCount >= limit) {
+        return res
+          .status(httpStatus.BAD_REQUEST)
+          .json({ message: 'Free listing limit reached for this month' });
+      }
+      // Set expiry date to 1 month from creation date
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + 1);
+      data.expires_at = expiryDate;
+      data.status = 'active';
+
       const product = await Product.create(data);
 
       if (!product.product_id) {
@@ -283,9 +312,12 @@ const createProduct = {
         await product.save();
       }
 
+      const msg = product.status === 'draft'
+        ? 'Free listing limit reached: listing saved as Draft'
+        : 'Product created successfully';
       return res.status(200).json({
         status: 200,
-        message: 'Product created successfully',
+        message: msg,
         data: product,
       });
     } catch (error) {
@@ -305,10 +337,13 @@ const getAllProducts = {
       filter_tenure,
       search,
       vendor_id: queryVendorId, // Explicit vendor_id from query
+      status: queryStatus,
     } = req.query;
 
     const bodyVendorId = req.body.vendor_id; // Support vendor_id from POST body
     const vendor_id = queryVendorId || bodyVendorId;
+    const bodyStatus = req.body.status;
+    const statusFilter = queryStatus || bodyStatus;
 
     const query = {};
 
@@ -343,6 +378,9 @@ const getAllProducts = {
 
     if (sub_category_id && sub_category_id !== 'all') {
       query.sub_category_id = sub_category_id;
+    }
+    if (statusFilter && ['active', 'draft', 'inactive'].includes(String(statusFilter))) {
+      query.status = String(statusFilter);
     }
 
     // Rent / Sell filter - filter_rent_sell: 1 = Rent, 2 = Sell
@@ -410,7 +448,6 @@ const getAllProducts = {
       // Enrich with vendor KYC details: city_id and city_name
       const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
       let vendorMap = {};
-      const VendorKyc = require('../models/vendor/vendorKyc.model');
       if (vendorIds.length) {
         const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
         kycs.forEach((k) => {
@@ -420,6 +457,14 @@ const getAllProducts = {
             vendor_name: (k.business_name || k.full_name || ''),
           };
         });
+      }
+      // Auto-draft expired listings
+      const now = new Date();
+      for (const p of data) {
+        if (p.expires_at && now > new Date(p.expires_at) && p.status !== 'draft') {
+          p.status = 'draft';
+          await p.save();
+        }
       }
       const normalized = data.map((p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
@@ -542,7 +587,6 @@ const getVendorProducts = {
       });
       // Enrich with vendor KYC details: city_id and city_name
       const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
-      const VendorKyc = require('../models/vendor/vendorKyc.model');
       let vendorMap = {};
       if (vendorIds.length) {
         const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
@@ -553,6 +597,14 @@ const getVendorProducts = {
             vendor_name: (k.business_name || k.full_name || ''),
           };
         });
+      }
+      // Auto-draft expired listings
+      const now = new Date();
+      for (const p of data) {
+        if (p.expires_at && now > new Date(p.expires_at) && p.status !== 'draft') {
+          p.status = 'draft';
+          await p.save();
+        }
       }
       const normalized = data.map((p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
@@ -1137,7 +1189,6 @@ const deleteProductDropdowns = {
   },
 };
 
-const VendorKyc = require('../models/vendor/vendorKyc.model');
 
 const webProductSuggestionList = {
   validation: {
@@ -1254,11 +1305,22 @@ const webSearchProductList = {
     subs.forEach((s) => {
       subMap[s._id.toString()] = s.name;
     });
+      // Auto-draft expired listings
+      const now = new Date();
+      for (const p of data) {
+        if (p.expires_at && now > new Date(p.expires_at) && p.status !== 'draft') {
+          p.status = 'draft';
+          await p.save();
+        }
+      }
     const normalized = data.map((p) => ({
+    
+
       ...p.toObject(),
       category_name: p.category_name || catMap[p.category_id] || '',
       sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
     }));
+    
     return res.status(200).json({
       success: true,
       total,
@@ -1267,6 +1329,93 @@ const webSearchProductList = {
       totalPages: Math.ceil(total / limit) || 1,
       data: normalized,
     });
+  },
+};
+
+const bulkDeactivateProducts = {
+  validation: {
+    body: Joi.object().keys({
+      product_ids: Joi.array().items(Joi.string().required()).min(1).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    const { product_ids } = req.body;
+    await Product.updateMany({ _id: { $in: product_ids } }, { $set: { status: 'inactive' } });
+    return res.status(200).json({ status: 200, message: 'Products deactivated', data: product_ids });
+  },
+};
+
+const bulkDeleteProducts = {
+  validation: {
+    body: Joi.object().keys({
+      product_ids: Joi.array().items(Joi.string().required()).min(1).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    const { product_ids } = req.body;
+    await Product.deleteMany({ _id: { $in: product_ids } });
+    return res.status(200).json({ status: 200, message: 'Products deleted', data: product_ids });
+  },
+};
+
+const purchaseListingPlan = {
+  validation: {
+    body: Joi.object().keys({
+      vendor_id: Joi.string().allow(''),
+      plan_type: Joi.string().trim().required(),
+      months: Joi.number().integer().min(1),
+      max_products: Joi.number().integer().min(1),
+      amount: Joi.number().min(0),
+      product_ids: Joi.array().items(Joi.string().required()).min(1).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    let { vendor_id } = req.body;
+    if (!vendor_id && req.user) {
+      vendor_id = req.user.id || req.user._id;
+    }
+    let { plan_type, product_ids } = req.body;
+    plan_type = String(plan_type || '').trim().toLowerCase();
+    let { months, max_products, amount } = req.body;
+    if (plan_type !== 'custom') {
+      let def = null;
+      try {
+        def = await ListingPlan.findOne({ plan_type, status: 'active' });
+      } catch (e) {}
+      if (!def) {
+        const fallback = [
+          { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },
+          { plan_type: 'standard', months: 5, max_products: 3, amount: 59 },
+          { plan_type: 'premium', months: 12, max_products: 7, amount: 109 },
+        ].find((p) => p.plan_type === plan_type);
+        if (fallback) def = fallback;
+      }
+      if (!def) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Invalid plan_type' });
+      }
+      months = def.months;
+      max_products = def.max_products;
+      amount = def.amount;
+    }
+    const assignIds = product_ids.slice(0, max_products || product_ids.length);
+    const start = new Date();
+    const expire = new Date(start);
+    expire.setMonth(expire.getMonth() + months);
+    const purchase = await ListingPlanPurchase.create({
+      vendor_id,
+      plan_type,
+      months,
+      max_products,
+      amount,
+      product_ids: assignIds,
+      start_at: start,
+      expire_at: expire,
+    });
+    await Product.updateMany(
+      { _id: { $in: assignIds }, vendor_id },
+      { $set: { status: 'active', expires_at: expire } }
+    );
+    return res.status(200).json({ status: 200, message: 'Plan applied to selected products', data: purchase });
   },
 };
 
@@ -1284,4 +1433,7 @@ module.exports = {
   getVendorProducts,
   webProductSuggestionList,
   webSearchProductList,
+  bulkDeactivateProducts,
+  bulkDeleteProducts,
+  purchaseListingPlan,
 };

@@ -47,9 +47,33 @@ router.delete(
 );
 
 router.post(
+  '/bulk-deactivate',
+  auth(),
+  upload.none(),
+  validate(productsController.bulkDeactivateProducts.validation),
+  catchAsync(productsController.bulkDeactivateProducts.handler)
+);
+
+router.post(
+  '/bulk-delete',
+  auth(),
+  upload.none(),
+  validate(productsController.bulkDeleteProducts.validation),
+  catchAsync(productsController.bulkDeleteProducts.handler)
+);
+
+// router.post(
+//   '/purchase-plan',
+//   auth(),
+//   upload.none(),
+//   validate(productsController.purchaseListingPlan.validation),
+//   catchAsync(productsController.purchaseListingPlan.handler)
+// );
+router.post(
   '/web-vendor-product-list',
   upload.none(),
   validate(productsController.getVendorProducts.validation),
+  catchAsync(productsController.getVendorProducts.handler),
   catchAsync(productsController.getVendorProducts.handler)
 );
 
