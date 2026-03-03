@@ -105,6 +105,15 @@ const productSchema = new mongoose.Schema(
       type: [productDetailSchema],
       default: [],
     },
+    status: {
+      type: String,
+      enum: ['active', 'draft', 'inactive'],
+      default: 'active',
+      index: true,
+    },
+    expires_at: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
