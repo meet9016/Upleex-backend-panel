@@ -17,6 +17,7 @@ const upload = require('../../middlewares/upload');
 const { productsController } = require('../../controllers');
 const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
 const listingPlanRoute = require('./listingPlan.route');
+const priorityPlanRoute = require('./priorityPlan.route');
 
 const router = express.Router();
 
@@ -90,6 +91,10 @@ const defaultRoutes = [
   {
     path: '/plans',
     route: listingPlanRoute,
+  },
+  {
+    path: '/priority-plans',
+    route: priorityPlanRoute,
   },
 ];
 
