@@ -13,6 +13,7 @@ const priorityPlanSchema = new mongoose.Schema(
     addon_available_for_yearly: { type: Boolean, default: false },
     addon_price_per_year: { type: Number, default: 0 },
     addon_max_slots: { type: Number, default: 0 },
+    is_popular: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

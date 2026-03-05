@@ -15,12 +15,19 @@ const createPriorityPlan = {
       addon_available_for_yearly: Joi.boolean().default(false),
       addon_price_per_year: Joi.number().min(0).default(0),
       addon_max_slots: Joi.number().integer().min(0).default(0),
+      is_popular: Joi.boolean().default(false),
     }),
   },
   handler: async (req, res) => {
     const data = req.body;
     const exists = await PriorityPlan.findOne({ name: data.name.trim() });
     if (exists) return res.status(httpStatus.BAD_REQUEST).json({ message: 'Priority plan with this name already exists' });
+    
+    // If this plan is marked as popular, remove popular from all other plans
+    if (data.is_popular) {
+      await PriorityPlan.updateMany({}, { is_popular: false });
+    }
+    
     const plan = await PriorityPlan.create(data);
     return res.status(201).json({ success: true, message: 'Priority plan created', data: plan });
   },
@@ -53,6 +60,7 @@ const updatePriorityPlan = {
       addon_available_for_yearly: Joi.boolean(),
       addon_price_per_year: Joi.number().min(0),
       addon_max_slots: Joi.number().integer().min(0),
+      is_popular: Joi.boolean(),
     }),
   },
   handler: async (req, res) => {
@@ -65,6 +73,12 @@ const updatePriorityPlan = {
       const dup = await PriorityPlan.findOne({ _id: { $ne: _id }, name: body.name.trim() });
       if (dup) return res.status(httpStatus.BAD_REQUEST).json({ message: 'Priority plan with this name already exists' });
     }
+    
+    // If this plan is being marked as popular, remove popular from all other plans
+    if (body.is_popular === true) {
+      await PriorityPlan.updateMany({ _id: { $ne: _id } }, { is_popular: false });
+    }
+    
     const updated = await PriorityPlan.findByIdAndUpdate(_id, body, { new: true });
     return res.status(200).json({ success: true, message: 'Priority plan updated', data: updated });
   },
