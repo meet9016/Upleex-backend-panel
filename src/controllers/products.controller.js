@@ -115,6 +115,7 @@ const createProduct = {
         Joi.array().items(Joi.string().allow('')),
         Joi.string().allow('')
       ).default([]),
+      pricing_type: Joi.string().valid('free', 'paid').default('paid'), // ← નવું field
     }).prefs({ convert: true }),
   },
   handler: async (req, res) => {
@@ -128,6 +129,76 @@ const createProduct = {
         // If you have a vendor model to fetch image, you could do it here, 
         // but for now we'll just use what's in the token or leave it empty.
         console.log('Vendor info attached to product:', { id: data.vendor_id, name: data.vendor_name });
+      }
+
+      if (!data.vendor_id) {
+        return res.status(401).json({ message: 'Vendor authentication required' });
+      }
+
+      // ───────────────────────────────────────────────
+      //          pricing_type handling + validation
+      // ───────────────────────────────────────────────
+      const pricingType = (data.pricing_type || 'paid').toLowerCase();
+
+      if (!['free', 'paid'].includes(pricingType)) {
+        return res.status(400).json({ message: 'Invalid pricing_type. Use "free" or "paid"' });
+      }
+
+      data.pricing_type = pricingType;  // normalized value store કરીએ
+
+      // જો paid હોય તો active paid plan ચેક કરો
+      let activePlan = null;
+      // if (pricingType === 'paid') {
+      //   activePlan = await ListingPlanPurchase.findOne({
+      //     vendor_id: data.vendor_id,
+      //     expire_at: { $gt: new Date() },
+      //     status: { $in: ['active', 'completed'] } // તમારા model મુજબ adjust કરો
+      //   });
+
+      //   if (!activePlan) {
+      //     return res.status(403).json({
+      //       message: 'No active paid listing plan found. Please purchase a plan to create Base (paid) listings.'
+      //     });
+      //   }
+
+      //   // Optional: product count limit check per plan (જો તમારા plan માં max_products હોય)
+      //   const usedCount = await Product.countDocuments({
+      //     _id: { $in: activePlan.product_ids || [] },
+      //     pricing_type: 'paid',
+      //     status: 'active'
+      //   });
+
+      //   if (usedCount >= (activePlan.max_products || 999)) {
+      //     return res.status(403).json({
+      //       message: 'Your paid plan has reached the maximum number of Base listings.'
+      //     });
+      //   }
+      // }
+
+      // ───────────────────────────────────────────────
+      //     Free limit check → ફક્ત free products માટે
+      // ───────────────────────────────────────────────
+      if (pricingType === 'free') {
+        let limit = 1;
+        const kyc = await VendorKyc.findOne({ vendor_id: String(data.vendor_id) });
+        const hasGST = !!(kyc && String(kyc.gst_number || '').trim());
+        limit = hasGST ? 3 : 1;
+
+        const startOfMonth = moment().startOf('month').toDate();
+        const endOfMonth = moment().endOf('month').toDate();
+
+        const activeFreeCount = await Product.countDocuments({
+          vendor_id: data.vendor_id,
+          status: 'active',
+          pricing_type: 'free',           // ← મહત્વની લાઈન
+          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+        });
+
+        if (activeFreeCount >= limit) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: `Free listing limit reached (${activeFreeCount}/${limit}) for this month. Upgrade to paid plan for Base listings.`
+          });
+        }
       }
 
       const extractIndexedArray = (body, baseKey) => {
@@ -280,25 +351,6 @@ const createProduct = {
           .json({ message: 'Product with this name already exists' });
       }
 
-      // Free listing policy enforcement (strict)
-      let limit = 1;
-      if (data.vendor_id) {
-        const kyc = await VendorKyc.findOne({ vendor_id: String(data.vendor_id) });
-        const hasGST = !!(kyc && String(kyc.gst_number || '').trim());
-        limit = hasGST ? 3 : 1;
-      }
-      const startOfMonth = moment().startOf('month').toDate();
-      const endOfMonth = moment().endOf('month').toDate();
-      const activeCount = await Product.countDocuments({
-        vendor_id: data.vendor_id,
-        status: 'active',
-        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-      });
-      if (activeCount >= limit) {
-        return res
-          .status(httpStatus.BAD_REQUEST)
-          .json({ message: 'Free listing limit reached for this month' });
-      }
       // Set expiry date to 1 month from creation date
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + 1);
@@ -312,6 +364,14 @@ const createProduct = {
         await product.save();
       }
 
+      // Optional: paid હોય તો plan માં product_id ઉમેરો (tracking માટે)
+      if (pricingType === 'paid' && activePlan) {
+        await ListingPlanPurchase.updateOne(
+          { _id: activePlan._id },
+          { $addToSet: { product_ids: product._id } }
+        );
+      }
+
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
         : 'Product created successfully';
@@ -321,6 +381,7 @@ const createProduct = {
         data: product,
       });
     } catch (error) {
+      console.error('Create product error:', error);
       res
         .status(httpStatus.INTERNAL_SERVER_ERROR)
         .json({ message: error.message });

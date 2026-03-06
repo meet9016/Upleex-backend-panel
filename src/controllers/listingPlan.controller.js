@@ -12,6 +12,7 @@ const createPlan = {
       amount: Joi.number().min(0).required(),
       status: Joi.string().valid('active', 'inactive').default('active'),
       description: Joi.string().allow(''),
+      popular: Joi.boolean().default(false),
     }),
   },
   handler: async (req, res) => {
@@ -21,6 +22,12 @@ const createPlan = {
     if (exists) {
       return res.status(httpStatus.BAD_REQUEST).json({ message: 'Plan type already exists' });
     }
+    
+    // If this plan is marked as popular, remove popular from all other plans
+    if (data.popular) {
+      await ListingPlan.updateMany({}, { popular: false });
+    }
+    
     const plan = await ListingPlan.create(data);
     return res.status(201).json({ success: true, message: 'Plan created', data: plan });
   },
@@ -82,6 +89,7 @@ const updatePlan = {
         amount: Joi.number().min(0),
         status: Joi.string().valid('active', 'inactive'),
         description: Joi.string().allow(''),
+        popular: Joi.boolean(),
       })
       .prefs({ convert: true }),
   },
@@ -96,6 +104,12 @@ const updatePlan = {
       const dup = await ListingPlan.findOne({ _id: { $ne: _id }, plan_type: body.plan_type });
       if (dup) return res.status(httpStatus.BAD_REQUEST).json({ message: 'Plan type already exists' });
     }
+    
+    // If this plan is being marked as popular, remove popular from all other plans
+    if (body.popular === true) {
+      await ListingPlan.updateMany({ _id: { $ne: _id } }, { popular: false });
+    }
+    
     const updated = await ListingPlan.findByIdAndUpdate(_id, body, { new: true });
     return res.status(200).json({ success: true, message: 'Plan updated', data: updated });
   },
