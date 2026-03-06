@@ -93,6 +93,12 @@ const productSchema = new mongoose.Schema(
     // vendor_image: {
     //   type: String,
     // },
+    pricing_type: {
+      type: String,
+      enum: ['free', 'paid'],
+      default: 'paid', // Default to free
+      index: true,
+    },
     month_arr: {
       type: [monthPriceSchema],
       default: [],
