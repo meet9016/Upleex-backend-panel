@@ -2,6 +2,7 @@ const Joi = require('joi');
 const httpStatus = require('http-status');
 const VendorKyc = require('../../models/vendor/vendorKyc.model');
 const Vendor = require('../../models/vendor/vendor.model');
+const { AccountType } = require('../../models');
 const { uploadToExternalService } = require('../../utils/fileUpload');
 
 const saveKyc = {
@@ -54,8 +55,15 @@ const saveKyc = {
 
       const contact = extract('ContactDetails');
       const identity = extract('Identity');
-      const bank = extract('Bank');
+      let bank = extract('Bank');
       const documents = extract('Documents');
+
+      if (bank && bank.account_type) {
+        try {
+          const at = await AccountType.findById(bank.account_type);
+          if (at) bank.account_type_name = at.type_name;
+        } catch (e) {}
+      }
 
       // Find by vendor_id or mobile/email in ContactDetails
       const searchEmail = contact?.email || body.email;
@@ -144,10 +152,17 @@ const getSingleKyc = {
       }
       const doc = await VendorKyc.findOne(filter).sort({ updatedAt: -1 });
 
+      let dataObj = doc ? doc.toJSON() : {};
+      if (dataObj?.Bank?.account_type && !dataObj?.Bank?.account_type_name) {
+        try {
+          const at = await AccountType.findById(dataObj.Bank.account_type);
+          if (at) dataObj.Bank.account_type_name = at.type_name;
+        } catch (e) {}
+      }
       return res.status(200).json({
         status: 200,
         message: 'Successfully',
-        data: doc ? doc.toJSON() : {},
+        data: dataObj,
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -169,6 +184,19 @@ const listKyc = {
         .skip(skip)
         .limit(limit);
 
+      const ids = [...new Set(docs.map(d => (d.toJSON().Bank?.account_type || '')).filter(Boolean))];
+      let atMap = {};
+      if (ids.length) {
+        const ats = await AccountType.find({ _id: { $in: ids } });
+        ats.forEach(a => { atMap[String(a._id)] = a.type_name; });
+      }
+      const dataArr = docs.map((d) => {
+        const obj = d.toJSON();
+        if (obj?.Bank?.account_type && !obj?.Bank?.account_type_name) {
+          obj.Bank.account_type_name = atMap[String(obj.Bank.account_type)] || '';
+        }
+        return obj;
+      });
       return res.status(200).json({
         status: 200,
         message: 'Successfully',
@@ -176,7 +204,7 @@ const listKyc = {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-        data: docs.map((d) => d.toJSON()),
+        data: dataArr,
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
