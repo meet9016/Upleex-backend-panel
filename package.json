@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "nap install",
-       "start": "node --watch src/index.js",
+    "start": "node --watch src/index.js",
     "dev": "node --watch src/index.js",
     "test": "jest -i --colors --verbose --detectOpenHandles",
     "test:watch": "jest -i --watchAll",
@@ -75,6 +75,7 @@
     "nodemailer": "^6.3.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.0",
+    "pdfkit": "^0.17.2",
     "pm2": "^6.0.13",
     "razorpay": "^2.9.6",
     "stripe": "^19.3.0",

@@ -65,6 +65,12 @@ router.post(
   catchAsync(kycController.changeStatus.handler)
 );
 
+// Download KYC PDF
+router.get(
+  '/vendor-kyc/:kyc_id/download-pdf',
+  catchAsync(kycController.downloadKycPDF.handler)
+);
+
 // Location Routes
 router.post(
   '/vendor-country-list',

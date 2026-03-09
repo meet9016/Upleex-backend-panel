@@ -62,7 +62,7 @@ const saveKyc = {
         try {
           const at = await AccountType.findById(bank.account_type);
           if (at) bank.account_type_name = at.type_name;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // Find by vendor_id or mobile/email in ContactDetails
@@ -157,7 +157,7 @@ const getSingleKyc = {
         try {
           const at = await AccountType.findById(dataObj.Bank.account_type);
           if (at) dataObj.Bank.account_type_name = at.type_name;
-        } catch (e) {}
+        } catch (e) { }
       }
       return res.status(200).json({
         status: 200,
@@ -305,6 +305,308 @@ const changeStatus = {
   },
 };
 
+const downloadKycPDF = {
+  handler: async (req, res) => {
+    try {
+      const { kyc_id } = req.params;
+
+      const doc = await VendorKyc.findById(kyc_id);
+      if (!doc) {
+        return res.status(404).json({ status: 404, message: "KYC not found" });
+      }
+
+      const PDFDocument = require("pdfkit");
+      const axios = require("axios");
+
+      const pdfDoc = new PDFDocument({
+        margin: 40,
+        bufferPages: true,
+        autoFirstPage: false,
+        size: "A4"
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${doc.ContactDetails?.full_name || "vendor"}_KYC.pdf"`
+      );
+
+      pdfDoc.pipe(res);
+      pdfDoc.addPage();
+
+      const data = doc.toJSON();
+      const contact = data.ContactDetails || {};
+      const identity = data.Identity || {};
+      const bank = data.Bank || {};
+
+      /* ---------- PAGE BREAK ---------- */
+
+      const checkPageBreak = (height = 0) => {
+        if (pdfDoc.y + height > pdfDoc.page.height - 110) {
+          pdfDoc.addPage();
+          pdfDoc.y = 60;
+        }
+      };
+
+      /* ---------- HEADER ---------- */
+
+      const addHeader = () => {
+        pdfDoc.rect(0, 0, pdfDoc.page.width, 70).fill("#0f172a");
+
+        pdfDoc
+          .fillColor("#ffffff")
+          .font("Helvetica-Bold")
+          .fontSize(20)
+          .text("VENDOR KYC VERIFICATION REPORT", 50, 25);
+
+        const statusColor =
+          data.status === "approved"
+            ? "#10b981"
+            : data.status === "rejected"
+              ? "#ef4444"
+              : "#f59e0b";
+
+        pdfDoc
+          .fillColor(statusColor)
+          .roundedRect(pdfDoc.page.width - 150, 20, 100, 30, 5)
+          .fill();
+
+        pdfDoc
+          .fillColor("#ffffff")
+          .fontSize(12)
+          .text((data.status || "PENDING").toUpperCase(), pdfDoc.page.width - 135, 30);
+
+        pdfDoc.y = 90;
+      };
+
+      /* ---------- VENDOR INFO ---------- */
+
+      const addVendorInfo = () => {
+        pdfDoc
+          .font("Helvetica-Bold")
+          .fillColor("#0f172a")
+          .fontSize(18)
+          .text(contact.full_name || "N/A", 50);
+
+        pdfDoc
+          .font("Helvetica")
+          .fontSize(11)
+          .fillColor("#64748b")
+          .text(identity.business_name || "Individual Vendor", 50);
+
+        pdfDoc.moveDown(2);
+      };
+
+      /* ---------- SECTION ---------- */
+
+      const addSection = (title) => {
+        checkPageBreak(40);
+
+        pdfDoc.rect(40, pdfDoc.y - 5, pdfDoc.page.width - 80, 28).fill("#f1f5f9");
+
+        pdfDoc
+          .fillColor("#0f172a")
+          .font("Helvetica-Bold")
+          .fontSize(13)
+          .text(title, 45, pdfDoc.y + 3);
+
+        pdfDoc.moveDown(2);
+      };
+
+      /* ---------- ROW ---------- */
+
+      const addRow = (label, value, index = 0) => {
+        checkPageBreak(22);
+        const y = pdfDoc.y;
+
+        if (index % 2 === 0) {
+          pdfDoc.rect(40, y - 3, pdfDoc.page.width - 80, 22).fill("#f8fafc");
+        }
+
+        pdfDoc
+          .fillColor("#475569")
+          .font("Helvetica-Bold")
+          .fontSize(9.5)
+          .text(label, 45, y + 2);
+
+        pdfDoc
+          .fillColor("#0f172a")
+          .font("Helvetica")
+          .fontSize(9.5)
+          .text(value || "—", 170, y + 2);
+
+        pdfDoc.y = y + 22;
+      };
+
+      /* ---------- CONTENT ---------- */
+
+      addHeader();
+      addVendorInfo();
+
+      addSection("CONTACT INFORMATION");
+
+      const contactRows = [
+        { label: "Email", value: contact.email },
+        { label: "Phone", value: contact.mobile },
+        { label: "Address", value: contact.address },
+        { label: "City", value: contact.city_name },
+        { label: "Pincode", value: contact.pincode },
+        { label: "State", value: contact.state_name }
+      ];
+
+      contactRows.forEach((r, i) => addRow(r.label, r.value, i));
+
+      addSection("IDENTITY DETAILS");
+
+      const identityRows = [
+        { label: "PAN Number", value: identity.pancard_number },
+        { label: "Aadhaar Number", value: identity.aadharcard_number },
+        { label: "Business Name", value: identity.business_name },
+        { label: "GST Number", value: identity.gst_number }
+      ];
+
+      identityRows.forEach((r, i) => addRow(r.label, r.value, i));
+
+      addSection("BANK DETAILS");
+
+      const bankRows = [
+        { label: "Account Holder", value: bank.account_holder_name },
+        { label: "Account Number", value: bank.account_number },
+        { label: "IFSC Code", value: bank.ifsc_code },
+        { label: "Account Type", value: bank.account_type_name }
+      ];
+
+      bankRows.forEach((r, i) => addRow(r.label, r.value, i));
+
+      /* ---------- DOCUMENTS ---------- */
+
+      addSection("UPLOADED DOCUMENTS");
+
+      const docsObj = Array.isArray(data.Documents)
+        ? data.Documents[0] || {}
+        : data.Documents || {};
+
+      const imageKeys = [
+        { key: "vendor_image", label: "Profile Photo" },
+        { key: "business_logo_image", label: "Business Logo" },
+        { key: "pancard_front_image", label: "PAN Card" },
+        { key: "aadharcard_front_image", label: "Aadhaar Front" },
+        { key: "aadharcard_back_image", label: "Aadhaar Back" },
+        { key: "gst_certificate_image", label: "GST Certificate" }
+      ];
+
+      let imageX = 55;
+      let imageY = pdfDoc.y;
+
+      const imgW = 220;
+      const imgH = 155;
+      let count = 0;
+
+      for (const item of imageKeys) {
+        let url = docsObj[item.key];
+
+        if (!url || !url.startsWith("http")) continue;
+
+        if (imageY + imgH + 80 > pdfDoc.page.height - 60) {
+          pdfDoc.addPage();
+          imageX = 55;
+          imageY = 70;
+          count = 0;
+        }
+
+        if (url.toLowerCase().endsWith(".pdf")) {
+
+          pdfDoc
+            .roundedRect(imageX, imageY, imgW, imgH, 8)
+            .fillAndStroke("#eff6ff", "#2563eb");
+
+          pdfDoc
+            .fillColor("#1d4ed8")
+            .font("Helvetica-Bold")
+            .fontSize(36)
+            .text("PDF", imageX, imageY + 45, { width: imgW, align: "center" });
+
+          pdfDoc
+            .fontSize(11)
+            .text("DOCUMENT", imageX, imageY + 90, { width: imgW, align: "center" });
+
+          const btnWidth = 120;
+          const btnHeight = 24;
+
+          const btnX = imageX + (imgW - btnWidth) / 2;
+          const btnY = imageY + 118;
+
+          // Button
+          pdfDoc
+            .roundedRect(btnX, btnY, btnWidth, btnHeight, 5)
+            .fill("#2563eb");
+
+          // Button text
+          pdfDoc
+            .fillColor("#ffffff")
+            .font("Helvetica-Bold")
+            .fontSize(9)
+            .text("VIEW PDF", btnX, btnY + 7, {
+              width: btnWidth,
+              align: "center"
+            });
+
+          // Clickable area (external link)
+          pdfDoc.link(btnX, btnY, btnWidth, btnHeight, url);
+
+        } else {
+
+          try {
+            const img = await axios.get(url, { responseType: "arraybuffer" });
+
+            pdfDoc.image(Buffer.from(img.data), imageX, imageY, {
+              fit: [imgW, imgH],
+              align: "center"
+            });
+
+          } catch {
+            pdfDoc.rect(imageX, imageY, imgW, imgH).fill("#f1f5f9");
+
+            pdfDoc
+              .fillColor("red")
+              .fontSize(10)
+              .text("Image load failed", imageX + 60, imageY + 70);
+          }
+        }
+
+        pdfDoc
+          .fillColor("#1e293b")
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .text(item.label, imageX, imageY + imgH + 25, {
+            width: imgW,
+            align: "center"
+          });
+
+        count++;
+
+        if (count % 2 === 0) {
+          imageX = 55;
+          imageY += imgH + 60;
+        } else {
+          imageX += imgW + 35;
+        }
+      }
+
+      pdfDoc.end();
+
+    } catch (error) {
+      console.error("PDF error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          status: 500,
+          message: "PDF generation failed"
+        });
+      }
+    }
+  }
+};
+
 module.exports = {
   saveKyc,
   getSingleKyc,
@@ -313,4 +615,5 @@ module.exports = {
   updateKyc,
   deleteKyc,
   changeStatus,
+  downloadKycPDF,
 };
