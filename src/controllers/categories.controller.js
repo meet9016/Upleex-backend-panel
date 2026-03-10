@@ -98,8 +98,11 @@ const getAllCategories = {
         categories.map(async (cat) => {
           const catId = cat.id || cat._id;
 
-          // Fetch product count for this category
-          const productCount = await Product.countDocuments({ category_id: String(catId) });
+          // Fetch approved product count for this category
+          const productCount = await Product.countDocuments({ 
+            category_id: String(catId),
+            approval_status: 'approved'
+          });
 
           // Fetch subcategories for this category
           const subcategories = await SubCategory.find({ categoryId: catId });
@@ -149,8 +152,11 @@ const getCategoryById = {
 
       const catId = category.id || category._id;
 
-      // Fetch product count for this category
-      const productCount = await Product.countDocuments({ category_id: String(catId) });
+      // Fetch approved product count for this category
+      const productCount = await Product.countDocuments({ 
+        category_id: String(catId),
+        approval_status: 'approved'
+      });
 
       // Fetch subcategories for this category
       const subcategories = await SubCategory.find({ categoryId: catId });

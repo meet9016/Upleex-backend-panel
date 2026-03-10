@@ -356,6 +356,7 @@ const createProduct = {
       expiryDate.setMonth(expiryDate.getMonth() + 1);
       data.expires_at = expiryDate;
       data.status = 'active';
+      data.approval_status = 'pending'; // Set to pending for admin approval
 
       const product = await Product.create(data);
 
@@ -415,6 +416,15 @@ const getAllProducts = {
     // 2. If user is logged in AND it's a vendor, only show their products
     else if (req.user && req.user.userType === 'vendor') {
       query.vendor_id = req.user.id || req.user._id;
+    }
+    // 3. If no vendor_id and not a vendor, show only approved products (for user panel)
+    else {
+      query.approval_status = 'approved';
+    }
+
+    // Only show approved products for public/user queries
+    if (!req.user || req.user.userType !== 'vendor') {
+      query.approval_status = 'approved';
     }
 
     // Add search functionality
@@ -580,6 +590,11 @@ const getVendorProducts = {
     } = req.body;
 
     const query = { vendor_id };
+
+    // Only show approved products for public vendor listings
+    if (!req.user || req.user.userType !== 'vendor' || req.user.id !== vendor_id) {
+      query.approval_status = 'approved';
+    }
 
     if (search && String(search).trim() !== '') {
       const searchRegex = new RegExp(String(search).trim(), 'i');
@@ -1287,7 +1302,14 @@ const webProductSuggestionList = {
         return res.status(200).json({ status: 200, data: [] });
       }
     }
-    const query = vendorFilterIds && vendorFilterIds.length ? { vendor_id: { $in: vendorFilterIds }, product_name: searchRegex } : { product_name: searchRegex };
+    const query = vendorFilterIds && vendorFilterIds.length ? { 
+      vendor_id: { $in: vendorFilterIds }, 
+      product_name: searchRegex,
+      approval_status: 'approved'
+    } : { 
+      product_name: searchRegex,
+      approval_status: 'approved'
+    };
     const products = await Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
     const suggestions = products.map(p => ({ id: p._id.toString(), product_name: p.product_name })).filter((s, idx, arr) => arr.findIndex(x => x.product_name === s.product_name) === idx);
     return res.status(200).json({ status: 200, data: suggestions });
@@ -1345,6 +1367,10 @@ const webSearchProductList = {
       { category_name: searchRegex },
       { sub_category_name: searchRegex },
     ];
+    
+    // Only show approved products for search
+    query.approval_status = 'approved';
+    
     if (vendorFilterIds && vendorFilterIds.length) {
       query.vendor_id = { $in: vendorFilterIds };
     }
