@@ -117,6 +117,12 @@ const productSchema = new mongoose.Schema(
       default: 'active',
       index: true,
     },
+    approval_status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
     expires_at: {
       type: Date,
     },
