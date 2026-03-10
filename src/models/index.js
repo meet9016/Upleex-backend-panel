@@ -11,4 +11,5 @@ module.exports.GetQuote = require('./getQuote.model');
 module.exports.AccountType = require('./accountType.model');
 module.exports.GetQuoteStatus = require('./getQuoteStatus.model');
 module.exports.Cart = require('./cart.model');
+module.exports.Wishlist = require('./wishlist.model');
 
