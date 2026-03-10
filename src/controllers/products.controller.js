@@ -417,6 +417,11 @@ const getAllProducts = {
       query.vendor_id = req.user.id || req.user._id;
     }
 
+    // Only show approved products for public/user queries
+    if (!req.user || req.user.userType !== 'vendor') {
+      query.approval_status = 'approved';
+    }
+
     // Add search functionality
     if (search && search.trim() !== '') {
       const searchRegex = new RegExp(search.trim(), 'i'); // Case-insensitive search
@@ -580,6 +585,11 @@ const getVendorProducts = {
     } = req.body;
 
     const query = { vendor_id };
+
+    // Only show approved products for public vendor listings
+    if (!req.user || req.user.userType !== 'vendor' || req.user.id !== vendor_id) {
+      query.approval_status = 'approved';
+    }
 
     if (search && String(search).trim() !== '') {
       const searchRegex = new RegExp(String(search).trim(), 'i');
@@ -1287,7 +1297,14 @@ const webProductSuggestionList = {
         return res.status(200).json({ status: 200, data: [] });
       }
     }
-    const query = vendorFilterIds && vendorFilterIds.length ? { vendor_id: { $in: vendorFilterIds }, product_name: searchRegex } : { product_name: searchRegex };
+    const query = vendorFilterIds && vendorFilterIds.length ? { 
+      vendor_id: { $in: vendorFilterIds }, 
+      product_name: searchRegex,
+      approval_status: 'approved'
+    } : { 
+      product_name: searchRegex,
+      approval_status: 'approved'
+    };
     const products = await Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
     const suggestions = products.map(p => ({ id: p._id.toString(), product_name: p.product_name })).filter((s, idx, arr) => arr.findIndex(x => x.product_name === s.product_name) === idx);
     return res.status(200).json({ status: 200, data: suggestions });
@@ -1345,6 +1362,10 @@ const webSearchProductList = {
       { category_name: searchRegex },
       { sub_category_name: searchRegex },
     ];
+    
+    // Only show approved products for search
+    query.approval_status = 'approved';
+    
     if (vendorFilterIds && vendorFilterIds.length) {
       query.vendor_id = { $in: vendorFilterIds };
     }
