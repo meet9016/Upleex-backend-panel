@@ -4,6 +4,7 @@ const auth = require('../../middlewares/auth');
 const catchAsync = require('../../utils/catchAsync');
 const upload = require('../../middlewares/upload');
 const { productsController } = require('../../controllers');
+const productApprovalController = require('../../controllers/productApproval.controller');
 
 const router = express.Router();
 
@@ -82,6 +83,32 @@ router.post(
   upload.none(),
   validate(productsController.getVendorProducts.validation),
   catchAsync(productsController.getVendorProducts.handler)
+);
+
+// Admin approval routes
+router.get(
+  '/vendors/getall',
+  auth(),
+  catchAsync(productApprovalController.getAllVendors.handler)
+);
+
+router.get(
+  '/vendor/:vendorId',
+  auth(),
+  catchAsync(productApprovalController.getVendorProducts.handler)
+);
+
+router.put(
+  '/approve/:productId',
+  auth(),
+  catchAsync(productApprovalController.approveProduct.handler)
+);
+
+router.post(
+  '/bulk-approve',
+  auth(),
+  validate(productApprovalController.bulkApproveProducts.validation),
+  catchAsync(productApprovalController.bulkApproveProducts.handler)
 );
 
 module.exports = router;

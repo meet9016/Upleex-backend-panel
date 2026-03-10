@@ -356,6 +356,7 @@ const createProduct = {
       expiryDate.setMonth(expiryDate.getMonth() + 1);
       data.expires_at = expiryDate;
       data.status = 'active';
+      data.approval_status = 'pending'; // Set to pending for admin approval
 
       const product = await Product.create(data);
 
@@ -415,6 +416,10 @@ const getAllProducts = {
     // 2. If user is logged in AND it's a vendor, only show their products
     else if (req.user && req.user.userType === 'vendor') {
       query.vendor_id = req.user.id || req.user._id;
+    }
+    // 3. If no vendor_id and not a vendor, show only approved products (for user panel)
+    else {
+      query.approval_status = 'approved';
     }
 
     // Add search functionality
