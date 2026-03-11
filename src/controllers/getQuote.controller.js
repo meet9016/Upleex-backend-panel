@@ -15,7 +15,7 @@ const createGetQuote = {
       product_id: Joi.string().required(),
       delivery_date: Joi.date().optional(),
       number_of_days: Joi.number().min(0).optional(),
-      months_id: Joi.string().optional(),
+      months_id: Joi.string().allow('').optional(),
       qty: Joi.number().optional(),
       note: Joi.string().allow('').optional(),
       status: Joi.string()
@@ -29,9 +29,55 @@ const createGetQuote = {
   handler: async (req, res) => {
     try {
       const data = req.body;
+      const user_id = req.user._id;
+      
+      console.log('Create quote request data:', data);
+      console.log('User ID:', user_id);
+
+      // Get product details to calculate price
+      const product = await Product.findById(data.product_id);
+      if (!product) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          success: false,
+          message: 'Product not found'
+        });
+      }
+
+      // Calculate price based on product type
+      let calculatedPrice = 0;
+      let priceDetails = {};
+      
+      if (data.months_id && product.month_arr && product.month_arr.length > 0) {
+        // Monthly product - find price from month_arr
+        const selectedMonth = product.month_arr.find(m => 
+          m.months_id === data.months_id || m.product_months_id === data.months_id
+        );
+        if (selectedMonth) {
+          calculatedPrice = Number(selectedMonth.price || 0) * Number(data.qty || 1);
+          priceDetails = {
+            month_name: selectedMonth.month_name,
+            unit_price: selectedMonth.price,
+            total_price: calculatedPrice
+          };
+        }
+      } else {
+        // Daily/Hourly product - use base price
+        const unitPrice = Number(product.price || 0);
+        const days = Number(data.number_of_days || 1);
+        const qty = Number(data.qty || 1);
+        calculatedPrice = unitPrice * days * qty;
+        priceDetails = {
+          unit_price: product.price,
+          days: days,
+          total_price: calculatedPrice
+        };
+      }
 
       const quote = await GetQuote.create({
         ...data,
+        user_id,
+        calculated_price: calculatedPrice,
+        price_details: priceDetails,
         status: data.status || 'pending',
       });
 
@@ -68,10 +114,21 @@ const getAllQuotes = {
         limit = 10
       } = req.query;
 
-      console.log("🚀 ~ Received filters:", { status, search, product_type, listing_type, month, delivery_start_date, delivery_end_date });
+      const user = req.user;
 
       // Build base query for GetQuote
       const query = {};
+
+      // Filter by user type
+      if (user.userType === 'vendor') {
+        // For vendors, show quotes for their products only
+        const vendorProducts = await Product.find({ vendor_id: user._id }).select('_id');
+        const productIds = vendorProducts.map(p => p._id);
+        query.product_id = { $in: productIds };
+      } else {
+        // For regular users, show only their quotes
+        query.user_id = user._id;
+      }
 
       // Filter by status
       if (status) {
@@ -147,7 +204,7 @@ const getAllQuotes = {
         const enrichedQuotes = paginatedQuotes.map(quote => {
           if (quote.months_id && quote.product_id?.month_arr) {
             const month = quote.product_id.month_arr.find(
-              m => m.months_id === quote.months_id.toString()
+              m => m.months_id === quote.months_id || m.product_months_id === quote.months_id
             );
             if (month) {
               quote.month_name = month.month_name;
@@ -201,7 +258,7 @@ const getAllQuotes = {
               
               if (populated.months_id && populated.product_id?.month_arr) {
                 const month = populated.product_id.month_arr.find(
-                  m => m.months_id === populated.months_id.toString()
+                  m => m.months_id === populated.months_id || m.product_months_id === populated.months_id
                 );
                 if (month) {
                   populated.month_name = month.month_name;
