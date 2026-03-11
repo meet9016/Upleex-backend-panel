@@ -87,24 +87,73 @@ const getAllPurchases = {
     query: Joi.object().keys({
       vendor_id: Joi.string().allow(''),
       plan_type: Joi.string().allow(''),
+      amount: Joi.number(),
+      start_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
+      expire_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
+      q: Joi.string().allow(''),
       page: Joi.number().integer().min(1),
       limit: Joi.number().integer().min(1).max(200),
     }),
   },
   handler: async (req, res) => {
-    const { vendor_id, plan_type } = req.query;
+    const { vendor_id, plan_type, amount, start_month, expire_month, q: searchText } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
-    const skip = (page - 1) * limit;
     const query = {};
+    
     if (vendor_id) query.vendor_id = vendor_id;
     if (plan_type) query.plan_type = plan_type;
-    const total = await ListingPlanPurchase.countDocuments(query);
-    let q = ListingPlanPurchase.find(query).sort({ createdAt: -1 });
-    if (limit) q = q.skip(skip).limit(limit);
-    const data = await q;
+    if (amount) {
+      query.amount = { $eq: Number(amount) };
+    }
+    
+    // Handle date filters - using OR condition to show purchases that either start in start_month OR expire in expire_month
+    const dateConditions = [];
+    
+    // Condition 1: Purchases that started in start_month
+    if (start_month) {
+      const startOfMonth = new Date(`${start_month}-01`);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const endOfMonth = new Date(startOfMonth);
+      endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+      endOfMonth.setDate(0);
+      endOfMonth.setHours(23, 59, 59, 999);
+      
+      dateConditions.push({
+        start_at: { $gte: startOfMonth, $lte: endOfMonth }
+      });
+    }
+    
+    // Condition 2: Purchases that expire in expire_month
+    if (expire_month) {
+      const startOfMonth = new Date(`${expire_month}-01`);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const endOfMonth = new Date(startOfMonth);
+      endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+      endOfMonth.setDate(0);
+      endOfMonth.setHours(23, 59, 59, 999);
+      
+      dateConditions.push({
+        expire_at: { $gte: startOfMonth, $lte: endOfMonth }
+      });
+    }
+    
+    // Apply OR condition if we have any date filters
+    if (dateConditions.length > 0) {
+      query.$or = dateConditions;
+    }
 
-    // Attach vendor_name from VendorKyc (business_name or full_name)
+    let mongo = ListingPlanPurchase.find(query).sort({ createdAt: -1 });
+    let data;
+    if (searchText) {
+      data = await mongo;
+    } else {
+      if (limit) mongo = mongo.skip((page - 1) * limit).limit(limit);
+      data = await mongo;
+    }
+
     const vendorIds = [...new Set(data.map((d) => d.vendor_id).filter(Boolean))];
     let vendorMap = {};
     if (vendorIds.length) {
@@ -119,10 +168,23 @@ const getAllPurchases = {
         vendorMap[vid] = business || full || '';
       });
     }
-    const enriched = data.map((d) => {
+
+    let enriched = data.map((d) => {
       const obj = d.toObject ? d.toObject() : d;
       return { ...obj, vendor_name: vendorMap[String(d.vendor_id)] || '' };
     });
+
+    if (searchText) {
+      const s = String(searchText).toLowerCase();
+      enriched = enriched.filter((e) => (e.vendor_name || '').toLowerCase().includes(s));
+    }
+
+    const total = searchText ? enriched.length : await ListingPlanPurchase.countDocuments(query);
+    let paged = enriched;
+    if (limit) {
+      const startIdx = (page - 1) * limit;
+      paged = enriched.slice(startIdx, startIdx + limit);
+    }
 
     res.status(200).json({
       success: true,
@@ -130,7 +192,7 @@ const getAllPurchases = {
       page: limit ? page : 1,
       limit: limit || total,
       totalPages: limit ? Math.ceil(total / limit) : 1,
-      data: enriched,
+      data: paged,
     });
   },
 };
