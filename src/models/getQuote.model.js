@@ -12,6 +12,12 @@ const STATUS = {
 
 const getQuoteSchema = new mongoose.Schema(
   {
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+
     product_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product', // make sure Product model exists
@@ -28,8 +34,7 @@ const getQuoteSchema = new mongoose.Schema(
     },
 
     months_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Month', // change according to your model name
+      type: String,
     },
 
     qty: {
@@ -43,6 +48,17 @@ const getQuoteSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
+    
+    calculated_price: {
+      type: Number,
+      default: 0,
+    },
+    
+    price_details: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    
      status: {
       type: String,
       enum: Object.values(STATUS),
