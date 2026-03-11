@@ -17,6 +17,8 @@ const listingPlanPurchaseSchema = new mongoose.Schema(
 
 listingPlanPurchaseSchema.plugin(toJSON);
 
+listingPlanPurchaseSchema.index({ plan_type: 1, amount: 1, start_at: 1, expire_at: 1 });
+
 const ListingPlanPurchase = mongoose.model('ListingPlanPurchase', listingPlanPurchaseSchema);
 
 module.exports = ListingPlanPurchase;
