@@ -9,6 +9,7 @@ const adminSchema = new mongoose.Schema(
     phone: { type: String, required: true, unique: true, trim: true },
     password: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
+    permissions: [{ type: String }], // Array of page permissions
   },
   { timestamps: true }
 );
