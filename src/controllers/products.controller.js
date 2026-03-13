@@ -475,17 +475,17 @@ const getAllProducts = {
     }
 
     try {
-      const page = parseInt(req.query.page || req.body.page) || 1;
-      const limit = (req.query.limit || req.body.limit) ? parseInt(req.query.limit || req.body.limit) : 10;
-      const skip = (page - 1) * limit;
-      
+      const pageNum = Math.max(parseInt(req.query.page || req.body.page) || 1, 1);
+      const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 100);
+      const skip = (pageNum - 1) * limitNum;
+
       console.log("Product query:", JSON.stringify(query, null, 2)); // Debug log
-      
+
       const total = await Product.countDocuments(query);
       let dataQuery = Product.find(query).sort({ createdAt: -1 });
-      
-      if (limit) {
-        dataQuery = dataQuery.skip(skip).limit(limit);
+
+      if (limitNum) {
+        dataQuery = dataQuery.skip(skip).limit(limitNum);
       }
       
       const data = await dataQuery;
@@ -552,16 +552,16 @@ const getAllProducts = {
       res.status(200).json({
         success: true,
         total,
-        page: limit ? page : 1,
-        limit: limit || total,
-        totalPages: limit ? Math.ceil(total / limit) : 1,
+        page: limitNum ? pageNum : 1,
+        limit: limitNum || total,
+        totalPages: limitNum ? Math.ceil(total / limitNum) : 1,
         data: normalized,
       });
     } catch (error) {
       console.error("Error in getAllProducts:", error);
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
-        message: error.message 
+        message: error.message
       });
     }
   },
@@ -810,7 +810,7 @@ const updateProduct = {
       }
 
       const body = req.body;
-      
+
       // Prevent changing vendor info via update
       delete body.vendor_id;
       delete body.vendor_name;
@@ -1468,7 +1468,7 @@ const purchaseListingPlan = {
       let def = null;
       try {
         def = await ListingPlan.findOne({ plan_type, status: 'active' });
-      } catch (e) {}
+      } catch (e) { }
       if (!def) {
         const fallback = [
           { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },

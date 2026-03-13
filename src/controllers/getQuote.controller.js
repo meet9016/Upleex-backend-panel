@@ -302,8 +302,8 @@ const getAllQuotesForAdmin = {
 
       const user = req.user;
 
-      // Build base query for GetQuote
-      const query = {};
+      // Build base query for GetQuote (Exclude pending quotes by default for Admin)
+      const query = { status: { $ne: 'pending' } };
       console.log("🚀 ~ query:", query)
 
       // Filter by status
@@ -389,121 +389,28 @@ const getAllQuotesForAdmin = {
           return quote;
         });
 
-        // Group quotes by vendor (using vendor info from product)
-        const groupedByVendor = enrichedQuotes.reduce((acc, quote) => {
-          const vendorName = quote.product_id?.vendor_name || 'Unknown Vendor';
-          // Use vendor name as key since we don't have vendor_id
-          const vendorKey = vendorName.replace(/\s+/g, '_').toLowerCase();
-          
-          if (!acc[vendorKey]) {
-            acc[vendorKey] = {
-              vendorName,
-              totalQuotes: 0,
-              totalAmount: 0,
-              quotes: []
-            };
-          }
-          
-          acc[vendorKey].quotes.push(quote);
-          acc[vendorKey].totalQuotes += 1;
-          acc[vendorKey].totalAmount += parseFloat(quote.calculated_price || quote.total_price || '0');
-          
-          return acc;
-        }, {});
-
-        console.log("🚀 ~ Sending response with:", {
-          totalVendors: Object.keys(groupedByVendor).length,
+        console.log("🚀 ~ Sending flat response with:", {
+          total,
           page: pageNum,
-          limit: limitNum
+          limit: limitNum,
+          dataCount: enrichedQuotes.length
         });
 
-        // Send response with grouped data
+        // Send flat response
         return res.status(httpStatus.OK).json({
           success: true,
-          totalVendors: Object.keys(groupedByVendor).length,
-          totalQuotes: total,
+          total,
           page: pageNum,
           limit: limitNum,
           totalPages: Math.ceil(total / limitNum),
-          data: groupedByVendor
+          data: enrichedQuotes
         });
       } 
       
       // No product filters, use handlePagination
       else {
-        // Override the json method to populate product details and group by vendor
-        const originalJson = res.json.bind(res);
-        res.json = async (payload) => {
-          if (payload && payload.success && Array.isArray(payload.data)) {
-            
-            // Get quote IDs
-            const quoteIds = payload.data.map(q => q._id);
-            
-            // Fetch populated quotes with product only (no vendor_id population)
-            const populatedQuotes = await GetQuote.find({ _id: { $in: quoteIds } })
-              .populate('product_id')
-              .lean();
-
-            // Create a map for quick lookup
-            const quoteMap = {};
-            populatedQuotes.forEach(quote => {
-              quoteMap[quote._id.toString()] = quote;
-            });
-
-            // Add month_name to each quote
-            const enrichedQuotes = payload.data.map(quote => {
-              const populated = quoteMap[quote._id.toString()] || quote;
-              
-              if (populated.months_id && populated.product_id?.month_arr) {
-                const month = populated.product_id.month_arr.find(
-                  m => m.months_id === populated.months_id || m.product_months_id === populated.months_id
-                );
-                if (month) {
-                  populated.month_name = month.month_name;
-                }
-              }
-              
-              return populated;
-            });
-
-            // Group quotes by vendor (using vendor info from product)
-            const groupedByVendor = enrichedQuotes.reduce((acc, quote) => {
-              const vendorName = quote.product_id?.vendor_name || 'Unknown Vendor';
-              // Use vendor name as key since we don't have vendor_id
-              const vendorKey = vendorName.replace(/\s+/g, '_').toLowerCase();
-              
-              if (!acc[vendorKey]) {
-                acc[vendorKey] = {
-                  vendorName,
-                  totalQuotes: 0,
-                  totalAmount: 0,
-                  quotes: []
-                };
-              }
-              
-              acc[vendorKey].quotes.push(quote);
-              acc[vendorKey].totalQuotes += 1;
-              acc[vendorKey].totalAmount += parseFloat(quote.calculated_price || quote.total_price || '0');
-              
-              return acc;
-            }, {});
-
-            // Transform the payload to return grouped data
-            return originalJson({
-              success: payload.success,
-              totalVendors: Object.keys(groupedByVendor).length,
-              totalQuotes: payload.total || enrichedQuotes.length,
-              page: payload.page,
-              limit: payload.limit,
-              totalPages: payload.totalPages,
-              data: groupedByVendor
-            });
-          }
-          return originalJson(payload);
-        };
-
-        // Use handlePagination
-        await handlePagination(GetQuote, req, res, query, { createdAt: -1 });
+        // Use handlePagination directly without overriding res.json
+        await handlePagination(GetQuote, req, res, query, { createdAt: -1 }, 'product_id');
       }
 
     } catch (error) {
