@@ -19,6 +19,7 @@ const { productsController } = require('../../controllers');
 const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
 const listingPlanRoute = require('./listingPlan.route');
 const priorityPlanRoute = require('./priorityPlan.route');
+const exportRoute = require('./export.route');
 
 const router = express.Router();
 
@@ -100,6 +101,10 @@ const defaultRoutes = [
   {
     path: '/priority-plans',
     route: priorityPlanRoute,
+  },
+  {
+    path: '/export',
+    route: exportRoute,
   },
 ];
 
