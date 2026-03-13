@@ -118,6 +118,7 @@ const getAllQuotes = {
 
       // Build base query for GetQuote
       const query = {};
+      console.log("🚀 ~ query:", query)
 
       // Filter by user type
       if (user.userType === 'vendor') {
@@ -284,7 +285,236 @@ const getAllQuotes = {
     }
   },
 };
+const getAllQuotesForAdmin = {
+  handler: async (req, res) => {
+    try {
+      const {
+        status,
+        search,
+        product_type,
+        listing_type,
+        month,
+        delivery_start_date,
+        delivery_end_date,
+        page = 1,
+        limit = 10
+      } = req.query;
 
+      const user = req.user;
+
+      // Build base query for GetQuote
+      const query = {};
+      console.log("🚀 ~ query:", query)
+
+      // Filter by status
+      if (status) {
+        query.status = status;
+      }
+
+      // Filter by month (direct field in GetQuote)
+      if (month) {
+        query.months_id = month;
+      }
+
+      // Filter by delivery date range
+      if (delivery_start_date || delivery_end_date) {
+        query.delivery_date = {};
+        if (delivery_start_date) {
+          query.delivery_date.$gte = new Date(delivery_start_date);
+        }
+        if (delivery_end_date) {
+          query.delivery_date.$lte = new Date(delivery_end_date);
+        }
+      }
+
+      // Search by note or status
+      if (search && search.trim() !== '') {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { note: searchRegex },
+          { status: searchRegex },
+        ];
+      }
+
+      console.log("🚀 ~ Base query:", JSON.stringify(query));
+
+      // Calculate pagination
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 10;
+      const skip = (pageNum - 1) * limitNum;
+
+      // If we have product-related filters, we need to handle differently
+      if (product_type || listing_type) {
+        // Get all quotes matching basic criteria with populated product only
+        let quotesQuery = GetQuote.find(query)
+          .populate({
+            path: 'product_id',
+          })
+          .lean();
+
+        const allQuotes = await quotesQuery;
+        
+        // Apply product-based filters
+        const filteredQuotes = allQuotes.filter(quote => {
+          const product = quote.product_id;
+          if (!product) return false;
+
+          // Filter by product type
+          if (product_type && product.product_type_id !== product_type) {
+            return false;
+          }
+
+          // Filter by listing type
+          if (listing_type && product.product_listing_type_id !== listing_type) {
+            return false;
+          }
+
+          return true;
+        });
+
+        // Apply pagination manually
+        const total = filteredQuotes.length;
+        const paginatedQuotes = filteredQuotes.slice(skip, skip + limitNum);
+
+        // Add month_name to each quote
+        const enrichedQuotes = paginatedQuotes.map(quote => {
+          if (quote.months_id && quote.product_id?.month_arr) {
+            const month = quote.product_id.month_arr.find(
+              m => m.months_id === quote.months_id || m.product_months_id === quote.months_id
+            );
+            if (month) {
+              quote.month_name = month.month_name;
+            }
+          }
+          return quote;
+        });
+
+        // Group quotes by vendor (using vendor info from product)
+        const groupedByVendor = enrichedQuotes.reduce((acc, quote) => {
+          const vendorName = quote.product_id?.vendor_name || 'Unknown Vendor';
+          // Use vendor name as key since we don't have vendor_id
+          const vendorKey = vendorName.replace(/\s+/g, '_').toLowerCase();
+          
+          if (!acc[vendorKey]) {
+            acc[vendorKey] = {
+              vendorName,
+              totalQuotes: 0,
+              totalAmount: 0,
+              quotes: []
+            };
+          }
+          
+          acc[vendorKey].quotes.push(quote);
+          acc[vendorKey].totalQuotes += 1;
+          acc[vendorKey].totalAmount += parseFloat(quote.calculated_price || quote.total_price || '0');
+          
+          return acc;
+        }, {});
+
+        console.log("🚀 ~ Sending response with:", {
+          totalVendors: Object.keys(groupedByVendor).length,
+          page: pageNum,
+          limit: limitNum
+        });
+
+        // Send response with grouped data
+        return res.status(httpStatus.OK).json({
+          success: true,
+          totalVendors: Object.keys(groupedByVendor).length,
+          totalQuotes: total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+          data: groupedByVendor
+        });
+      } 
+      
+      // No product filters, use handlePagination
+      else {
+        // Override the json method to populate product details and group by vendor
+        const originalJson = res.json.bind(res);
+        res.json = async (payload) => {
+          if (payload && payload.success && Array.isArray(payload.data)) {
+            
+            // Get quote IDs
+            const quoteIds = payload.data.map(q => q._id);
+            
+            // Fetch populated quotes with product only (no vendor_id population)
+            const populatedQuotes = await GetQuote.find({ _id: { $in: quoteIds } })
+              .populate('product_id')
+              .lean();
+
+            // Create a map for quick lookup
+            const quoteMap = {};
+            populatedQuotes.forEach(quote => {
+              quoteMap[quote._id.toString()] = quote;
+            });
+
+            // Add month_name to each quote
+            const enrichedQuotes = payload.data.map(quote => {
+              const populated = quoteMap[quote._id.toString()] || quote;
+              
+              if (populated.months_id && populated.product_id?.month_arr) {
+                const month = populated.product_id.month_arr.find(
+                  m => m.months_id === populated.months_id || m.product_months_id === populated.months_id
+                );
+                if (month) {
+                  populated.month_name = month.month_name;
+                }
+              }
+              
+              return populated;
+            });
+
+            // Group quotes by vendor (using vendor info from product)
+            const groupedByVendor = enrichedQuotes.reduce((acc, quote) => {
+              const vendorName = quote.product_id?.vendor_name || 'Unknown Vendor';
+              // Use vendor name as key since we don't have vendor_id
+              const vendorKey = vendorName.replace(/\s+/g, '_').toLowerCase();
+              
+              if (!acc[vendorKey]) {
+                acc[vendorKey] = {
+                  vendorName,
+                  totalQuotes: 0,
+                  totalAmount: 0,
+                  quotes: []
+                };
+              }
+              
+              acc[vendorKey].quotes.push(quote);
+              acc[vendorKey].totalQuotes += 1;
+              acc[vendorKey].totalAmount += parseFloat(quote.calculated_price || quote.total_price || '0');
+              
+              return acc;
+            }, {});
+
+            // Transform the payload to return grouped data
+            return originalJson({
+              success: payload.success,
+              totalVendors: Object.keys(groupedByVendor).length,
+              totalQuotes: payload.total || enrichedQuotes.length,
+              page: payload.page,
+              limit: payload.limit,
+              totalPages: payload.totalPages,
+              data: groupedByVendor
+            });
+          }
+          return originalJson(payload);
+        };
+
+        // Use handlePagination
+        await handlePagination(GetQuote, req, res, query, { createdAt: -1 });
+      }
+
+    } catch (error) {
+      console.error('Error in getAllQuotes:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+};
 const getQuoteById = {
   handler: async (req, res) => {
     try {
@@ -471,4 +701,5 @@ module.exports = {
   deleteQuote,
   statusDropdown,
   changeStatus,
+  getAllQuotesForAdmin
 };
