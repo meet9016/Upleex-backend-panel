@@ -20,7 +20,10 @@ router.get(
   auth(),
   catchAsync(getQuoteController.getAllQuotes.handler)
 );
-
+router.get(
+  '/getallforadmin',
+  catchAsync(getQuoteController.getAllQuotesForAdmin.handler)
+);
 router.get(
   '/getById/:_id',
   auth(),
