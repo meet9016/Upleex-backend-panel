@@ -111,4 +111,12 @@ router.post(
   catchAsync(productApprovalController.bulkApproveProducts.handler)
 );
 
+router.post(
+  '/bulk-reject',
+  auth(),
+  validate(productApprovalController.bulkRejectProducts.validation),
+  catchAsync(productApprovalController.bulkRejectProducts.handler)
+);
+
+
 module.exports = router;
