@@ -4,7 +4,6 @@ const { toJSON } = require('./plugins');
 const STATUS = {
   PENDING: 'pending',
   APPROVAL: 'approval',
-  ACTIVE: 'active',
   REJECT: 'reject',
   COMPLETE: 'complete',
   SUCCESSFUL: 'successful',

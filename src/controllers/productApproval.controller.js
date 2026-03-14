@@ -111,9 +111,38 @@ const bulkApproveProducts = {
   }
 };
 
+
+
+// Bulk reject products
+const bulkRejectProducts = {
+  validation: {
+    body: Joi.object().keys({
+      product_ids: Joi.array().items(Joi.string().required()).min(1).required()
+    })
+  },
+  handler: async (req, res) => {
+    try {
+      const { product_ids } = req.body;
+
+      await Product.updateMany(
+        { _id: { $in: product_ids } },
+        { $set: { approval_status: 'rejected' } }
+      );
+
+      res.status(200).json({
+        status: 200,
+        message: `${product_ids.length} products rejected successfully`
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
 module.exports = {
   getAllVendors,
   getVendorProducts,
   approveProduct,
-  bulkApproveProducts
+  bulkApproveProducts,
+  bulkRejectProducts
 };
