@@ -41,12 +41,16 @@ const businessRegister = catchAsync(async (req, res) => {
     country,
     isVerified: true,
   });
+  const token = await generateAuthTokens(vendor, 'vendor');
 
   res.status(httpStatus.CREATED).json({
     status: 200,
     success: true,
     message: 'Business registered successfully',
-    data: vendor,
+    data: {
+      vendor: vendor,
+      auth_token: token.access, // Use the same structure as vendorLogin
+    },
   });
 });
 

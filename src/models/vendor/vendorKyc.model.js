@@ -37,6 +37,9 @@ const vendorKycSchema = new mongoose.Schema(
       aadharcard_back_image: { type: String, default: '' },
       gst_certificate_image: { type: String, default: '' },
     },
+    Declaration: {
+      terms_conditions: { type: Boolean, default: false },
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -68,6 +71,7 @@ vendorKycSchema.options.toJSON = {
       Identity: ret.Identity || {},
       Bank: ret.Bank || {},
       Documents: ret.Documents || {},
+      Declaration: ret.Declaration || {},
       status: ret.status || 'pending',
       completed_pages: ret.completed_pages || [],
       createdAt,
