@@ -88,8 +88,8 @@ const getAllPurchases = {
       vendor_id: Joi.string().allow(''),
       plan_type: Joi.string().allow(''),
       amount: Joi.number(),
-      start_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
-      expire_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
+      start_month: Joi.string().pattern(/^\d{4}-\d{2}(?:-\d{2})?$/).allow(''),
+      expire_month: Joi.string().pattern(/^\d{4}-\d{2}(?:-\d{2})?$/).allow(''),
       q: Joi.string().allow(''),
       page: Joi.number().integer().min(1),
       limit: Joi.number().integer().min(1).max(200),
@@ -112,32 +112,26 @@ const getAllPurchases = {
     
     // Condition 1: Purchases that started in start_month
     if (start_month) {
-      const startOfMonth = new Date(`${start_month}-01`);
+      const sm = String(start_month).slice(0, 7); // YYYY-MM
+      const startOfMonth = new Date(`${sm}-01`);
       startOfMonth.setHours(0, 0, 0, 0);
-      
       const endOfMonth = new Date(startOfMonth);
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
       endOfMonth.setDate(0);
       endOfMonth.setHours(23, 59, 59, 999);
-      
-      dateConditions.push({
-        start_at: { $gte: startOfMonth, $lte: endOfMonth }
-      });
+      dateConditions.push({ start_at: { $gte: startOfMonth, $lte: endOfMonth } });
     }
-    
+
     // Condition 2: Purchases that expire in expire_month
     if (expire_month) {
-      const startOfMonth = new Date(`${expire_month}-01`);
+      const em = String(expire_month).slice(0, 7); // YYYY-MM
+      const startOfMonth = new Date(`${em}-01`);
       startOfMonth.setHours(0, 0, 0, 0);
-      
       const endOfMonth = new Date(startOfMonth);
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
       endOfMonth.setDate(0);
       endOfMonth.setHours(23, 59, 59, 999);
-      
-      dateConditions.push({
-        expire_at: { $gte: startOfMonth, $lte: endOfMonth }
-      });
+      dateConditions.push({ expire_at: { $gte: startOfMonth, $lte: endOfMonth } });
     }
     
     // Apply OR condition if we have any date filters

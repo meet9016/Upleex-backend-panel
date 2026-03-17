@@ -3,7 +3,7 @@ const { toJSON } = require('./plugins');
 
 const priorityPlanSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true, index: true }, // Priority Basic, Standard, Premium
+    name: { type: String, required: true, unique: true, index: true, trim: true }, // Priority Basic, Standard, Premium
     monthly_price: { type: Number, required: true },
     yearly_price: { type: Number, required: true },
     product_slots: { type: Number, required: true },
