@@ -57,6 +57,17 @@ const saveKyc = {
       const identity = extract('Identity');
       let bank = extract('Bank');
       const documents = extract('Documents');
+      
+      // FIX: Extract Declaration data
+      let declaration = null;
+      if (body.terms_conditions !== undefined) {
+        // Direct form data submission from declaration step
+        declaration = {
+          terms_conditions: body.terms_conditions === 'true' || body.terms_conditions === true
+        };
+      } else {
+        declaration = extract('Declaration');
+      }
 
       if (bank && bank.account_type) {
         try {
@@ -84,8 +95,7 @@ const saveKyc = {
         if (pageStr && pageStr !== 'undefined' && !currentPages.includes(pageStr)) {
           currentPages.push(pageStr);
         }
-        // Also check if step has page attribute encoded within
-        [contact, identity, bank, documents].forEach(item => {
+        [contact, identity, bank, documents, declaration].forEach(item => {
           if (item && item.page && !currentPages.includes(String(item.page))) {
             currentPages.push(String(item.page));
           }
@@ -102,6 +112,11 @@ const saveKyc = {
         if (identity) doc.Identity = { ...doc.Identity.toObject(), ...identity };
         if (bank) doc.Bank = { ...doc.Bank.toObject(), ...bank };
         if (documents) doc.Documents = { ...doc.Documents.toObject(), ...documents };
+        
+        // FIX: Update Declaration
+        if (declaration) {
+          doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
+        }
 
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
@@ -115,6 +130,7 @@ const saveKyc = {
           Identity: identity || {},
           Bank: bank || {},
           Documents: documents || {},
+          Declaration: declaration || { terms_conditions: false }, // FIX: Include Declaration
           completed_pages: pushPage([]),
           status: 'pending'
         });
@@ -153,6 +169,12 @@ const getSingleKyc = {
       const doc = await VendorKyc.findOne(filter).sort({ updatedAt: -1 });
 
       let dataObj = doc ? doc.toJSON() : {};
+      
+      // FIX: Ensure terms_conditions is at root level for frontend compatibility
+      if (dataObj.Declaration) {
+        dataObj.terms_conditions = dataObj.Declaration.terms_conditions || false;
+      }
+      
       if (dataObj?.Bank?.account_type && !dataObj?.Bank?.account_type_name) {
         try {
           const at = await AccountType.findById(dataObj.Bank.account_type);
