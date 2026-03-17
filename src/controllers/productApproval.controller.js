@@ -44,12 +44,14 @@ const getVendorProducts = {
   handler: async (req, res) => {
     try {
       const { vendorId } = req.params;
-      
       const products = await Product.find({ vendor_id: vendorId }).sort({ createdAt: -1 });
+      const pending = products.filter(p => p.approval_status === 'pending').length;
+      const approved = products.filter(p => p.approval_status === 'approved').length;
+      const rejected = products.filter(p => p.approval_status === 'rejected').length;
 
       res.status(200).json({
         status: 200,
-        data: products
+        data: { products, counts: { pending, approved, rejected } }
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -74,9 +76,16 @@ const approveProduct = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
+      const vendorId = product.vendor_id;
+      const pending = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'pending' });
+      const approved = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
+      const rejected = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
+
       res.status(200).json({
         status: 200,
-        message: 'Product approved successfully',
+        message: 'Product status updated',
+        vendor_id: vendorId,
+        counts: { pending, approved, rejected },
         data: product
       });
     } catch (error) {
@@ -101,9 +110,20 @@ const bulkApproveProducts = {
         { $set: { approval_status: 'approved' } }
       );
 
+      const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
+      const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
+      const countsByVendor = {};
+      for (const vid of vendorIds) {
+        const pending = await Product.countDocuments({ vendor_id: vid, approval_status: 'pending' });
+        const approved = await Product.countDocuments({ vendor_id: vid, approval_status: 'approved' });
+        const rejected = await Product.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
+        countsByVendor[vid] = { pending, approved, rejected };
+      }
+
       res.status(200).json({
         status: 200,
-        message: `${product_ids.length} products approved successfully`
+        message: `${product_ids.length} products approved successfully`,
+        countsByVendor
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -129,9 +149,20 @@ const bulkRejectProducts = {
         { $set: { approval_status: 'rejected' } }
       );
 
+      const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
+      const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
+      const countsByVendor = {};
+      for (const vid of vendorIds) {
+        const pending = await Product.countDocuments({ vendor_id: vid, approval_status: 'pending' });
+        const approved = await Product.countDocuments({ vendor_id: vid, approval_status: 'approved' });
+        const rejected = await Product.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
+        countsByVendor[vid] = { pending, approved, rejected };
+      }
+
       res.status(200).json({
         status: 200,
-        message: `${product_ids.length} products rejected successfully`
+        message: `${product_ids.length} products rejected successfully`,
+        countsByVendor
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
