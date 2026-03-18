@@ -118,6 +118,7 @@ const getAllCategories = {
               subcategory_id: String(sub.id || sub._id),
               subcategory_name: sub.name || sub.subcategory_name || '',
               image: sub.image || '',
+              created_at: sub.createdAt,
             })),
           };
         })
