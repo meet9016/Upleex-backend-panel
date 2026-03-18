@@ -58,7 +58,10 @@ const createPurchase = {
         amount = def.amount;
       }
     }
-    const assignIds = product_ids.slice(0, max_products || product_ids.length);
+    // Ensure we don't exceed max_products limit, but allow all products if max_products is sufficient
+    const assignIds = max_products && max_products < product_ids.length 
+      ? product_ids.slice(0, max_products) 
+      : product_ids;
     const start = start_at ? new Date(start_at) : new Date();
     const expire = expire_at ? new Date(expire_at) : new Date(start);
     if (!expire_at) {
@@ -76,7 +79,13 @@ const createPurchase = {
     });
     await Product.updateMany(
       { _id: { $in: assignIds }, vendor_id },
-      { $set: { status: 'active', expires_at: expire } }
+      { 
+        $set: { 
+          status: 'active', 
+          expires_at: expire,
+          // approval_status:  'approved' // Ensure products are approved when activated
+        } 
+      }
     );
     return res.status(201).json({ status: 201, message: 'Plan purchase created', data: purchase });
   },
@@ -247,14 +256,23 @@ const updatePurchase = {
       }
     }
     if (body.product_ids && body.product_ids.length && body.max_products) {
-      body.product_ids = body.product_ids.slice(0, body.max_products);
+      // Only limit if max_products is less than the number of products being assigned
+      if (body.max_products < body.product_ids.length) {
+        body.product_ids = body.product_ids.slice(0, body.max_products);
+      }
     }
     const updated = await ListingPlanPurchase.findByIdAndUpdate(_id, body, { new: true });
     if (updated && updated.product_ids && updated.product_ids.length) {
       const expire = updated.expire_at || new Date();
       await Product.updateMany(
         { _id: { $in: updated.product_ids }, vendor_id: updated.vendor_id },
-        { $set: { status: 'active', expires_at: expire } }
+        { 
+          $set: { 
+            status: 'active', 
+            expires_at: expire,
+            // approval_status: 'approved' // Ensure products are approved when activated
+          } 
+        }
       );
     }
     return res.status(200).json({ status: 200, message: 'Updated', data: updated });
