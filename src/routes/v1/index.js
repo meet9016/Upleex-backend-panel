@@ -20,6 +20,8 @@ const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
 const listingPlanRoute = require('./listingPlan.route');
 const priorityPlanRoute = require('./priorityPlan.route');
 const exportRoute = require('./export.route');
+const servicesRoute = require('./services.route');
+const serviceCategoriesRoute = require('./serviceCategories.route');
 
 const router = express.Router();
 
@@ -105,6 +107,14 @@ const defaultRoutes = [
   {
     path: '/export',
     route: exportRoute,
+  },
+  {
+    path: '/services',
+    route: servicesRoute,
+  },
+  {
+    path: '/service-categories',
+    route: serviceCategoriesRoute,
   },
 ];
 
