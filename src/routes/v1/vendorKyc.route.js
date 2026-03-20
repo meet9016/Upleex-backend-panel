@@ -20,6 +20,8 @@ router.post(
     { name: 'gst_certificate_image', maxCount: 1 },
     { name: 'vendor_image', maxCount: 1 },
     { name: 'business_logo_image', maxCount: 1 },
+    { name: 'qr_code_image', maxCount: 1 },
+    { name: 'cheque_image', maxCount: 1 },
   ]),
   validate(kycController.saveKyc.validation),
   catchAsync(kycController.saveKyc.handler)

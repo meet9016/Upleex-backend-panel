@@ -36,6 +36,8 @@ const vendorKycSchema = new mongoose.Schema(
       aadharcard_front_image: { type: String, default: '' },
       aadharcard_back_image: { type: String, default: '' },
       gst_certificate_image: { type: String, default: '' },
+      qr_code_image: { type: String, default: '' },
+      cheque_image: { type: String, default: '' },
     },
     Declaration: {
       terms_conditions: { type: Boolean, default: false },

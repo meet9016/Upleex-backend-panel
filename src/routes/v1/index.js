@@ -122,6 +122,8 @@ const defaultRoutes = [
   {
     path: '/vendor/payments',
     route: vendorPaymentsRoute,
+  },
+  {
     path: '/services',
     route: servicesRoute,
   },
