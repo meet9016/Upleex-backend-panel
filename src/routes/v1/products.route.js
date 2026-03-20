@@ -118,5 +118,20 @@ router.post(
   catchAsync(productApprovalController.bulkRejectProducts.handler)
 );
 
+// router.post(
+//   '/update-stock',
+//   auth(),
+//   upload.none(),
+//   validate(productsController.updateProductStock.validation),
+//   catchAsync(productsController.updateProductStock.handler)
+// );
+
+// router.post(
+//   '/by-type',
+//   auth(true),
+//   upload.none(),
+//   validate(productsController.getProductsByType.validation),
+//   catchAsync(productsController.getProductsByType.handler)
+// );
 
 module.exports = router;

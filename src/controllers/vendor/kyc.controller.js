@@ -24,6 +24,8 @@ const saveKyc = {
           'gst_certificate_image',
           'vendor_image',
           'business_logo_image',
+          'qr_code_image',
+          'cheque_image',
         ];
 
         // Documents might come as a stringified JSON if it's multipart/form-data
@@ -543,7 +545,9 @@ const downloadKycPDF = {
         { key: "pancard_front_image", label: "PAN Card" },
         { key: "aadharcard_front_image", label: "Aadhaar Front" },
         { key: "aadharcard_back_image", label: "Aadhaar Back" },
-        { key: "gst_certificate_image", label: "GST Certificate" }
+        { key: "gst_certificate_image", label: "GST Certificate" },
+        { key: "qr_code_image", label: "QR Code" },
+        { key: "cheque_image", label: "Cheque" }
       ];
 
       let imageX = 55;

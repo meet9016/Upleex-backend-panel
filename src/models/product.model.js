@@ -133,6 +133,25 @@ const productSchema = new mongoose.Schema(
     expires_at: {
       type: Date,
     },
+    is_new: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    deposit_amount: {
+      type: String,
+      default: '0',
+    },
+    available_quantity: {
+      type: Number,
+      default: 1,
+      min: 0,
+    },
+    is_out_of_stock: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

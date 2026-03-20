@@ -182,7 +182,10 @@ const createProduct = {
         Joi.array().items(Joi.string().allow('')),
         Joi.string().allow('')
       ).default([]),
-      pricing_type: Joi.string().valid('free', 'paid').default('paid'), // ← નવું field
+      is_new: Joi.boolean().default(false),
+      deposit_amount: Joi.string().allow('').default('0'),
+      available_quantity: Joi.number().integer().min(0).default(1),
+      pricing_type: Joi.string().valid('free', 'paid').default('paid'),
     }).prefs({ convert: true }),
   },
   handler: async (req, res) => {
@@ -438,6 +441,11 @@ const createProduct = {
       data.expires_at = expiryDate;
       data.status = 'active';
       data.approval_status = 'pending'; // Set to pending for admin approval
+      
+      // Set initial stock status
+      if (data.product_type_name === 'Sell' && data.available_quantity) {
+        data.is_out_of_stock = Number(data.available_quantity) <= 0;
+      }
 
       const product = await Product.create(data);
 
@@ -1607,6 +1615,97 @@ const purchaseListingPlan = {
 };
 
 
+const updateProductStock = {
+  validation: {
+    body: Joi.object().keys({
+      product_id: Joi.string().required(),
+      quantity_purchased: Joi.number().integer().min(1).required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { product_id, quantity_purchased } = req.body;
+      
+      const product = await Product.findById(product_id);
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      
+      if (product.product_type_name !== 'Sell') {
+        return res.status(400).json({ message: 'Stock management only applies to sell products' });
+      }
+      
+      const newAvailableQuantity = Math.max(0, product.available_quantity - quantity_purchased);
+      const isOutOfStock = newAvailableQuantity <= 0;
+      
+      await Product.findByIdAndUpdate(product_id, {
+        available_quantity: newAvailableQuantity,
+        is_out_of_stock: isOutOfStock
+      });
+      
+      res.status(200).json({
+        success: true,
+        message: 'Stock updated successfully',
+        data: {
+          available_quantity: newAvailableQuantity,
+          is_out_of_stock: isOutOfStock
+        }
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  },
+};
+
+const getProductsByType = {
+  validation: {
+    body: Joi.object().keys({
+      product_type: Joi.string().valid('Rent', 'Sell').required(),
+      vendor_id: Joi.string().allow(''),
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(100).default(20),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { product_type, vendor_id, page, limit } = req.body;
+      const skip = (page - 1) * limit;
+      
+      const query = { product_type_name: product_type };
+      
+      // If vendor_id is provided, filter by vendor
+      if (vendor_id) {
+        query.vendor_id = vendor_id;
+      }
+      // If user is logged in as vendor, show only their products
+      else if (req.user && req.user.userType === 'vendor') {
+        query.vendor_id = req.user.id || req.user._id;
+      }
+      // For public access, only show approved products
+      else {
+        query.approval_status = 'approved';
+      }
+      
+      const total = await Product.countDocuments(query);
+      const products = await Product.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+      
+      res.status(200).json({
+        success: true,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        data: products,
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  },
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -1623,4 +1722,6 @@ module.exports = {
   bulkDeactivateProducts,
   bulkDeleteProducts,
   purchaseListingPlan,
+  updateProductStock,
+  getProductsByType,
 };

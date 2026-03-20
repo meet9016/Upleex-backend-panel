@@ -38,6 +38,15 @@ const getOrdersValidation = {
   }),
 };
 
+const cancelOrderValidation = {
+  params: Joi.object().keys({
+    order_id: Joi.string().required(),
+  }),
+  body: Joi.object().keys({
+    reason: Joi.string().allow('').optional(),
+  }),
+};
+
 // Routes
 router.get(
   '/test',
@@ -108,5 +117,13 @@ router.get(
   validate(getOrdersValidation),
   catchAsync(paymentController.getVendorPaymentHistory)
 );
+
+router.put(
+  '/cancel-order/:order_id',
+  auth(),
+  validate(cancelOrderValidation),
+  catchAsync(paymentController.cancelOrder)
+);
+
 
 module.exports = router;

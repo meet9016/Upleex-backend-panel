@@ -78,6 +78,16 @@ const createOrder = catchAsync(async (req, res) => {
       continue;
     }
 
+    // Check stock availability for sell products
+    if (product.product_type_name === 'Sell') {
+      if (product.is_out_of_stock || product.available_quantity < cartItem.qty) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST, 
+          `Product "${product.product_name}" is out of stock or insufficient quantity available. Available: ${product.available_quantity}, Requested: ${cartItem.qty}`
+        );
+      }
+    }
+
     const price = Number(product.price) || 0;
     const quantity = Number(cartItem.qty) || 1;
     const itemSubtotal = price * quantity;
@@ -259,6 +269,36 @@ const verifyPayment = catchAsync(async (req, res) => {
     { status: 'ordered' }
   );
   console.log('🛒 Cart items updated to ordered status');
+
+  // Reduce available quantity for sell products
+  for (const item of order.items) {
+    try {
+      const product = await Product.findById(item.product_id);
+      
+      if (!product) {
+        console.log(`❌ Product not found: ${item.product_id}`);
+        continue;
+      }
+            
+      if (product && product.product_type_name === 'Sell' && product.available_quantity > 0) {
+        const newAvailableQuantity = Math.max(0, product.available_quantity - item.quantity);
+        const isOutOfStock = newAvailableQuantity === 0;
+        
+        const updateResult = await Product.findByIdAndUpdate(item.product_id, {
+          available_quantity: newAvailableQuantity,
+          is_out_of_stock: isOutOfStock
+        }, { new: true });
+        
+        console.log(`📦 Stock updated for product ${item.product_name}: ${product.available_quantity} -> ${newAvailableQuantity}`);
+      } else {
+        console.log(`⏭️ Skipping stock update: type=${product.product_type_name}, available=${product.available_quantity}`);
+      }
+    } catch (stockError) {
+      console.error(`❌ Failed to update stock for product ${item.product_id}:`, stockError);
+      // Don't fail the payment if stock update fails
+    }
+  }
+  console.log('✅ Stock reduction completed');
 
   // Send order confirmation email
   console.log('📧 Starting email sending process...');
@@ -489,10 +529,71 @@ const getVendorPaymentHistory = catchAsync(async (req, res) => {
 
 
 
+// Cancel order and restore stock
+const cancelOrder = catchAsync(async (req, res) => {
+  const { order_id } = req.params;
+  const { reason } = req.body;
+
+  const order = await Order.findOne({ order_id });
+  if (!order) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
+  }
+
+  if (order.order_status === 'cancelled') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Order is already cancelled');
+  }
+
+  if (['delivered', 'shipped', 'out_for_delivery'].includes(order.order_status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot cancel order after it has been shipped');
+  }
+
+  // Restore stock for sell products
+  console.log('📦 Restoring stock for cancelled order...');
+  for (const item of order.items) {
+    try {
+      const product = await Product.findById(item.product_id);
+      if (product && product.product_type_name === 'Sell') {
+        const newAvailableQuantity = product.available_quantity + item.quantity;
+        const isOutOfStock = newAvailableQuantity === 0;
+        
+        await Product.findByIdAndUpdate(item.product_id, {
+          available_quantity: newAvailableQuantity,
+          is_out_of_stock: isOutOfStock
+        });
+        
+        console.log(`📦 Stock restored for product ${item.product_name}: ${product.available_quantity} -> ${newAvailableQuantity}`);
+      }
+    } catch (stockError) {
+      console.error(`❌ Failed to restore stock for product ${item.product_id}:`, stockError);
+    }
+  }
+
+  // Update order status
+  order.order_status = 'cancelled';
+  order.order_notes = reason || 'Order cancelled by user';
+  
+  // Update vendor payments to cancelled
+  order.vendor_payments.forEach(vendorPayment => {
+    if (vendorPayment.payment_status === 'pending') {
+      vendorPayment.payment_status = 'cancelled';
+    }
+  });
+
+  await order.save();
+
+  res.status(httpStatus.OK).send({
+    status: 200,
+    success: true,
+    message: 'Order cancelled successfully and stock restored',
+    data: { order_id: order.order_id, order_status: order.order_status }
+  });
+});
+
 module.exports = {
   createOrder,
   verifyPayment,
   getUserOrders,
   getVendorOrders,
   getVendorPaymentHistory,
+  cancelOrder
 };
