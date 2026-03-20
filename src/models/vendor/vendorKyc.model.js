@@ -47,6 +47,7 @@ const vendorKycSchema = new mongoose.Schema(
       index: true,
     },
     completed_pages: { type: [String], default: [] },
+    vendor_type: { type: String, default: 'both' },
     approved_at: { type: Date },
   },
   {
@@ -74,6 +75,7 @@ vendorKycSchema.options.toJSON = {
       Declaration: ret.Declaration || {},
       status: ret.status || 'pending',
       completed_pages: ret.completed_pages || [],
+      vendor_type: ret.vendor_type || 'both',
       createdAt,
       updatedAt,
       approved_at,
