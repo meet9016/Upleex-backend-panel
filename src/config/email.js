@@ -2,11 +2,11 @@ const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === "true", // false for port 587 (TLS)
+  port: parseInt(process.env.SMTP_PORT),
+  secure: process.env.SMTP_SECURE === "true",
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USERNAME,
+    pass: process.env.SMTP_PASSWORD,
   },
 });
 
@@ -15,7 +15,7 @@ transporter.verify((error, success) => {
   if (error) {
     console.error("SMTP connection failed:", error);
   } else {
-    console.log("Mailtrap SMTP server ready to send emails");
+    console.log("Gmail SMTP server ready to send emails");
   }
 });
 
