@@ -55,6 +55,13 @@ const productSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    sku: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
     price: {
       type: String,
     },

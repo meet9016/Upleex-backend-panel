@@ -12,4 +12,6 @@ module.exports.AccountType = require('./accountType.model');
 module.exports.GetQuoteStatus = require('./getQuoteStatus.model');
 module.exports.Cart = require('./cart.model');
 module.exports.Wishlist = require('./wishlist.model');
+module.exports.Order = require('./order.model');
+module.exports.VendorPayment = require('./vendorPayment.model');
 

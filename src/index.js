@@ -2,12 +2,15 @@ const mongoose = require('mongoose');
 const app = require('./app');
 const config = require('./config/config');
 const logger = require('./config/logger');
+const { initPaymentReleaseCron } = require('./utils/paymentCron');
 
 require('node:dns').setServers(['1.1.1.1','8.8.8.8'])
 
 let server;
 mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   logger.info('Connected to MongoDB');
+  // Initialize payment release cron job
+  initPaymentReleaseCron();
   server = app.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
   });

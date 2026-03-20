@@ -21,6 +21,72 @@ const VendorKyc = require('../models/vendor/vendorKyc.model');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
 
+
+const generateSKU = (categoryName, businessName, counter) => {
+  const categoryCode = categoryName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
+    const businessCode = businessName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
+    const counterCode = counter.toString().padStart(3, '0');
+  
+  return `${categoryCode}-${businessCode}-${counterCode}`;
+};
+
+const getNextSKUCounter = async (vendorId) => {
+  try {
+    const products = await Product.find({ vendor_id: vendorId }, { sku: 1 }).sort({ createdAt: -1 });
+    let maxCounter = 0;
+    
+    products.forEach(product => {
+      if (product.sku) {
+        const skuParts = product.sku.split('-');
+        if (skuParts.length === 3) {
+          const counter = parseInt(skuParts[2], 10);
+          if (!isNaN(counter) && counter > maxCounter) {
+            maxCounter = counter;
+          }
+        }
+      }
+    });
+    
+    return maxCounter + 1;
+  } catch (error) {
+    console.error('Error getting next SKU counter:', error);
+    return 1;
+  }
+};
+
+const generateProductSKU = async (vendorId, categoryId) => {
+  try {
+    // Get vendor business name
+    const vendorKyc = await VendorKyc.findOne({ vendor_id: vendorId });
+    const businessName = vendorKyc?.business_name || vendorKyc?.full_name || 'Vendor';
+    
+    // Get category name
+    const category = await Category.findById(categoryId);
+    const categoryName = category?.categories_name || 'Category';
+    
+    // Get next counter
+    const counter = await getNextSKUCounter(vendorId);
+    
+    // Generate SKU
+    const sku = generateSKU(categoryName, businessName, counter);
+    
+    // Check if SKU already exists (rare case)
+    const existingSKU = await Product.findOne({ sku });
+    if (existingSKU) {
+      // If exists, try with next counter
+      const nextCounter = counter + 1;
+      return generateSKU(categoryName, businessName, nextCounter);
+    }
+    
+    return sku;
+  } catch (error) {
+    console.error('Error generating SKU:', error);
+    // Fallback SKU
+    const timestamp = Date.now().toString().slice(-6);
+    return `GEN-VEN-${timestamp}`;
+  }
+};
+
 const productDetailSchema = Joi.object().keys({
   specification_id: Joi.string().allow(''),
   specification: Joi.string().allow(''),
@@ -76,6 +142,7 @@ const createProduct = {
       product_type_id: Joi.string().required(),
       product_listing_type_id: Joi.string().allow(''),
       product_name: Joi.string().trim().required(),
+      sku: Joi.string().trim().allow(''),
       price: Joi.string().allow(''),
       cancel_price: Joi.string().allow(''),
       description: Joi.string().allow(''),
@@ -133,6 +200,20 @@ const createProduct = {
 
       if (!data.vendor_id) {
         return res.status(401).json({ message: 'Vendor authentication required' });
+      }
+
+      // Generate SKU if not provided
+      if (!data.sku || !data.sku.trim()) {
+        data.sku = await generateProductSKU(data.vendor_id, data.category_id);
+      } else {
+        // Check if provided SKU already exists
+        const existingSKU = await Product.findOne({ sku: data.sku.trim() });
+        if (existingSKU) {
+          return res.status(httpStatus.BAD_REQUEST).json({ 
+            message: 'SKU already exists. Please use a different SKU.' 
+          });
+        }
+        data.sku = data.sku.trim();
       }
 
       // ───────────────────────────────────────────────
@@ -746,6 +827,7 @@ const updateProduct = {
         product_type_id: Joi.string().required(),
         product_listing_type_id: Joi.string().allow(''),
         product_name: Joi.string().trim().required(),
+        sku: Joi.string().trim().allow(''),
         price: Joi.string().allow(''),
         cancel_price: Joi.string().allow(''),
         description: Joi.string().allow(''),
@@ -814,6 +896,24 @@ const updateProduct = {
       // Prevent changing vendor info via update
       delete body.vendor_id;
       delete body.vendor_name;
+
+      // Handle SKU update
+      if (body.sku && body.sku.trim()) {
+        const trimmedSKU = body.sku.trim();
+        // Check if SKU is being changed and if new SKU already exists
+        if (trimmedSKU !== existing.sku) {
+          const existingSKU = await Product.findOne({ 
+            sku: trimmedSKU, 
+            _id: { $ne: _id } 
+          });
+          if (existingSKU) {
+            return res.status(httpStatus.BAD_REQUEST).json({ 
+              message: 'SKU already exists. Please use a different SKU.' 
+            });
+          }
+        }
+        body.sku = trimmedSKU;
+      }
 
       const extractIndexedArray = (body, baseKey) => {
         const regex = new RegExp(`^${baseKey}\\[(\\d+)\\]$`);
