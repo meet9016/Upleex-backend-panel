@@ -88,6 +88,31 @@ const saveKyc = {
         ],
       };
 
+      if (!vendor_id && !searchEmail && !searchMobile) {
+        // If we don't have enough to find an existing record, let's at least check basics
+      }
+
+      // --- UNIQUENESS CHECKS FOR SENSITIVE FIELDS ---
+      const checkUniqueness = async (field, value, label) => {
+        if (!value) return;
+        const q = { [field]: value };
+        const existing = await VendorKyc.findOne(q);
+        if (existing) {
+          // If existing record belongs to a different vendor, it's a conflict
+          const existingVendorId = existing.ContactDetails?.vendor_id || existing.vendor_id;
+          if (vendor_id && String(existingVendorId) !== String(vendor_id)) {
+            throw new Error(`${label} is already registered by another vendor`);
+          }
+        }
+      };
+
+      if (searchEmail) await checkUniqueness('ContactDetails.email', searchEmail, 'Email');
+      if (searchMobile) await checkUniqueness('ContactDetails.mobile', searchMobile, 'Phone Number');
+      if (identity?.pancard_number) await checkUniqueness('Identity.pancard_number', identity.pancard_number, 'PAN Number');
+      if (identity?.aadharcard_number) await checkUniqueness('Identity.aadharcard_number', identity.aadharcard_number, 'Aadhaar Number');
+      if (identity?.gst_number) await checkUniqueness('Identity.gst_number', identity.gst_number, 'GST Number');
+      if (bank?.account_number) await checkUniqueness('Bank.account_number', bank.account_number, 'Account Number');
+
       let doc = await VendorKyc.findOne(filter);
 
       const pageStr = String(body.page || '');
@@ -196,7 +221,7 @@ const listKyc = {
   handler: async (req, res) => {
     try {
       const page = parseInt(req.query.page) || 1;
-      const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+      const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
       const status = req.query.status;
       const q = status ? { status } : {};
