@@ -138,9 +138,12 @@ const saveKyc = {
         if (bank) doc.Bank = { ...doc.Bank.toObject(), ...bank };
         if (documents) doc.Documents = { ...doc.Documents.toObject(), ...documents };
         
-        // FIX: Update Declaration
         if (declaration) {
           doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
+        }
+
+        if (body.vendor_type) {
+          doc.vendor_type = body.vendor_type;
         }
 
         doc.completed_pages = pushPage(doc.completed_pages || []);
@@ -157,6 +160,7 @@ const saveKyc = {
           Documents: documents || {},
           Declaration: declaration || { terms_conditions: false }, // FIX: Include Declaration
           completed_pages: pushPage([]),
+          vendor_type: body.vendor_type || 'both',
           status: 'pending'
         });
       }
