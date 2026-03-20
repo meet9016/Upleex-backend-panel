@@ -63,7 +63,7 @@ const createService = {
       }
 
       data.status = 'active';
-      data.approval_status = 'approved';
+      data.approval_status = 'pending';
 
       const service = await Service.create(data);
 
