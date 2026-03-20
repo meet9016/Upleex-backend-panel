@@ -14,4 +14,6 @@ module.exports.Cart = require('./cart.model');
 module.exports.Wishlist = require('./wishlist.model');
 module.exports.Order = require('./order.model');
 module.exports.VendorPayment = require('./vendorPayment.model');
+module.exports.Service = require('./service.model');
+module.exports.ServiceCategory = require('./serviceCategory.model');
 

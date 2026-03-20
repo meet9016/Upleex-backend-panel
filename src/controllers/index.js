@@ -9,3 +9,5 @@ module.exports.getQuoteController = require('./getQuote.controller');
 module.exports.cartController = require('./cart.controller');
 module.exports.wishlistController = require('./wishlist.controller');
 module.exports.listingPlanPurchaseController = require('./listingPlanPurchase.controller');
+module.exports.servicesController = require('./services.controller');
+module.exports.serviceCategoriesController = require('./serviceCategories.controller');
