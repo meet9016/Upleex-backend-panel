@@ -134,12 +134,16 @@ const updateOrderStatus = {
         const vendorItems = order.items.filter(item => item.vendor_id === vendorId);
         const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0) * 0.9; // 10% admin commission
         
+        // Create payment record regardless of user payment status
+        // Admin will handle payment release based on user payment verification
         await VendorPayment.create({
           order_id: order._id,
           vendor_id: vendorId,
           vendor_amount: vendorAmount,
           delivered_at: deliveredAt,
-          release_date: releaseDate
+          release_date: releaseDate,
+          payment_status: 'pending', // Always start as pending for admin review
+          notes: 'Payment record created on delivery. Awaiting admin verification of user payment.'
         });
         
         console.log(`Created payment record for order ${order.order_id}, vendor ${vendorId}`);
@@ -313,12 +317,15 @@ const bulkUpdateOrderStatus = {
           const vendorItems = order.items.filter(item => item.vendor_id === vendorId);
           const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0) * 0.9; // 10% admin commission
           
+          // Create payment record regardless of user payment status
           await VendorPayment.create({
             order_id: order._id,
             vendor_id: vendorId,
             vendor_amount: vendorAmount,
             delivered_at: deliveredAt,
-            release_date: releaseDate
+            release_date: releaseDate,
+            payment_status: 'pending',
+            notes: 'Payment record created on delivery. Awaiting admin verification of user payment.'
           });
         }
       }
