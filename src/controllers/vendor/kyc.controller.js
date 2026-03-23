@@ -4,6 +4,7 @@ const VendorKyc = require('../../models/vendor/vendorKyc.model');
 const Vendor = require('../../models/vendor/vendor.model');
 const { AccountType } = require('../../models');
 const { uploadToExternalService } = require('../../utils/fileUpload');
+const { createKycNotification, sendKycIncompleteEmail } = require('../../services/kycEmail.service');
 
 const saveKyc = {
   handler: async (req, res) => {
@@ -150,7 +151,31 @@ const saveKyc = {
 
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
-        await doc.save();
+      await doc.save();
+
+      // Trigger KYC incomplete email notification
+      const completedSteps = doc.completed_pages?.length || 0;
+      const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+      const vendorEmail = doc.ContactDetails?.email;
+      
+      if (vendorEmail && completedSteps < 5) {
+        try {
+          // Send instant notification
+          await sendKycIncompleteEmail(vendorEmail, vendorName, completedSteps, 5, 'instant');
+          
+          // Create notification record for future reminders
+          await createKycNotification(
+            vendor_id,
+            vendorEmail,
+            doc._id,
+            'kyc_incomplete',
+            'instant',
+            completedSteps
+          );
+        } catch (emailError) {
+          console.error('Error sending KYC notification email:', emailError);
+        }
+      }
       } else {
         const initialContact = contact || {};
         if (vendor_id) initialContact.vendor_id = vendor_id;
@@ -165,6 +190,30 @@ const saveKyc = {
           vendor_type: body.vendor_type || 'both',
           status: 'pending'
         });
+
+        // Trigger KYC incomplete email notification for new KYC
+        const completedSteps = doc.completed_pages?.length || 0;
+        const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+        const vendorEmail = doc.ContactDetails?.email;
+        
+        if (vendorEmail && completedSteps < 5) {
+          try {
+            // Send instant notification
+            await sendKycIncompleteEmail(vendorEmail, vendorName, completedSteps, 5, 'instant');
+            
+            // Create notification record for future reminders
+            await createKycNotification(
+              vendor_id,
+              vendorEmail,
+              doc._id,
+              'kyc_incomplete',
+              'instant',
+              completedSteps
+            );
+          } catch (emailError) {
+            console.error('Error sending KYC notification email:', emailError);
+          }
+        }
       }
 
       return res.status(200).json({
@@ -368,11 +417,12 @@ const changeStatus = {
       kyc_id: Joi.string().allow(''),
       vendor_id: Joi.string().allow(''),
       status: Joi.string().valid('pending', 'approved', 'rejected').required(),
+      rejection_reason: Joi.string().allow('').optional(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { kyc_id, vendor_id, status } = req.body;
+      const { kyc_id, vendor_id, status, rejection_reason } = req.body;
       const filter = kyc_id ? { _id: kyc_id } : vendor_id ? { 'ContactDetails.vendor_id': vendor_id } : null;
       if (!filter) {
         return res.status(400).json({ status: 400, message: 'kyc_id or vendor_id is required' });
@@ -381,6 +431,8 @@ const changeStatus = {
       if (!doc) {
         return res.status(404).json({ status: 404, message: 'KYC not found' });
       }
+      
+      const previousStatus = doc.status;
       doc.status = status;
       const v_id = doc.ContactDetails?.vendor_id || doc.vendor_id;
       if (status === 'approved') {
@@ -394,7 +446,29 @@ const changeStatus = {
           await Vendor.findByIdAndUpdate(v_id, { isVerified: false });
         }
       }
+      
       await doc.save();
+
+      // Send email notifications for status changes
+      const vendorEmail = doc.ContactDetails?.email;
+      const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+      
+      if (vendorEmail && previousStatus !== status) {
+        try {
+          const { sendKycApprovalEmail, sendKycRejectionEmail, createKycNotification } = require('../../services/kycEmail.service');
+          
+          if (status === 'approved') {
+            await sendKycApprovalEmail(vendorEmail, vendorName);
+            await createKycNotification(v_id, vendorEmail, doc._id, 'admin_approval');
+          } else if (status === 'rejected') {
+            await sendKycRejectionEmail(vendorEmail, vendorName, rejection_reason);
+            await createKycNotification(v_id, vendorEmail, doc._id, 'admin_rejection');
+          }
+        } catch (emailError) {
+          console.error('Error sending status change email:', emailError);
+        }
+      }
+      
       return res.status(200).json({ status: 200, message: 'Status updated', data: doc.toJSON() });
     } catch (error) {
       console.error("Change Status Error:", error);
