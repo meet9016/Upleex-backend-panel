@@ -3,6 +3,7 @@ const config = require("../config/config");
 const logger = require("../config/logger");
 const moment = require("moment");
 const transporter = require("../config/email");
+const kycEmailService = require('./kycEmail.service');
 
 const sendWelcomeEmail = async (to, name, zoomLink) => {
   const mailOptions = {
@@ -916,4 +917,5 @@ module.exports = {
   sendPurchaseConfirmationEmail,
   sendCombinedPurchaseEmail,
   sendOrderConfirmationEmail,
+  ...kycEmailService,
 };
