@@ -20,10 +20,24 @@ const getVendorPayments = {
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
-      .populate('order_id', 'order_id total_amount user_name')
+      .populate('order_id', 'order_id total_amount user_name vendor_status')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
+    
+    // Add payment status info for vendor
+    const paymentsWithStatus = payments.map(payment => ({
+      ...payment.toObject(),
+      payment_status_display: {
+        status: payment.payment_status,
+        status_text: payment.payment_status === 'pending' ? 'Payment Pending' : 
+                    payment.payment_status === 'released' ? 'Payment Released' : 
+                    payment.payment_status === 'failed' ? 'Payment Failed' : 'Payment Cancelled',
+        can_be_released: payment.payment_status === 'pending' && new Date() >= new Date(payment.release_date),
+        days_until_release: payment.payment_status === 'pending' ? 
+          Math.max(0, Math.ceil((new Date(payment.release_date) - new Date()) / (1000 * 60 * 60 * 24))) : 0
+      }
+    }));
     
     const total = await VendorPayment.countDocuments(filter);
     
@@ -32,7 +46,7 @@ const getVendorPayments = {
       success: true,
       message: 'Vendor payments retrieved successfully',
       data: {
-        payments,
+        payments: paymentsWithStatus,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -62,7 +76,7 @@ const getAllVendorPayments = {
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
-      .populate('order_id', 'order_id total_amount user_name')
+      .populate('order_id', 'order_id total_amount user_name vendor_status')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -84,6 +98,12 @@ const getAllVendorPayments = {
               business_name: `Business ${payment.vendor_id}`,
               email: 'N/A',
               number: 'N/A'
+            },
+            admin_actions: {
+              can_release: payment.payment_status === 'pending',
+              can_cancel: payment.payment_status === 'pending',
+              is_overdue: payment.payment_status === 'pending' && new Date() > new Date(payment.release_date),
+              days_since_delivery: Math.floor((new Date() - new Date(payment.delivered_at)) / (1000 * 60 * 60 * 24))
             }
           };
         } catch (error) {
@@ -95,6 +115,12 @@ const getAllVendorPayments = {
               business_name: `Business ${payment.vendor_id}`,
               email: 'N/A',
               number: 'N/A'
+            },
+            admin_actions: {
+              can_release: payment.payment_status === 'pending',
+              can_cancel: payment.payment_status === 'pending',
+              is_overdue: payment.payment_status === 'pending' && new Date() > new Date(payment.release_date),
+              days_since_delivery: Math.floor((new Date() - new Date(payment.delivered_at)) / (1000 * 60 * 60 * 24))
             }
           };
         }
@@ -136,6 +162,7 @@ const releasePayment = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Payment already processed');
     }
     
+    // Admin can release payment anytime, regardless of release date
     payment.payment_status = 'released';
     payment.released_at = new Date();
     payment.released_by = 'admin';
@@ -276,11 +303,42 @@ const releaseScheduledPayments = {
   })
 };
 
+// Cancel payment (admin only)
+const cancelPayment = {
+  handler: catchAsync(async (req, res) => {
+    const { paymentId } = req.params;
+    const { reason } = req.body;
+    
+    const payment = await VendorPayment.findById(paymentId);
+    
+    if (!payment) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Payment not found');
+    }
+    
+    if (payment.payment_status !== 'pending') {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Payment already processed');
+    }
+    
+    payment.payment_status = 'cancelled';
+    payment.notes = reason || 'Cancelled by admin';
+    
+    await payment.save();
+    
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      message: 'Payment cancelled successfully',
+      data: { payment }
+    });
+  })
+};
+
 module.exports = {
   getVendorPayments,
   getAllVendorPayments,
   releasePayment,
   releaseOrderPayment,
   getPaymentStats,
-  releaseScheduledPayments
+  releaseScheduledPayments,
+  cancelPayment
 };
