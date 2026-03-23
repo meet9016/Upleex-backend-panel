@@ -230,7 +230,52 @@ const listKyc = {
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
       const status = req.query.status;
-      const q = status ? { status } : {};
+      const search = req.query.search;
+      const vendor_type = req.query.vendor_type;
+      const date_from = req.query.date_from;
+      const date_to = req.query.date_to;
+      const vendor_name = req.query.vendor_name;
+      const business_name = req.query.business_name;
+      const kyc_progress = req.query.kyc_progress;
+      
+      const q = {};
+      if (status) {
+        q.status = status;
+      }
+      if (vendor_type) {
+        q.vendor_type = vendor_type;
+      }
+      if (vendor_name) {
+        q['ContactDetails.full_name'] = { $regex: vendor_name, $options: 'i' };
+      }
+      if (business_name) {
+        q['Identity.business_name'] = { $regex: business_name, $options: 'i' };
+      }
+      if (kyc_progress !== undefined && kyc_progress !== '') {
+        q.completed_pages = { $size: parseInt(kyc_progress) };
+      }
+      
+      if (date_from || date_to) {
+        q.createdAt = {};
+        if (date_from) {
+          q.createdAt.$gte = new Date(date_from);
+        }
+        if (date_to) {
+          const to = new Date(date_to);
+          to.setHours(23, 59, 59, 999);
+          q.createdAt.$lte = to;
+        }
+      }
+      
+      if (search) {
+        q.$or = [
+          { 'ContactDetails.full_name': { $regex: search, $options: 'i' } },
+          { 'ContactDetails.email': { $regex: search, $options: 'i' } },
+          { 'ContactDetails.mobile': { $regex: search, $options: 'i' } },
+          { 'Identity.business_name': { $regex: search, $options: 'i' } }
+        ];
+      }
+
       const total = await VendorKyc.countDocuments(q);
       const docs = await VendorKyc.find(q)
         .sort({ updatedAt: -1 })
