@@ -67,6 +67,14 @@ router.post(
   catchAsync(kycController.changeStatus.handler)
 );
 
+// Vendor: update vendor_type separately
+router.post(
+  '/vendor-type',
+  auth(),
+  validate(kycController.updateVendorType.validation),
+  catchAsync(kycController.updateVendorType.handler)
+);
+
 // Download KYC PDF
 router.get(
   '/vendor-kyc/:kyc_id/download-pdf',

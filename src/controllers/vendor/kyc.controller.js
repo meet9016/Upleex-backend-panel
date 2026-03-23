@@ -144,10 +144,6 @@ const saveKyc = {
           doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
         }
 
-        if (body.vendor_type) {
-          doc.vendor_type = body.vendor_type;
-        }
-
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
         await doc.save();
@@ -162,7 +158,6 @@ const saveKyc = {
           Documents: documents || {},
           Declaration: declaration || { terms_conditions: false }, // FIX: Include Declaration
           completed_pages: pushPage([]),
-          vendor_type: body.vendor_type || 'both',
           status: 'pending'
         });
       }
@@ -707,6 +702,49 @@ const downloadKycPDF = {
   }
 };
 
+const updateVendorType = {
+  validation: {
+    body: Joi.object().keys({
+      vendor_type: Joi.string().valid('service', 'product', 'both').required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      let vendor_id = '';
+      if (req.user && (req.user.id || req.user._id)) {
+        vendor_id = String(req.user.id || req.user._id);
+      }
+      if (!vendor_id) {
+        return res.status(400).json({ status: 400, message: 'Unauthorized' });
+      }
+
+      const { vendor_type } = req.body;
+
+      const doc = await VendorKyc.findOneAndUpdate(
+        { 'ContactDetails.vendor_id': vendor_id },
+        {
+          $set: { vendor_type },
+          $setOnInsert: {
+            'ContactDetails.vendor_id': vendor_id,
+            status: 'pending',
+            completed_pages: [],
+          }
+        },
+        { new: true, upsert: true }
+      );
+
+      return res.status(200).json({
+        status: 200,
+        message: 'Vendor type updated successfully',
+        data: doc.toJSON(),
+      });
+    } catch (error) {
+      console.error('UpdateVendorType Error:', error);
+      res.status(500).json({ status: 500, message: error.message });
+    }
+  },
+};
+
 module.exports = {
   saveKyc,
   getSingleKyc,
@@ -716,4 +754,5 @@ module.exports = {
   deleteKyc,
   changeStatus,
   downloadKycPDF,
+  updateVendorType,
 };
