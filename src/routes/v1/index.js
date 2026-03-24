@@ -25,6 +25,7 @@ const vendorOrdersRoute = require('./vendorOrders.route');
 const vendorPaymentsRoute = require('./vendorPayments.route');
 const servicesRoute = require('./services.route');
 const serviceCategoriesRoute = require('./serviceCategories.route');
+const walletRoute = require('./wallet.route');
 
 const router = express.Router();
 
@@ -130,6 +131,10 @@ const defaultRoutes = [
   {
     path: '/service-categories',
     route: serviceCategoriesRoute,
+  },
+  {
+    path: '/wallet',
+    route: walletRoute,
   },
 ];
 

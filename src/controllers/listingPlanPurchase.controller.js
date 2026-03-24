@@ -5,6 +5,7 @@ const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
 const { Product } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const walletService = require('../services/wallet.service');
 
 const fallbackPlanOptions = [
   { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },
@@ -58,6 +59,36 @@ const createPurchase = {
         amount = def.amount;
       }
     }
+    
+    // Check wallet balance before deducting
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
+    if (!hasBalance) {
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: `Insufficient wallet balance. Plan costs ₹${amount}. Please add money to your wallet.`
+      });
+    }
+    
+    // Deduct amount from wallet
+    try {
+      await walletService.deductMoneyFromWallet(
+        vendor_id,
+        amount,
+        `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
+        {
+          purpose: 'plan_purchase',
+          plan_type: plan_type,
+          months: months,
+          max_products: max_products,
+        }
+      );
+      console.log(`💰 Deducted ₹${amount} from vendor ${vendor_id} wallet for ${plan_type} plan`);
+    } catch (walletError) {
+      console.error('Wallet deduction failed:', walletError);
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: 'Failed to process wallet payment. Please try again.'
+      });
+    }
+    
     // Ensure we don't exceed max_products limit, but allow all products if max_products is sufficient
     const assignIds = max_products && max_products < product_ids.length 
       ? product_ids.slice(0, max_products) 
@@ -83,11 +114,14 @@ const createPurchase = {
         $set: { 
           status: 'active', 
           expires_at: expire,
-          // approval_status:  'approved' // Ensure products are approved when activated
         } 
       }
     );
-    return res.status(201).json({ status: 201, message: 'Plan purchase created', data: purchase });
+    return res.status(201).json({ 
+      status: 201, 
+      message: `Plan applied successfully. ₹${amount} deducted from wallet.`, 
+      data: purchase 
+    });
   },
 };
 
@@ -270,7 +304,6 @@ const updatePurchase = {
           $set: { 
             status: 'active', 
             expires_at: expire,
-            // approval_status: 'approved' // Ensure products are approved when activated
           } 
         }
       );
