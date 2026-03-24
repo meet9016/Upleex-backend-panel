@@ -9,6 +9,7 @@ const {
   ProductMonth,
   Category,
   SubCategory,
+  Wallet,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const {
@@ -20,8 +21,7 @@ const moment = require('moment');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
-
-
+const walletService = require('../services/wallet.service');
 const generateSKU = (categoryName, businessName, counter) => {
   const categoryCode = categoryName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
     const businessCode = businessName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
@@ -230,34 +230,40 @@ const createProduct = {
 
       data.pricing_type = pricingType;  // normalized value store કરીએ
 
-      // જો paid હોય તો active paid plan ચેક કરો
-      let activePlan = null;
-      // if (pricingType === 'paid') {
-      //   activePlan = await ListingPlanPurchase.findOne({
-      //     vendor_id: data.vendor_id,
-      //     expire_at: { $gt: new Date() },
-      //     status: { $in: ['active', 'completed'] } // તમારા model મુજબ adjust કરો
-      //   });
+      // ───────────────────────────────────────────────
+      //     Wallet deduction for paid listings
+      // ───────────────────────────────────────────────
+      if (pricingType === 'paid') {
+        // Check vendor's wallet balance
+        const hasBalance = await walletService.hasSufficientBalance(data.vendor_id, 10);
+        
+        if (!hasBalance) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: 'Insufficient wallet balance. Minimum ₹10 required for Base (Paid listing). Please add money to your wallet.'
+          });
+        }
 
-      //   if (!activePlan) {
-      //     return res.status(403).json({
-      //       message: 'No active paid listing plan found. Please purchase a plan to create Base (paid) listings.'
-      //     });
-      //   }
-
-      //   // Optional: product count limit check per plan (જો તમારા plan માં max_products હોય)
-      //   const usedCount = await Product.countDocuments({
-      //     _id: { $in: activePlan.product_ids || [] },
-      //     pricing_type: 'paid',
-      //     status: 'active'
-      //   });
-
-      //   if (usedCount >= (activePlan.max_products || 999)) {
-      //     return res.status(403).json({
-      //       message: 'Your paid plan has reached the maximum number of Base listings.'
-      //     });
-      //   }
-      // }
+        // Deduct ₹10 from wallet for paid listing
+        try {
+          await walletService.deductMoneyFromWallet(
+            data.vendor_id,
+            10,
+            `Base (Paid listing) fee for product: ${data.product_name}`,
+            {
+              purpose: 'paid_listing_fee',
+              product_name: data.product_name,
+              category_id: data.category_id,
+              sub_category_id: data.sub_category_id,
+            }
+          );
+          console.log(`💰 Deducted ₹10 from vendor ${data.vendor_id} wallet for paid listing`);
+        } catch (walletError) {
+          console.error('Wallet deduction failed:', walletError);
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: 'Failed to process wallet payment. Please try again.'
+          });
+        }
+      }
 
       // ───────────────────────────────────────────────
       //     Free limit check → ફક્ત free products માટે
@@ -379,7 +385,10 @@ const createProduct = {
         }
       }
 
-      if (data.product_listing_type_id) {
+      // Convert empty string to null for ObjectId field
+      if (!data.product_listing_type_id || data.product_listing_type_id === '') {
+        data.product_listing_type_id = null;
+      } else {
         const listingDoc = await ProductListingType.findById(
           data.product_listing_type_id
         );
@@ -454,17 +463,11 @@ const createProduct = {
         await product.save();
       }
 
-      // Optional: paid હોય તો plan માં product_id ઉમેરો (tracking માટે)
-      if (pricingType === 'paid' && activePlan) {
-        await ListingPlanPurchase.updateOne(
-          { _id: activePlan._id },
-          { $addToSet: { product_ids: product._id } }
-        );
-      }
-
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
-        : 'Product created successfully';
+        : pricingType === 'paid' 
+          ? 'Base (Paid listing) created successfully. ₹10 deducted from wallet.'
+          : 'Product created successfully';
       return res.status(200).json({
         status: 200,
         message: msg,
@@ -1021,7 +1024,10 @@ const updateProduct = {
         }
       }
 
-      if (body.product_listing_type_id) {
+      // Convert empty string to null for ObjectId field
+      if (!body.product_listing_type_id || body.product_listing_type_id === '') {
+        body.product_listing_type_id = null;
+      } else {
         const listingDoc = await ProductListingType.findById(
           body.product_listing_type_id
         );
@@ -1592,6 +1598,36 @@ const purchaseListingPlan = {
       max_products = def.max_products;
       amount = def.amount;
     }
+    
+    // Check wallet balance before deducting
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
+    if (!hasBalance) {
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: `Insufficient wallet balance. Plan costs ₹${amount}. Please add money to your wallet.`
+      });
+    }
+    
+    // Deduct amount from wallet
+    try {
+      await walletService.deductMoneyFromWallet(
+        vendor_id,
+        amount,
+        `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
+        {
+          purpose: 'plan_purchase',
+          plan_type: plan_type,
+          months: months,
+          max_products: max_products,
+        }
+      );
+      console.log(`💰 Deducted ₹${amount} from vendor ${vendor_id} wallet for ${plan_type} plan`);
+    } catch (walletError) {
+      console.error('Wallet deduction failed:', walletError);
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: 'Failed to process wallet payment. Please try again.'
+      });
+    }
+    
     const assignIds = product_ids.slice(0, max_products || product_ids.length);
     const start = new Date();
     const expire = new Date(start);
@@ -1610,7 +1646,11 @@ const purchaseListingPlan = {
       { _id: { $in: assignIds }, vendor_id },
       { $set: { status: 'active', expires_at: expire } }
     );
-    return res.status(200).json({ status: 200, message: 'Plan applied to selected products', data: purchase });
+    return res.status(200).json({ 
+      status: 200, 
+      message: `Plan applied successfully. ₹${amount} deducted from wallet.`, 
+      data: purchase 
+    });
   },
 };
 

@@ -35,15 +35,18 @@ const productSchema = new mongoose.Schema(
       type: String,
     },
     category_id: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
       required: true,
     },
     sub_category_id: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubCategory',
       required: true,
     },
     product_type_id: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProductType',
       required: true,
     },
     product_listing_type_id: {
@@ -159,6 +162,23 @@ const productSchema = new mongoose.Schema(
 );
 
 productSchema.plugin(toJSON);
+
+// Pre-save hook to convert empty strings to null for ObjectId fields
+productSchema.pre('save', function(next) {
+  if (this.product_listing_type_id === '') {
+    this.product_listing_type_id = null;
+  }
+  if (this.category_id === '') {
+    this.category_id = null;
+  }
+  if (this.sub_category_id === '') {
+    this.sub_category_id = null;
+  }
+  if (this.product_type_id === '') {
+    this.product_type_id = null;
+  }
+  next();
+});
 
 const Product = mongoose.model('Product', productSchema);
 

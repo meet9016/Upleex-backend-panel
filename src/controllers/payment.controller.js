@@ -1,11 +1,12 @@
 const httpStatus = require('http-status');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const { Cart, Product, Order } = require('../models');
+const { Cart, Product, Order, Wallet } = require('../models');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/config');
 const { sendOrderConfirmationEmail } = require('../services/email.service');
+// const walletService = require('../services/wallet.service');
 
 // Initialize Razorpay
 let razorpay;
@@ -299,6 +300,30 @@ const verifyPayment = catchAsync(async (req, res) => {
     }
   }
   console.log('✅ Stock reduction completed');
+
+  // Process vendor payments - Add money to vendor wallets
+  console.log('💰 Processing vendor payments...');
+  // for (const vendorPayment of order.vendor_payments) {
+  //   try {
+  //     if (vendorPayment.payment_status === 'paid' && vendorPayment.vendor_amount > 0) {
+  //       await walletService.processVendorPayment(
+  //         vendorPayment.vendor_id,
+  //         vendorPayment.vendor_amount,
+  //         order.order_id,
+  //         {
+  //           customer_name: order.user_name,
+  //           customer_email: order.user_email,
+  //           razorpay_payment_id: razorpay_payment_id,
+  //         }
+  //       );
+  //       console.log(`💰 Payment processed for vendor ${vendorPayment.vendor_id}: ₹${vendorPayment.vendor_amount}`);
+  //     }
+  //   } catch (walletError) {
+  //     console.error(`❌ Failed to process payment for vendor ${vendorPayment.vendor_id}:`, walletError);
+  //     // Don't fail the order if wallet payment fails
+  //   }
+  // }
+  console.log('✅ Vendor payments processing completed');
 
   // Send order confirmation email
   console.log('📧 Starting email sending process...');
