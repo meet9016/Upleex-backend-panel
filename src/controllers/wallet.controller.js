@@ -33,10 +33,24 @@ const getWalletBalance = catchAsync(async (req, res) => {
 
   const vendorId = req.user.id || req.user._id;
   
-  // Find or create wallet for vendor
+  // Find wallet - DO NOT auto-create
   let wallet = await Wallet.findOne({ vendor_id: vendorId });
+  
+  // If wallet doesn't exist, return zero balance instead of creating
   if (!wallet) {
-    wallet = await Wallet.createWalletForVendor(vendorId);
+    return res.status(httpStatus.OK).send({
+      status: 200,
+      success: true,
+      message: 'Wallet balance fetched successfully',
+      data: {
+        balance: 0,
+        currency: 'INR',
+        total_credited: 0,
+        total_debited: 0,
+        transaction_count: 0,
+        is_active: true,
+      },
+    });
   }
 
   res.status(httpStatus.OK).send({
@@ -68,14 +82,15 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Minimum amount is ₹50');
   }
 
-  // if (amount > 50000) {
-  //   throw new ApiError(httpStatus.BAD_REQUEST, 'Maximum amount is ₹50,000');
-  // }
-
-  // Find or create wallet for vendor
+  // Find wallet - only create if it doesn't exist
   let wallet = await Wallet.findOne({ vendor_id: vendorId });
   if (!wallet) {
-    wallet = await Wallet.createWalletForVendor(vendorId);
+    wallet = await Wallet.create({
+      vendor_id: vendorId,
+      balance: 0,
+      currency: 'INR',
+      transactions: [],
+    });
   }
 
   // Generate transaction ID
@@ -378,10 +393,25 @@ const getWalletSummary = catchAsync(async (req, res) => {
 
   const vendorId = req.user.id || req.user._id;
   
-  // Find or create wallet for vendor
+  // Find wallet - DO NOT auto-create
   let wallet = await Wallet.findOne({ vendor_id: vendorId });
+  
   if (!wallet) {
-    wallet = await Wallet.createWalletForVendor(vendorId);
+    return res.status(httpStatus.OK).send({
+      status: 200,
+      success: true,
+      message: 'Wallet summary fetched successfully',
+      data: {
+        balance: 0,
+        currency: 'INR',
+        total_credited: 0,
+        total_debited: 0,
+        this_month_credits: 0,
+        this_month_debits: 0,
+        recent_transactions: [],
+        is_active: true,
+      },
+    });
   }
 
   // Get recent transactions (last 5)
@@ -429,6 +459,155 @@ const getWalletSummary = catchAsync(async (req, res) => {
   });
 });
 
+// Admin: Get all vendor wallets
+const getAllVendorWallets = catchAsync(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const search = req.query.search || '';
+
+  const skip = (page - 1) * limit;
+
+  let searchQuery = {};
+  if (search) {
+    searchQuery = {
+      $or: [
+        { 'vendor_id.full_name': { $regex: search, $options: 'i' } },
+        { 'vendor_id.business_name': { $regex: search, $options: 'i' } },
+        { 'vendor_id.email': { $regex: search, $options: 'i' } },
+      ]
+    };
+  }
+
+  const total = await Wallet.countDocuments(searchQuery);
+
+  const wallets = await Wallet.find(searchQuery)
+    .populate('vendor_id', 'full_name business_name email')
+    .skip(skip)
+    .limit(limit)
+    .sort({ createdAt: -1 });
+
+  const formattedWallets = wallets.map(wallet => ({
+    id: wallet._id,
+    vendor_id: wallet.vendor_id?._id,
+    vendor_name: wallet.vendor_id?.full_name || 'N/A',
+    vendor_email: wallet.vendor_id?.email || 'N/A',
+    balance: wallet.balance,
+    currency: wallet.currency,
+    total_credited: wallet.total_credited,
+    total_debited: wallet.total_debited,
+    transaction_count: wallet.transaction_count,
+    is_active: wallet.is_active,
+    created_at: wallet.createdAt,
+    updated_at: wallet.updatedAt,
+  }));
+
+  res.status(httpStatus.OK).send({
+    status: 200,
+    success: true,
+    message: 'Vendor wallets fetched successfully',
+    data: {
+      wallets: formattedWallets,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    },
+  });
+});
+
+// Admin: Get vendor wallet details
+const getVendorWalletDetails = catchAsync(async (req, res) => {
+  const { vendorId } = req.params;
+
+  const wallet = await Wallet.findOne({ vendor_id: vendorId })
+    .populate('vendor_id', 'full_name business_name email');
+  if (!wallet) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found for this vendor');
+  }
+
+  res.status(httpStatus.OK).send({
+    status: 200,
+    success: true,
+    message: 'Vendor wallet details fetched successfully',
+    data: {
+      id: wallet._id,
+      vendor_id: wallet.vendor_id?._id,
+      vendor_name:  wallet.vendor_id?.full_name || 'N/A',
+      vendor_email: wallet.vendor_id?.email || 'N/A',
+      balance: wallet.balance,
+      currency: wallet.currency,
+      total_credited: wallet.total_credited,
+      total_debited: wallet.total_debited,
+      transaction_count: wallet.transaction_count,
+      is_active: wallet.is_active,
+      created_at: wallet.createdAt,
+      updated_at: wallet.updatedAt,
+    },
+  });
+});
+
+// Admin: Get vendor wallet transactions
+const getVendorWalletTransactions = catchAsync(async (req, res) => {
+  const { vendorId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const type = req.query.type;
+  const status = req.query.status;
+
+  const wallet = await Wallet.findOne({ vendor_id: vendorId })
+    .populate('vendor_id', 'full_name business_name email');
+  if (!wallet) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found for this vendor');
+  }
+
+  let transactions = [...wallet.transactions];
+
+  if (type) {
+    transactions = transactions.filter(t => t.type === type);
+  }
+
+  if (status) {
+    transactions = transactions.filter(t => t.status === status);
+  }
+
+  transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const total = transactions.length;
+  const skip = (page - 1) * limit;
+  const paginatedTransactions = transactions.slice(skip, skip + limit);
+
+  const formattedTransactions = paginatedTransactions.map(transaction => ({
+    id: transaction._id,
+    transaction_id: transaction.transaction_id,
+    type: transaction.type,
+    amount: transaction.amount,
+    description: transaction.description,
+    status: transaction.status,
+    date: transaction.createdAt,
+    razorpay_payment_id: transaction.razorpay_payment_id || null,
+    metadata: transaction.metadata || {},
+  }));
+
+  res.status(httpStatus.OK).send({
+    status: 200,
+    success: true,
+    message: 'Vendor wallet transactions fetched successfully',
+    data: {
+      vendor_name: wallet.vendor_id?.full_name || 'N/A',
+      vendor_email: wallet.vendor_id?.email || 'N/A',
+      transactions: formattedTransactions,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    },
+  });
+});
+
 module.exports = {
   getWalletBalance,
   createAddMoneyOrder,
@@ -436,4 +615,7 @@ module.exports = {
   getWalletTransactions,
   deductMoney,
   getWalletSummary,
+  getAllVendorWallets,
+  getVendorWalletDetails,
+  getVendorWalletTransactions,
 };

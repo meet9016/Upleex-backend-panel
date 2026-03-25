@@ -69,8 +69,9 @@ const createPurchase = {
     }
     
     // Deduct amount from wallet
+    let deductionResult;
     try {
-      await walletService.deductMoneyFromWallet(
+      deductionResult = await walletService.deductMoneyFromWallet(
         vendor_id,
         amount,
         `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
@@ -117,10 +118,17 @@ const createPurchase = {
         } 
       }
     );
+    
+    // Get updated wallet balance
+    const updatedBalance = await walletService.getWalletBalance(vendor_id);
+    
     return res.status(201).json({ 
       status: 201, 
       message: `Plan applied successfully. ₹${amount} deducted from wallet.`, 
-      data: purchase 
+      data: {
+        ...purchase.toObject(),
+        wallet_balance: updatedBalance,
+      }
     });
   },
 };
