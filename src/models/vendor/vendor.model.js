@@ -41,6 +41,11 @@ const vendorSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  vendor_type: {
+    type: String,
+    enum: ['service', 'vendor', 'both'],
+    default: 'both',
+  },
 }, {
   timestamps: true,
 });

@@ -1,9 +1,9 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
-const { Product } = require('../models');
+const { Service } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 
-// Get all vendors with pending product count
+// Get all vendors with pending service count
 const getAllVendors = {
   handler: async (req, res) => {
     try {
@@ -12,7 +12,7 @@ const getAllVendors = {
       const vendorsWithCount = await Promise.all(
         vendors.map(async (vendor) => {
           const vendorId = vendor.ContactDetails?.vendor_id || '';
-          const pendingCount = await Product.countDocuments({
+          const pendingCount = await Service.countDocuments({
             vendor_id: vendorId,
             approval_status: 'pending'
           });
@@ -39,19 +39,19 @@ const getAllVendors = {
   }
 };
 
-// Get products by vendor ID
-const getVendorProducts = {
+// Get services by vendor ID
+const getVendorServices = {
   handler: async (req, res) => {
     try {
       const { vendorId } = req.params;
-      const products = await Product.find({ vendor_id: vendorId }).sort({ createdAt: -1 });
-      const pending = products.filter(p => p.approval_status === 'pending').length;
-      const approved = products.filter(p => p.approval_status === 'approved').length;
-      const rejected = products.filter(p => p.approval_status === 'rejected').length;
+      const services = await Service.find({ vendor_id: vendorId }).sort({ createdAt: -1 });
+      const pending = services.filter(s => s.approval_status === 'pending').length;
+      const approved = services.filter(s => s.approval_status === 'approved').length;
+      const rejected = services.filter(s => s.approval_status === 'rejected').length;
 
       res.status(200).json({
         status: 200,
-        data: { products, counts: { pending, approved, rejected } }
+        data: { services, counts: { pending, approved, rejected } }
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -59,34 +59,34 @@ const getVendorProducts = {
   }
 };
 
-// Approve single product
-const approveProduct = {
+// Approve single service
+const approveService = {
   handler: async (req, res) => {
     try {
-      const { productId } = req.params;
+      const { serviceId } = req.params;
       const { approval_status } = req.body;
       
-      const product = await Product.findByIdAndUpdate(
-        productId,
+      const service = await Service.findByIdAndUpdate(
+        serviceId,
         { approval_status: approval_status || 'approved' },
         { new: true }
       );
 
-      if (!product) {
-        return res.status(404).json({ message: 'Product not found' });
+      if (!service) {
+        return res.status(404).json({ message: 'Service not found' });
       }
 
-      const vendorId = product.vendor_id;
-      const pending = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'pending' });
-      const approved = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
-      const rejected = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
+      const vendorId = service.vendor_id;
+      const pending = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'pending' });
+      const approved = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
+      const rejected = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
 
       res.status(200).json({
         status: 200,
-        message: 'Product status updated',
+        message: 'Service status updated',
         vendor_id: vendorId,
         counts: { pending, approved, rejected },
-        data: product
+        data: service
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -94,35 +94,35 @@ const approveProduct = {
   }
 };
 
-// Bulk approve products
-const bulkApproveProducts = {
+// Bulk approve services
+const bulkApproveServices = {
   validation: {
     body: Joi.object().keys({
-      product_ids: Joi.array().items(Joi.string().required()).min(1).required()
+      service_ids: Joi.array().items(Joi.string().required()).min(1).required()
     })
   },
   handler: async (req, res) => {
     try {
-      const { product_ids } = req.body;
+      const { service_ids } = req.body;
 
-      await Product.updateMany(
-        { _id: { $in: product_ids } },
+      await Service.updateMany(
+        { _id: { $in: service_ids } },
         { $set: { approval_status: 'approved' } }
       );
 
-      const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
+      const vendors = await Service.find({ _id: { $in: service_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
       const countsByVendor = {};
       for (const vid of vendorIds) {
-        const pending = await Product.countDocuments({ vendor_id: vid, approval_status: 'pending' });
-        const approved = await Product.countDocuments({ vendor_id: vid, approval_status: 'approved' });
-        const rejected = await Product.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
+        const pending = await Service.countDocuments({ vendor_id: vid, approval_status: 'pending' });
+        const approved = await Service.countDocuments({ vendor_id: vid, approval_status: 'approved' });
+        const rejected = await Service.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
         countsByVendor[vid] = { pending, approved, rejected };
       }
 
       res.status(200).json({
         status: 200,
-        message: `${product_ids.length} products approved successfully`,
+        message: `${service_ids.length} services approved successfully`,
         countsByVendor
       });
     } catch (error) {
@@ -131,37 +131,35 @@ const bulkApproveProducts = {
   }
 };
 
-
-
-// Bulk reject products
-const bulkRejectProducts = {
+// Bulk reject services
+const bulkRejectServices = {
   validation: {
     body: Joi.object().keys({
-      product_ids: Joi.array().items(Joi.string().required()).min(1).required()
+      service_ids: Joi.array().items(Joi.string().required()).min(1).required()
     })
   },
   handler: async (req, res) => {
     try {
-      const { product_ids } = req.body;
+      const { service_ids } = req.body;
 
-      await Product.updateMany(
-        { _id: { $in: product_ids } },
+      await Service.updateMany(
+        { _id: { $in: service_ids } },
         { $set: { approval_status: 'rejected' } }
       );
 
-      const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
+      const vendors = await Service.find({ _id: { $in: service_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
       const countsByVendor = {};
       for (const vid of vendorIds) {
-        const pending = await Product.countDocuments({ vendor_id: vid, approval_status: 'pending' });
-        const approved = await Product.countDocuments({ vendor_id: vid, approval_status: 'approved' });
-        const rejected = await Product.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
+        const pending = await Service.countDocuments({ vendor_id: vid, approval_status: 'pending' });
+        const approved = await Service.countDocuments({ vendor_id: vid, approval_status: 'approved' });
+        const rejected = await Service.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
         countsByVendor[vid] = { pending, approved, rejected };
       }
 
       res.status(200).json({
         status: 200,
-        message: `${product_ids.length} products rejected successfully`,
+        message: `${service_ids.length} services rejected successfully`,
         countsByVendor
       });
     } catch (error) {
@@ -172,8 +170,8 @@ const bulkRejectProducts = {
 
 module.exports = {
   getAllVendors,
-  getVendorProducts,
-  approveProduct,
-  bulkApproveProducts,
-  bulkRejectProducts
+  getVendorServices,
+  approveService,
+  bulkApproveServices,
+  bulkRejectServices
 };

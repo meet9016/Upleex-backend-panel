@@ -311,6 +311,15 @@ const webLoginRegister = {
           message: 'Name and email are required for new users'
         });
       }
+ const existingEmailUser = await User.findOne({ email: email.toLowerCase().trim() });
+      
+      if (existingEmailUser) {
+        return res.status(400).send({
+          status: 400,
+          success: false,
+          message: 'This email is already registered with another account.'
+        });
+      }
 
       // Handle name splitting for first_name and last_name
       const nameParts = name.trim().split(' ');

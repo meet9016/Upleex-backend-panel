@@ -4,6 +4,7 @@ const VendorKyc = require('../../models/vendor/vendorKyc.model');
 const Vendor = require('../../models/vendor/vendor.model');
 const { AccountType } = require('../../models');
 const { uploadToExternalService } = require('../../utils/fileUpload');
+const { createKycNotification, sendKycIncompleteEmail } = require('../../services/kycEmail.service');
 
 const saveKyc = {
   handler: async (req, res) => {
@@ -24,6 +25,8 @@ const saveKyc = {
           'gst_certificate_image',
           'vendor_image',
           'business_logo_image',
+          'qr_code_image',
+          'cheque_image',
         ];
 
         // Documents might come as a stringified JSON if it's multipart/form-data
@@ -58,6 +61,17 @@ const saveKyc = {
       let bank = extract('Bank');
       const documents = extract('Documents');
 
+      // FIX: Extract Declaration data
+      let declaration = null;
+      if (body.terms_conditions !== undefined) {
+        // Direct form data submission from declaration step
+        declaration = {
+          terms_conditions: body.terms_conditions === 'true' || body.terms_conditions === true
+        };
+      } else {
+        declaration = extract('Declaration');
+      }
+
       if (bank && bank.account_type) {
         try {
           const at = await AccountType.findById(bank.account_type);
@@ -77,6 +91,31 @@ const saveKyc = {
         ],
       };
 
+      if (!vendor_id && !searchEmail && !searchMobile) {
+        // If we don't have enough to find an existing record, let's at least check basics
+      }
+
+      // --- UNIQUENESS CHECKS FOR SENSITIVE FIELDS ---
+      const checkUniqueness = async (field, value, label) => {
+        if (!value) return;
+        const q = { [field]: value };
+        const existing = await VendorKyc.findOne(q);
+        if (existing) {
+          // If existing record belongs to a different vendor, it's a conflict
+          const existingVendorId = existing.ContactDetails?.vendor_id || existing.vendor_id;
+          if (vendor_id && String(existingVendorId) !== String(vendor_id)) {
+            throw new Error(`${label} is already registered by another vendor`);
+          }
+        }
+      };
+
+      if (searchEmail) await checkUniqueness('ContactDetails.email', searchEmail, 'Email');
+      if (searchMobile) await checkUniqueness('ContactDetails.mobile', searchMobile, 'Phone Number');
+      if (identity?.pancard_number) await checkUniqueness('Identity.pancard_number', identity.pancard_number, 'PAN Number');
+      if (identity?.aadharcard_number) await checkUniqueness('Identity.aadharcard_number', identity.aadharcard_number, 'Aadhaar Number');
+      if (identity?.gst_number) await checkUniqueness('Identity.gst_number', identity.gst_number, 'GST Number');
+      if (bank?.account_number) await checkUniqueness('Bank.account_number', bank.account_number, 'Account Number');
+
       let doc = await VendorKyc.findOne(filter);
 
       const pageStr = String(body.page || '');
@@ -84,8 +123,7 @@ const saveKyc = {
         if (pageStr && pageStr !== 'undefined' && !currentPages.includes(pageStr)) {
           currentPages.push(pageStr);
         }
-        // Also check if step has page attribute encoded within
-        [contact, identity, bank, documents].forEach(item => {
+        [contact, identity, bank, documents, declaration].forEach(item => {
           if (item && item.page && !currentPages.includes(String(item.page))) {
             currentPages.push(String(item.page));
           }
@@ -103,21 +141,82 @@ const saveKyc = {
         if (bank) doc.Bank = { ...doc.Bank.toObject(), ...bank };
         if (documents) doc.Documents = { ...doc.Documents.toObject(), ...documents };
 
+        if (declaration) {
+          doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
+        }
+
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
         await doc.save();
+
+        // Trigger KYC incomplete email notification
+        const completedSteps = doc.completed_pages?.length || 0;
+        const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+        const vendorEmail = doc.ContactDetails?.email;
+
+        if (vendorEmail && completedSteps < 5) {
+          try {
+            // Send instant notification
+            await sendKycIncompleteEmail(vendorEmail, vendorName, completedSteps, 5, 'instant');
+
+            // Create notification record for future reminders
+            await createKycNotification(
+              vendor_id,
+              vendorEmail,
+              doc._id,
+              'kyc_incomplete',
+              'instant',
+              completedSteps
+            );
+          } catch (emailError) {
+            console.error('Error sending KYC notification email:', emailError);
+          }
+        }
       } else {
         const initialContact = contact || {};
         if (vendor_id) initialContact.vendor_id = vendor_id;
+
+        // Fetch vendor_type from Vendor record for consistency
+        let vendor_type = 'both';
+        if (vendor_id) {
+          const v = await Vendor.findById(vendor_id);
+          if (v && v.vendor_type) vendor_type = v.vendor_type;
+        }
 
         doc = await VendorKyc.create({
           ContactDetails: initialContact,
           Identity: identity || {},
           Bank: bank || {},
           Documents: documents || {},
+          Declaration: declaration || { terms_conditions: false }, // FIX: Include Declaration
           completed_pages: pushPage([]),
-          status: 'pending'
+          status: 'pending',
+          vendor_type
         });
+
+        // Trigger KYC incomplete email notification for new KYC
+        const completedSteps = doc.completed_pages?.length || 0;
+        const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+        const vendorEmail = doc.ContactDetails?.email;
+
+        if (vendorEmail && completedSteps < 5) {
+          try {
+            // Send instant notification
+            await sendKycIncompleteEmail(vendorEmail, vendorName, completedSteps, 5, 'instant');
+
+            // Create notification record for future reminders
+            await createKycNotification(
+              vendor_id,
+              vendorEmail,
+              doc._id,
+              'kyc_incomplete',
+              'instant',
+              completedSteps
+            );
+          } catch (emailError) {
+            console.error('Error sending KYC notification email:', emailError);
+          }
+        }
       }
 
       return res.status(200).json({
@@ -153,6 +252,12 @@ const getSingleKyc = {
       const doc = await VendorKyc.findOne(filter).sort({ updatedAt: -1 });
 
       let dataObj = doc ? doc.toJSON() : {};
+
+      // FIX: Ensure terms_conditions is at root level for frontend compatibility
+      if (dataObj.Declaration) {
+        dataObj.terms_conditions = dataObj.Declaration.terms_conditions || false;
+      }
+
       if (dataObj?.Bank?.account_type && !dataObj?.Bank?.account_type_name) {
         try {
           const at = await AccountType.findById(dataObj.Bank.account_type);
@@ -174,10 +279,55 @@ const listKyc = {
   handler: async (req, res) => {
     try {
       const page = parseInt(req.query.page) || 1;
-      const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+      const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
       const status = req.query.status;
-      const q = status ? { status } : {};
+      const search = req.query.search;
+      const vendor_type = req.query.vendor_type;
+      const date_from = req.query.date_from;
+      const date_to = req.query.date_to;
+      const vendor_name = req.query.vendor_name;
+      const business_name = req.query.business_name;
+      const kyc_progress = req.query.kyc_progress;
+
+      const q = {};
+      if (status) {
+        q.status = status;
+      }
+      if (vendor_type) {
+        q.vendor_type = vendor_type;
+      }
+      if (vendor_name) {
+        q['ContactDetails.full_name'] = { $regex: vendor_name, $options: 'i' };
+      }
+      if (business_name) {
+        q['Identity.business_name'] = { $regex: business_name, $options: 'i' };
+      }
+      if (kyc_progress !== undefined && kyc_progress !== '') {
+        q.completed_pages = { $size: parseInt(kyc_progress) };
+      }
+
+      if (date_from || date_to) {
+        q.createdAt = {};
+        if (date_from) {
+          q.createdAt.$gte = new Date(date_from);
+        }
+        if (date_to) {
+          const to = new Date(date_to);
+          to.setHours(23, 59, 59, 999);
+          q.createdAt.$lte = to;
+        }
+      }
+
+      if (search) {
+        q.$or = [
+          { 'ContactDetails.full_name': { $regex: search, $options: 'i' } },
+          { 'ContactDetails.email': { $regex: search, $options: 'i' } },
+          { 'ContactDetails.mobile': { $regex: search, $options: 'i' } },
+          { 'Identity.business_name': { $regex: search, $options: 'i' } }
+        ];
+      }
+
       const total = await VendorKyc.countDocuments(q);
       const docs = await VendorKyc.find(q)
         .sort({ updatedAt: -1 })
@@ -270,11 +420,12 @@ const changeStatus = {
       kyc_id: Joi.string().allow(''),
       vendor_id: Joi.string().allow(''),
       status: Joi.string().valid('pending', 'approved', 'rejected').required(),
+      rejection_reason: Joi.string().allow('').optional(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { kyc_id, vendor_id, status } = req.body;
+      const { kyc_id, vendor_id, status, rejection_reason } = req.body;
       const filter = kyc_id ? { _id: kyc_id } : vendor_id ? { 'ContactDetails.vendor_id': vendor_id } : null;
       if (!filter) {
         return res.status(400).json({ status: 400, message: 'kyc_id or vendor_id is required' });
@@ -283,6 +434,8 @@ const changeStatus = {
       if (!doc) {
         return res.status(404).json({ status: 404, message: 'KYC not found' });
       }
+
+      const previousStatus = doc.status;
       doc.status = status;
       const v_id = doc.ContactDetails?.vendor_id || doc.vendor_id;
       if (status === 'approved') {
@@ -296,7 +449,29 @@ const changeStatus = {
           await Vendor.findByIdAndUpdate(v_id, { isVerified: false });
         }
       }
+
       await doc.save();
+
+      // Send email notifications for status changes
+      const vendorEmail = doc.ContactDetails?.email;
+      const vendorName = doc.ContactDetails?.full_name || 'Vendor';
+
+      if (vendorEmail && previousStatus !== status) {
+        try {
+          const { sendKycApprovalEmail, sendKycRejectionEmail, createKycNotification } = require('../../services/kycEmail.service');
+
+          if (status === 'approved') {
+            await sendKycApprovalEmail(vendorEmail, vendorName);
+            await createKycNotification(v_id, vendorEmail, doc._id, 'admin_approval');
+          } else if (status === 'rejected') {
+            await sendKycRejectionEmail(vendorEmail, vendorName, rejection_reason);
+            await createKycNotification(v_id, vendorEmail, doc._id, 'admin_rejection');
+          }
+        } catch (emailError) {
+          console.error('Error sending status change email:', emailError);
+        }
+      }
+
       return res.status(200).json({ status: 200, message: 'Status updated', data: doc.toJSON() });
     } catch (error) {
       console.error("Change Status Error:", error);
@@ -492,7 +667,9 @@ const downloadKycPDF = {
         { key: "pancard_front_image", label: "PAN Card" },
         { key: "aadharcard_front_image", label: "Aadhaar Front" },
         { key: "aadharcard_back_image", label: "Aadhaar Back" },
-        { key: "gst_certificate_image", label: "GST Certificate" }
+        { key: "gst_certificate_image", label: "GST Certificate" },
+        { key: "qr_code_image", label: "QR Code" },
+        { key: "cheque_image", label: "Cheque" }
       ];
 
       let imageX = 55;
@@ -607,6 +784,46 @@ const downloadKycPDF = {
   }
 };
 
+const updateVendorType = {
+  validation: {
+    body: Joi.object().keys({
+      vendor_type: Joi.string().valid('service', 'vendor', 'both').required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      let vendor_id = '';
+      if (req.user && (req.user.id || req.user._id)) {
+        vendor_id = String(req.user.id || req.user._id);
+      }
+      if (!vendor_id) {
+        return res.status(400).json({ status: 400, message: 'Unauthorized' });
+      }
+
+      const { vendor_type } = req.body;
+
+      // 1. Update Vendor record (Source of truth)
+      await Vendor.findByIdAndUpdate(vendor_id, { vendor_type });
+
+      // 2. Update VendorKyc record ONLY if it exists
+      const doc = await VendorKyc.findOneAndUpdate(
+        { 'ContactDetails.vendor_id': vendor_id },
+        { $set: { vendor_type } },
+        { new: true }
+      );
+
+      return res.status(200).json({
+        status: 200,
+        message: 'Vendor type updated successfully',
+        data: { vendor_type },
+      });
+    } catch (error) {
+      console.error('UpdateVendorType Error:', error);
+      res.status(500).json({ status: 500, message: error.message });
+    }
+  },
+};
+
 module.exports = {
   saveKyc,
   getSingleKyc,
@@ -616,4 +833,5 @@ module.exports = {
   deleteKyc,
   changeStatus,
   downloadKycPDF,
+  updateVendorType,
 };

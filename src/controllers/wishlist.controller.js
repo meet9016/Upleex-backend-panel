@@ -27,7 +27,6 @@ const removeFromWishlist = async (req, res) => {
   const { product_id } = req.body;
   const user_id = req.user._id;
 
-  // product_id નથી આવ્યું તો error
   if (!product_id) {
     return res.status(400).json({
       success: false,
@@ -35,7 +34,6 @@ const removeFromWishlist = async (req, res) => {
     });
   }
 
-  // બંનેને ObjectIdમાં convert કરી નાખીએ (safe way)
   let productObjectId;
   try {
     productObjectId = new mongoose.Types.ObjectId(product_id);
@@ -47,15 +45,11 @@ const removeFromWishlist = async (req, res) => {
   }
 
   const deletedItem = await Wishlist.findOneAndDelete({
-    user_id: user_id,                    // એ ObjectId જ છે
+    user_id: user_id,                
     product_id: productObjectId
   });
 
   if (!deletedItem) {
-    // ડીબગ માટે જોઈ શકો (productionમાં રિમૂવ કરી શકો)
-    // const all = await Wishlist.find({ user_id });
-    // console.log("User's wishlist:", all);
-
     return res.status(httpStatus.NOT_FOUND).json({
       success: false,
       message: "Product not found in your wishlist"
@@ -65,7 +59,6 @@ const removeFromWishlist = async (req, res) => {
   return res.status(httpStatus.OK).json({
     success: true,
     message: "Product removed from wishlist",
-    // optionally: data: deletedItem
   });
 };
 

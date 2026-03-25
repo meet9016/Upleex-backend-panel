@@ -20,6 +20,12 @@ const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
 const listingPlanRoute = require('./listingPlan.route');
 const priorityPlanRoute = require('./priorityPlan.route');
 const exportRoute = require('./export.route');
+const paymentRoute = require('./payment.route');
+const vendorOrdersRoute = require('./vendorOrders.route');
+const vendorPaymentsRoute = require('./vendorPayments.route');
+const servicesRoute = require('./services.route');
+const serviceCategoriesRoute = require('./serviceCategories.route');
+const walletRoute = require('./wallet.route');
 
 const router = express.Router();
 
@@ -105,6 +111,30 @@ const defaultRoutes = [
   {
     path: '/export',
     route: exportRoute,
+  },
+  {
+    path: '/payment',
+    route: paymentRoute,
+  },
+  {
+    path: '/vendor/orders',
+    route: vendorOrdersRoute,
+  },
+  {
+    path: '/vendor/payments',
+    route: vendorPaymentsRoute,
+  },
+  {
+    path: '/services',
+    route: servicesRoute,
+  },
+  {
+    path: '/service-categories',
+    route: serviceCategoriesRoute,
+  },
+  {
+    path: '/wallet',
+    route: walletRoute,
   },
 ];
 

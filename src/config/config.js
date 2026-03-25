@@ -24,7 +24,9 @@ const envVarsSchema = Joi.object()
     SMTP_PASSWORD: Joi.string().description('password for email server'),
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     FILE_UPLOAD_PATH: Joi.string().description('the path where the files will be uploaded'),
-    BACKEND_URL : Joi.string().description('the backend url')
+    BACKEND_URL : Joi.string().description('the backend url'),
+    RAZORPAY_KEY_ID: Joi.string().description('Razorpay Key ID'),
+    RAZORPAY_KEY_SECRET: Joi.string().description('Razorpay Key Secret')
   })
   .unknown();
 
@@ -40,8 +42,7 @@ module.exports = {
   mongoose: {
     url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
     options: {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      // Removed deprecated options
     },
   },
   fileUploadPath: envVars.FILE_UPLOAD_PATH,
@@ -63,5 +64,9 @@ module.exports = {
       },
     },
     from: envVars.EMAIL_FROM,
+  },
+  razorpay: {
+    keyId: envVars.RAZORPAY_KEY_ID,
+    keySecret: envVars.RAZORPAY_KEY_SECRET,
   },
 };

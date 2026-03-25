@@ -20,6 +20,8 @@ router.post(
     { name: 'gst_certificate_image', maxCount: 1 },
     { name: 'vendor_image', maxCount: 1 },
     { name: 'business_logo_image', maxCount: 1 },
+    { name: 'qr_code_image', maxCount: 1 },
+    { name: 'cheque_image', maxCount: 1 },
   ]),
   validate(kycController.saveKyc.validation),
   catchAsync(kycController.saveKyc.handler)
@@ -63,6 +65,14 @@ router.post(
   '/change-status',
   validate(kycController.changeStatus.validation),
   catchAsync(kycController.changeStatus.handler)
+);
+
+// Vendor: update vendor_type separately
+router.post(
+  '/vendor-type',
+  auth(),
+  validate(kycController.updateVendorType.validation),
+  catchAsync(kycController.updateVendorType.handler)
 );
 
 // Download KYC PDF

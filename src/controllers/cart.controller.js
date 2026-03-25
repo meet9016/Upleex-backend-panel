@@ -72,6 +72,10 @@ const listCart = catchAsync(async (req, res) => {
       final_amount: finalAmount.toFixed(2),
       image: p?.product_main_image || '',
       cart_id: item.id,
+      // Add stock information for frontend validation
+      product_type_name: p?.product_type_name || '',
+      available_quantity: p?.available_quantity || 0,
+      is_out_of_stock: p?.is_out_of_stock || false,
     };
   });
 

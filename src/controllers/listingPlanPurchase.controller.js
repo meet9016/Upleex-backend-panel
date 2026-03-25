@@ -5,6 +5,7 @@ const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
 const { Product } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const walletService = require('../services/wallet.service');
 
 const fallbackPlanOptions = [
   { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },
@@ -58,7 +59,41 @@ const createPurchase = {
         amount = def.amount;
       }
     }
-    const assignIds = product_ids.slice(0, max_products || product_ids.length);
+    
+    // Check wallet balance before deducting
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
+    if (!hasBalance) {
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: `Insufficient wallet balance. Plan costs ₹${amount}. Please add money to your wallet.`
+      });
+    }
+    
+    // Deduct amount from wallet
+    let deductionResult;
+    try {
+      deductionResult = await walletService.deductMoneyFromWallet(
+        vendor_id,
+        amount,
+        `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
+        {
+          purpose: 'plan_purchase',
+          plan_type: plan_type,
+          months: months,
+          max_products: max_products,
+        }
+      );
+      console.log(`💰 Deducted ₹${amount} from vendor ${vendor_id} wallet for ${plan_type} plan`);
+    } catch (walletError) {
+      console.error('Wallet deduction failed:', walletError);
+      return res.status(httpStatus.BAD_REQUEST).json({
+        message: 'Failed to process wallet payment. Please try again.'
+      });
+    }
+    
+    // Ensure we don't exceed max_products limit, but allow all products if max_products is sufficient
+    const assignIds = max_products && max_products < product_ids.length 
+      ? product_ids.slice(0, max_products) 
+      : product_ids;
     const start = start_at ? new Date(start_at) : new Date();
     const expire = expire_at ? new Date(expire_at) : new Date(start);
     if (!expire_at) {
@@ -76,9 +111,25 @@ const createPurchase = {
     });
     await Product.updateMany(
       { _id: { $in: assignIds }, vendor_id },
-      { $set: { status: 'active', expires_at: expire } }
+      { 
+        $set: { 
+          status: 'active', 
+          expires_at: expire,
+        } 
+      }
     );
-    return res.status(201).json({ status: 201, message: 'Plan purchase created', data: purchase });
+    
+    // Get updated wallet balance
+    const updatedBalance = await walletService.getWalletBalance(vendor_id);
+    
+    return res.status(201).json({ 
+      status: 201, 
+      message: `Plan applied successfully. ₹${amount} deducted from wallet.`, 
+      data: {
+        ...purchase.toObject(),
+        wallet_balance: updatedBalance,
+      }
+    });
   },
 };
 
@@ -88,8 +139,8 @@ const getAllPurchases = {
       vendor_id: Joi.string().allow(''),
       plan_type: Joi.string().allow(''),
       amount: Joi.number(),
-      start_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
-      expire_month: Joi.string().pattern(/^\d{4}-\d{2}$/).allow(''),
+      start_month: Joi.string().pattern(/^\d{4}-\d{2}(?:-\d{2})?$/).allow(''),
+      expire_month: Joi.string().pattern(/^\d{4}-\d{2}(?:-\d{2})?$/).allow(''),
       q: Joi.string().allow(''),
       page: Joi.number().integer().min(1),
       limit: Joi.number().integer().min(1).max(200),
@@ -112,32 +163,26 @@ const getAllPurchases = {
     
     // Condition 1: Purchases that started in start_month
     if (start_month) {
-      const startOfMonth = new Date(`${start_month}-01`);
+      const sm = String(start_month).slice(0, 7); // YYYY-MM
+      const startOfMonth = new Date(`${sm}-01`);
       startOfMonth.setHours(0, 0, 0, 0);
-      
       const endOfMonth = new Date(startOfMonth);
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
       endOfMonth.setDate(0);
       endOfMonth.setHours(23, 59, 59, 999);
-      
-      dateConditions.push({
-        start_at: { $gte: startOfMonth, $lte: endOfMonth }
-      });
+      dateConditions.push({ start_at: { $gte: startOfMonth, $lte: endOfMonth } });
     }
-    
+
     // Condition 2: Purchases that expire in expire_month
     if (expire_month) {
-      const startOfMonth = new Date(`${expire_month}-01`);
+      const em = String(expire_month).slice(0, 7); // YYYY-MM
+      const startOfMonth = new Date(`${em}-01`);
       startOfMonth.setHours(0, 0, 0, 0);
-      
       const endOfMonth = new Date(startOfMonth);
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
       endOfMonth.setDate(0);
       endOfMonth.setHours(23, 59, 59, 999);
-      
-      dateConditions.push({
-        expire_at: { $gte: startOfMonth, $lte: endOfMonth }
-      });
+      dateConditions.push({ expire_at: { $gte: startOfMonth, $lte: endOfMonth } });
     }
     
     // Apply OR condition if we have any date filters
@@ -253,14 +298,22 @@ const updatePurchase = {
       }
     }
     if (body.product_ids && body.product_ids.length && body.max_products) {
-      body.product_ids = body.product_ids.slice(0, body.max_products);
+      // Only limit if max_products is less than the number of products being assigned
+      if (body.max_products < body.product_ids.length) {
+        body.product_ids = body.product_ids.slice(0, body.max_products);
+      }
     }
     const updated = await ListingPlanPurchase.findByIdAndUpdate(_id, body, { new: true });
     if (updated && updated.product_ids && updated.product_ids.length) {
       const expire = updated.expire_at || new Date();
       await Product.updateMany(
         { _id: { $in: updated.product_ids }, vendor_id: updated.vendor_id },
-        { $set: { status: 'active', expires_at: expire } }
+        { 
+          $set: { 
+            status: 'active', 
+            expires_at: expire,
+          } 
+        }
       );
     }
     return res.status(200).json({ status: 200, message: 'Updated', data: updated });

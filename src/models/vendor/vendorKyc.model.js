@@ -36,6 +36,11 @@ const vendorKycSchema = new mongoose.Schema(
       aadharcard_front_image: { type: String, default: '' },
       aadharcard_back_image: { type: String, default: '' },
       gst_certificate_image: { type: String, default: '' },
+      qr_code_image: { type: String, default: '' },
+      cheque_image: { type: String, default: '' },
+    },
+    Declaration: {
+      terms_conditions: { type: Boolean, default: false },
     },
     status: {
       type: String,
@@ -44,6 +49,7 @@ const vendorKycSchema = new mongoose.Schema(
       index: true,
     },
     completed_pages: { type: [String], default: [] },
+    vendor_type: { type: String, default: 'both' },
     approved_at: { type: Date },
   },
   {
@@ -68,8 +74,10 @@ vendorKycSchema.options.toJSON = {
       Identity: ret.Identity || {},
       Bank: ret.Bank || {},
       Documents: ret.Documents || {},
+      Declaration: ret.Declaration || {},
       status: ret.status || 'pending',
       completed_pages: ret.completed_pages || [],
+      vendor_type: ret.vendor_type || 'both',
       createdAt,
       updatedAt,
       approved_at,

@@ -78,6 +78,16 @@ app.use(
   })
 );
 
+// Serve uploads under /api/v1 as well to handle frontend requests
+app.use(
+  '/api/v1/uploads',
+  express.static(path.join(process.cwd(), 'uploads'), {
+    maxAge: '1d',
+    etag: true,
+    lastModified: true,
+  })
+);
+
 // Serve public folder (for other static assets)
 app.use(express.static(path.resolve('./public')));
 
