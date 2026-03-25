@@ -133,6 +133,10 @@ const productSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    rejection_reason: {
+      type: String,
+      default: '',
+    },
     expires_at: {
       type: Date,
     },
@@ -153,6 +157,11 @@ const productSchema = new mongoose.Schema(
     is_out_of_stock: {
       type: Boolean,
       default: false,
+      index: true,
+    },
+    is_visible: {
+      type: Boolean,
+      default: true,
       index: true,
     },
   },

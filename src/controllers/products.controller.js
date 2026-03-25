@@ -186,6 +186,7 @@ const createProduct = {
       deposit_amount: Joi.string().allow('').default('0'),
       available_quantity: Joi.number().integer().min(0).default(1),
       pricing_type: Joi.string().valid('free', 'paid').default('paid'),
+      is_visible: Joi.boolean().default(true),
     }).prefs({ convert: true }),
   },
   handler: async (req, res) => {
@@ -231,39 +232,10 @@ const createProduct = {
       data.pricing_type = pricingType;  // normalized value store કરીએ
 
       // ───────────────────────────────────────────────
-      //     Wallet deduction for paid listings
+      //     Remove wallet deduction from product creation
+      //     Money will be deducted only after admin approval
       // ───────────────────────────────────────────────
-      if (pricingType === 'paid') {
-        // Check vendor's wallet balance
-        const hasBalance = await walletService.hasSufficientBalance(data.vendor_id, 10);
-        
-        if (!hasBalance) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Insufficient wallet balance. Minimum ₹10 required for Base (Paid listing). Please add money to your wallet.'
-          });
-        }
-
-        // Deduct ₹10 from wallet for paid listing
-        try {
-          await walletService.deductMoneyFromWallet(
-            data.vendor_id,
-            10,
-            `Base (Paid listing) fee for product: ${data.product_name}`,
-            {
-              purpose: 'paid_listing_fee',
-              product_name: data.product_name,
-              category_id: data.category_id,
-              sub_category_id: data.sub_category_id,
-            }
-          );
-          console.log(`💰 Deducted ₹10 from vendor ${data.vendor_id} wallet for paid listing`);
-        } catch (walletError) {
-          console.error('Wallet deduction failed:', walletError);
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Failed to process wallet payment. Please try again.'
-          });
-        }
-      }
+      // Wallet deduction logic removed - will be handled in approval process
 
       // ───────────────────────────────────────────────
       //     Free limit check → ફક્ત free products માટે
@@ -465,9 +437,7 @@ const createProduct = {
 
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
-        : pricingType === 'paid' 
-          ? 'Base (Paid listing) created successfully. ₹10 deducted from wallet.'
-          : 'Product created successfully';
+        : 'Product created successfully and submitted for admin approval';
       return res.status(200).json({
         status: 200,
         message: msg,
@@ -509,14 +479,16 @@ const getAllProducts = {
     else if (req.user && req.user.userType === 'vendor') {
       query.vendor_id = req.user.id || req.user._id;
     }
-    // 3. If no vendor_id and not a vendor, show only approved products (for user panel)
+    // 3. If no vendor_id and not a vendor, show only approved and visible products (for user panel)
     else {
       query.approval_status = 'approved';
+      query.is_visible = true;
     }
 
-    // Only show approved products for public/user queries
+    // Only show approved and visible products for public/user queries
     if (!req.user || req.user.userType !== 'vendor') {
       query.approval_status = 'approved';
+      query.is_visible = true;
     }
 
     // Add search functionality
@@ -683,9 +655,10 @@ const getVendorProducts = {
 
     const query = { vendor_id };
 
-    // Only show approved products for public vendor listings
+    // Only show approved and visible products for public vendor listings
     if (!req.user || req.user.userType !== 'vendor' || req.user.id !== vendor_id) {
       query.approval_status = 'approved';
+      query.is_visible = true;
     }
 
     if (search && String(search).trim() !== '') {
@@ -1419,10 +1392,12 @@ const webProductSuggestionList = {
     const query = vendorFilterIds && vendorFilterIds.length ? { 
       vendor_id: { $in: vendorFilterIds }, 
       product_name: searchRegex,
-      approval_status: 'approved'
+      approval_status: 'approved',
+      is_visible: true
     } : { 
       product_name: searchRegex,
-      approval_status: 'approved'
+      approval_status: 'approved',
+      is_visible: true
     };
     const products = await Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
     const suggestions = products.map(p => ({ id: p._id.toString(), product_name: p.product_name })).filter((s, idx, arr) => arr.findIndex(x => x.product_name === s.product_name) === idx);
@@ -1482,8 +1457,9 @@ const webSearchProductList = {
       { sub_category_name: searchRegex },
     ];
     
-    // Only show approved products for search
+    // Only show approved and visible products for search
     query.approval_status = 'approved';
+    query.is_visible = true;
     
     if (vendorFilterIds && vendorFilterIds.length) {
       query.vendor_id = { $in: vendorFilterIds };
@@ -1721,9 +1697,10 @@ const getProductsByType = {
       else if (req.user && req.user.userType === 'vendor') {
         query.vendor_id = req.user.id || req.user._id;
       }
-      // For public access, only show approved products
+      // For public access, only show approved and visible products
       else {
         query.approval_status = 'approved';
+        query.is_visible = true;
       }
       
       const total = await Product.countDocuments(query);
@@ -1739,6 +1716,51 @@ const getProductsByType = {
         limit,
         totalPages: Math.ceil(total / limit),
         data: products,
+      });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  },
+};
+
+// Vendor: Toggle product visibility
+const toggleProductVisibility = {
+  validation: {
+    body: Joi.object().keys({
+      product_id: Joi.string().required(),
+      is_visible: Joi.boolean().required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { product_id, is_visible } = req.body;
+      
+      const product = await Product.findById(product_id);
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      
+      // Authorization check: Only the vendor who created the product can toggle visibility
+      if (req.user && product.vendor_id && product.vendor_id !== req.user.id) {
+        return res.status(httpStatus.FORBIDDEN).json({ 
+          message: 'You do not have permission to modify this product' 
+        });
+      }
+      
+      product.is_visible = is_visible;
+      await product.save();
+      
+      const message = is_visible 
+        ? 'Product is now visible to users'
+        : 'Product is now hidden from users';
+      
+      res.status(200).json({
+        success: true,
+        message: message,
+        data: {
+          product_id: product._id,
+          is_visible: product.is_visible,
+        },
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -1764,4 +1786,5 @@ module.exports = {
   purchaseListingPlan,
   updateProductStock,
   getProductsByType,
+  toggleProductVisibility,
 };

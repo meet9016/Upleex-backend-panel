@@ -104,6 +104,15 @@ router.put(
   catchAsync(productApprovalController.approveProduct.handler)
 );
 
+// Vendor visibility toggle
+router.post(
+  '/toggle-visibility',
+  auth(),
+  upload.none(),
+  validate(productsController.toggleProductVisibility.validation),
+  catchAsync(productsController.toggleProductVisibility.handler)
+);
+
 router.post(
   '/bulk-approve',
   auth(),

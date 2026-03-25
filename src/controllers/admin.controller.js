@@ -126,6 +126,10 @@ const getAvailablePages = {
         { name: 'users', displayName: 'Users' },
         { name: 'orders', displayName: 'Orders' },
         { name: 'reports', displayName: 'Reports' },
+        {name: 'dropdowns', displayName: 'Dropdowns' },
+        {name: 'quotes', displayName: 'Quotes' },
+        {name: 'vendor-wallets', displayName: 'Vendor Wallets' },
+        {name: 'vendor-payments', displayName: 'Vendor Payments' },
       ];
       return res.status(httpStatus.OK).json({
         status: 200,

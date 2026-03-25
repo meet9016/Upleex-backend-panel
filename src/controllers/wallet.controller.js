@@ -33,8 +33,8 @@ const getWalletBalance = catchAsync(async (req, res) => {
 
   const vendorId = req.user.id || req.user._id;
   
-  // Find wallet - DO NOT auto-create
-  let wallet = await Wallet.findOne({ vendor_id: vendorId });
+  // Find wallet - DO NOT auto-create, always fetch fresh data
+  let wallet = await Wallet.findOne({ vendor_id: vendorId }).lean();
   
   // If wallet doesn't exist, return zero balance instead of creating
   if (!wallet) {
@@ -393,8 +393,8 @@ const getWalletSummary = catchAsync(async (req, res) => {
 
   const vendorId = req.user.id || req.user._id;
   
-  // Find wallet - DO NOT auto-create
-  let wallet = await Wallet.findOne({ vendor_id: vendorId });
+  // Find wallet - DO NOT auto-create, always fetch fresh data
+  let wallet = await Wallet.findOne({ vendor_id: vendorId }).lean();
   
   if (!wallet) {
     return res.status(httpStatus.OK).send({
@@ -414,8 +414,9 @@ const getWalletSummary = catchAsync(async (req, res) => {
     });
   }
 
-  // Get recent transactions (last 5)
-  const recentTransactions = wallet.getRecentTransactions(5);
+  // Get recent transactions (last 5) - need to fetch full wallet for methods
+  const fullWallet = await Wallet.findOne({ vendor_id: vendorId });
+  const recentTransactions = fullWallet.getRecentTransactions(5);
 
   // Calculate this month's activity
   const currentMonth = new Date();

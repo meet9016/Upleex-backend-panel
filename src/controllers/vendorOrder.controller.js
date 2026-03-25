@@ -32,7 +32,7 @@ const getVendorOrders = {
       .skip(skip)
       .limit(parseInt(limit))
       .populate('user_id', 'name email phone')
-      .populate('items.product_id', 'name images');
+      .populate('items.product_id', 'name images sku');
     
     // Filter orders to show only this vendor's items and payment info
     const vendorOrders = await Promise.all(orders.map(async (order) => {
@@ -198,7 +198,7 @@ const getOrderDetails = {
       'items.vendor_id': vendorId
     })
     .populate('user_id', 'name email phone')
-    .populate('items.product_id', 'name images description');
+    .populate('items.product_id', 'name images description sku');
     
     if (!order) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
