@@ -3,24 +3,31 @@ const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 
 /**
- * Create wallet for vendor
+ * Create wallet for vendor - only when needed
  * @param {string} vendorId
  * @returns {Promise<Wallet>}
  */
 const createWalletForVendor = async (vendorId) => {
+  if (!vendorId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID is required');
+  }
+  
   return await Wallet.createWalletForVendor(vendorId);
 };
 
 /**
- * Get wallet by vendor ID
+ * Get wallet by vendor ID - do not auto-create
  * @param {string} vendorId
  * @returns {Promise<Wallet>}
  */
 const getWalletByVendorId = async (vendorId) => {
-  let wallet = await Wallet.findOne({ vendor_id: vendorId });
-  if (!wallet) {
-    wallet = await createWalletForVendor(vendorId);
+  if (!vendorId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID is required');
   }
+
+  let wallet = await Wallet.findOne({ vendor_id: vendorId });
+  
+  // Return null if wallet doesn't exist - don't auto-create
   return wallet;
 };
 
@@ -31,7 +38,17 @@ const getWalletByVendorId = async (vendorId) => {
  * @returns {Promise<boolean>}
  */
 const hasSufficientBalance = async (vendorId, amount) => {
+  if (!vendorId || !amount) {
+    return false;
+  }
+
   const wallet = await getWalletByVendorId(vendorId);
+  
+  // If wallet doesn't exist, balance is 0
+  if (!wallet) {
+    return false;
+  }
+  
   return wallet.balance >= amount;
 };
 
@@ -44,7 +61,15 @@ const hasSufficientBalance = async (vendorId, amount) => {
  * @returns {Promise<object>}
  */
 const deductMoneyFromWallet = async (vendorId, amount, description, metadata = {}) => {
+  if (!vendorId || !amount) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID and amount are required');
+  }
+
   const wallet = await getWalletByVendorId(vendorId);
+  
+  if (!wallet) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found. Please add money to wallet first.');
+  }
   
   if (wallet.balance < amount) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Insufficient wallet balance');
@@ -55,15 +80,19 @@ const deductMoneyFromWallet = async (vendorId, amount, description, metadata = {
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
   const transactionId = `WLT${timestamp.slice(-6)}${random}`;
 
-  const transaction = wallet.deductMoney(amount, transactionId, description, metadata);
-  await wallet.save();
+  try {
+    const transaction = wallet.deductMoney(amount, transactionId, description, metadata);
+    await wallet.save();
 
-  return {
-    transaction_id: transaction.transaction_id,
-    amount: transaction.amount,
-    new_balance: wallet.balance,
-    description: transaction.description,
-  };
+    return {
+      transaction_id: transaction.transaction_id,
+      amount: transaction.amount,
+      new_balance: wallet.balance,
+      description: transaction.description,
+    };
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
+  }
 };
 
 /**
@@ -75,22 +104,35 @@ const deductMoneyFromWallet = async (vendorId, amount, description, metadata = {
  * @returns {Promise<object>}
  */
 const addMoneyToWallet = async (vendorId, amount, description, paymentDetails = {}) => {
-  const wallet = await getWalletByVendorId(vendorId);
+  if (!vendorId || !amount) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID and amount are required');
+  }
+
+  let wallet = await getWalletByVendorId(vendorId);
+
+  // Create wallet if it doesn't exist
+  if (!wallet) {
+    wallet = await createWalletForVendor(vendorId);
+  }
 
   // Generate transaction ID
   const timestamp = Date.now().toString();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
   const transactionId = `WLT${timestamp.slice(-6)}${random}`;
 
-  const transaction = wallet.addMoney(amount, transactionId, description, paymentDetails);
-  await wallet.save();
+  try {
+    const transaction = wallet.addMoney(amount, transactionId, description, paymentDetails);
+    await wallet.save();
 
-  return {
-    transaction_id: transaction.transaction_id,
-    amount: transaction.amount,
-    new_balance: wallet.balance,
-    description: transaction.description,
-  };
+    return {
+      transaction_id: transaction.transaction_id,
+      amount: transaction.amount,
+      new_balance: wallet.balance,
+      description: transaction.description,
+    };
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
+  }
 };
 
 /**
@@ -99,8 +141,14 @@ const addMoneyToWallet = async (vendorId, amount, description, paymentDetails = 
  * @returns {Promise<number>}
  */
 const getWalletBalance = async (vendorId) => {
+  if (!vendorId) {
+    return 0;
+  }
+
   const wallet = await getWalletByVendorId(vendorId);
-  return wallet.balance;
+  
+  // Return 0 if wallet doesn't exist
+  return wallet ? wallet.balance : 0;
 };
 
 /**
@@ -110,9 +158,25 @@ const getWalletBalance = async (vendorId) => {
  * @returns {Promise<object>}
  */
 const getWalletTransactions = async (vendorId, options = {}) => {
+  if (!vendorId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID is required');
+  }
+
   const { page = 1, limit = 20, type, status } = options;
   
   const wallet = await getWalletByVendorId(vendorId);
+  
+  if (!wallet) {
+    return {
+      transactions: [],
+      pagination: {
+        page,
+        limit,
+        total: 0,
+        pages: 0,
+      },
+    };
+  }
   
   // Filter transactions
   let transactions = [...wallet.transactions];
@@ -192,7 +256,25 @@ const processRefund = async (vendorId, amount, orderId, reason = 'Order refund')
  * @returns {Promise<object>}
  */
 const getWalletStatistics = async (vendorId) => {
+  if (!vendorId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID is required');
+  }
+
   const wallet = await getWalletByVendorId(vendorId);
+  
+  if (!wallet) {
+    return {
+      current_balance: 0,
+      total_credited: 0,
+      total_debited: 0,
+      this_month_credits: 0,
+      this_month_debits: 0,
+      last_30_days_transactions: 0,
+      total_transactions: 0,
+      completed_transactions: 0,
+      pending_transactions: 0,
+    };
+  }
   
   // Calculate this month's activity
   const currentMonth = new Date();

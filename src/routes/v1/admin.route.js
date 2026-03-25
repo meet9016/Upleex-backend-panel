@@ -3,6 +3,7 @@ const validate = require('../../middlewares/validate');
 const catchAsync = require('../../utils/catchAsync');
 const auth = require('../../middlewares/auth');
 const adminController = require('../../controllers/admin.controller');
+const walletController = require('../../controllers/wallet.controller');
 
 const router = express.Router();
 
@@ -44,7 +45,24 @@ router.get(
   catchAsync(adminController.getMyPermissions.handler)
 );
 
+// Vendor Wallets
+router.get(
+  '/vendor-wallets',
+  auth(),
+  catchAsync(walletController.getAllVendorWallets)
+);
 
+router.get(
+  '/vendor-wallets/:vendorId',
+  auth(),
+  catchAsync(walletController.getVendorWalletDetails)
+);
+
+router.get(
+  '/vendor-wallets/:vendorId/transactions',
+  auth(),
+  catchAsync(walletController.getVendorWalletTransactions)
+);
 
 module.exports = router;
 
