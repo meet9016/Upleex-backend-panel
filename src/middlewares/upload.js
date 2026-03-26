@@ -29,7 +29,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit to accommodate larger videos
+    fileSize: 1000 * 1024 * 1024, // 1GB limit (PDFs can be any size)
   }
 });
 
