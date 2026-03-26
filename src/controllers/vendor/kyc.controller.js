@@ -46,6 +46,45 @@ const saveKyc = {
         body.Documents = [docObj];
       }
 
+      // Handle file deletions - check for empty string values or delete flags
+      const handleFileDeletions = (docObj) => {
+        const fileFields = [
+          'pancard_front_image',
+          'aadharcard_front_image', 
+          'aadharcard_back_image',
+          'gst_certificate_image',
+          'vendor_image',
+          'business_logo_image',
+          'qr_code_image',
+          'cheque_image'
+        ];
+        
+        fileFields.forEach(field => {
+          // Check for empty string (indicating deletion)
+          if (body[field] === '') {
+            docObj[field] = null;
+          }
+          // Check for delete flags
+          if (body[`delete_${field}`] === 'true') {
+            docObj[field] = null;
+          }
+        });
+        
+        return docObj;
+      };
+
+      // Apply file deletions to documents
+      if (body.Documents || Object.keys(body).some(key => key.startsWith('delete_') || body[key] === '')) {
+        let docObj = {};
+        if (body.Documents) {
+          docObj = Array.isArray(body.Documents) ? body.Documents[0] || {} : (typeof body.Documents === 'string' ? JSON.parse(body.Documents) : body.Documents || {});
+          if (Array.isArray(docObj)) docObj = docObj[0] || {};
+        }
+        
+        docObj = handleFileDeletions(docObj);
+        body.Documents = [docObj];
+      }
+
       // Helper to extract nested data from arrays (payload format: Array of objects or flat objects)
       const extract = (section) => {
         if (body[section]) {
@@ -139,7 +178,20 @@ const saveKyc = {
         }
         if (identity) doc.Identity = { ...doc.Identity.toObject(), ...identity };
         if (bank) doc.Bank = { ...doc.Bank.toObject(), ...bank };
-        if (documents) doc.Documents = { ...doc.Documents.toObject(), ...documents };
+        if (documents) {
+          // Merge documents but handle null values properly (for deletions)
+          const currentDocs = doc.Documents.toObject();
+          const mergedDocs = { ...currentDocs, ...documents };
+          
+          // Remove null values (deleted files) from the final object
+          Object.keys(mergedDocs).forEach(key => {
+            if (mergedDocs[key] === null) {
+              delete mergedDocs[key];
+            }
+          });
+          
+          doc.Documents = mergedDocs;
+        }
 
         if (declaration) {
           doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
