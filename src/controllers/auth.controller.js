@@ -219,6 +219,72 @@ const getUserProfile = {
   }
 };
 
+const updateUserProfile = {
+  validation: {
+    body: Joi.object().keys({
+      first_name: Joi.string().trim().optional(),
+      last_name: Joi.string().trim().optional(),
+      mobile: Joi.string().pattern(/^[0-9]{10,15}$/).optional().messages({
+        'string.pattern.base': 'Mobile number must be between 10 and 15 digits'
+      }),
+      gender: Joi.string().valid('male', 'female', 'other').optional(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      if (!req.user) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to update profile');
+      }
+
+      const userId = req.user.id || req.user._id;
+      const { first_name, last_name, mobile, gender } = req.body;
+
+      // Find user
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+      }
+
+      // Update fields
+      if (first_name) user.first_name = first_name;
+      if (last_name) user.last_name = last_name;
+      if (mobile) user.mobile = mobile;
+      if (gender) user.gender = gender;
+
+      // Update full_name
+      if (first_name || last_name) {
+        user.full_name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      }
+
+      // Save user
+      await user.save();
+
+      return res.status(httpStatus.OK).send({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+          _id: user._id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          full_name: user.full_name,
+          email: user.email,
+          mobile: user.mobile,
+          phone: user.phone,
+          gender: user.gender,
+          profile_photo: user.profile_photo,
+        }
+      });
+
+    } catch (error) {
+      console.error("Profile update error:", error);
+      return res.status(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR).send({
+        success: false,
+        message: error.message || 'Failed to update profile'
+      });
+    }
+  }
+};
+
 const logout = catchAsync(async (req, res) => {
   await authService.logout(req.body.refreshToken);
   res.status(httpStatus.NO_CONTENT).send();
@@ -393,6 +459,7 @@ module.exports = {
   sendVerificationEmail,
   verifyEmail,
   getUserProfile,
+  updateUserProfile,
   webLoginRegister,
   uploadNone
 };

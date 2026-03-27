@@ -190,7 +190,7 @@ const getAllPurchases = {
       query.$or = dateConditions;
     }
 
-    let mongo = ListingPlanPurchase.find(query).sort({ createdAt: -1 });
+    let mongo = ListingPlanPurchase.find(query).populate('product_ids', 'product_name category_name').sort({ createdAt: -1 });
     let data;
     if (searchText) {
       data = await mongo;
