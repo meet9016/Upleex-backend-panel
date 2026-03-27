@@ -152,7 +152,12 @@ const getAllPurchases = {
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
     const query = {};
     
-    if (vendor_id) query.vendor_id = vendor_id;
+    // Auto-filter by logged-in vendor if applicable
+    if (req.user && req.user.userType === 'vendor') {
+      query.vendor_id = req.user.id || req.user._id;
+    } else if (vendor_id) {
+      query.vendor_id = vendor_id;
+    }
     if (plan_type) query.plan_type = plan_type;
     if (amount) {
       query.amount = { $eq: Number(amount) };

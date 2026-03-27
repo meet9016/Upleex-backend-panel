@@ -30,6 +30,7 @@ router.post(
 
 router.get(
   '/getall',
+  auth(),
   validate(listingPlanPurchaseController.getAllPurchases.validation),
   catchAsync(listingPlanPurchaseController.getAllPurchases.handler)
 );
