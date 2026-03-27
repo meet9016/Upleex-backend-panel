@@ -3,12 +3,12 @@ const { toJSON } = require('./plugins');
 
 const listingPlanPurchaseSchema = new mongoose.Schema(
   {
-    vendor_id: { type: String, required: true, index: true },
+    vendor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true, index: true },
     plan_type: { type: String, required: true },
     months: { type: Number, required: true },
     max_products: { type: Number, required: true },
     amount: { type: Number, default: 0 },
-    product_ids: { type: [String], default: [] },
+    product_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Product', default: [] },
     start_at: { type: Date, default: () => new Date() },
     expire_at: { type: Date },
   },
