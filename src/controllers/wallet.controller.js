@@ -5,6 +5,7 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/config');
 const Wallet = require('../models/wallet.model');
+const Vendor = require('../models/vendor/vendor.model');
 
 // Initialize Razorpay
 let razorpay;
@@ -470,13 +471,17 @@ const getAllVendorWallets = catchAsync(async (req, res) => {
 
   let searchQuery = {};
   if (search) {
-    searchQuery = {
+    // First find matching vendors
+    const matchingVendors = await Vendor.find({
       $or: [
-        { 'vendor_id.full_name': { $regex: search, $options: 'i' } },
-        { 'vendor_id.business_name': { $regex: search, $options: 'i' } },
-        { 'vendor_id.email': { $regex: search, $options: 'i' } },
+        { full_name: { $regex: search, $options: 'i' } },
+        { business_name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
       ]
-    };
+    }).select('_id');
+
+    const vendorIds = matchingVendors.map(v => v._id);
+    searchQuery = { vendor_id: { $in: vendorIds } };
   }
 
   const total = await Wallet.countDocuments(searchQuery);
