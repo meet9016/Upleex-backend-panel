@@ -7,9 +7,9 @@ const kycEmailService = require('./kycEmail.service');
 
 const sendWelcomeEmail = async (to, name, zoomLink) => {
   const mailOptions = {
-    from: `"Mendel Shop" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex Shop" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
-    subject: "Welcome to Mendel Academy! 🎓",
+    subject: "Welcome to Upleex! 🎓",
     html: `
   <div style="margin:0; padding:0; background-color:#f4f4f4; font-family:Arial, sans-serif;">
     <table width="100%" border="0" cellspacing="0" cellpadding="0" 
@@ -18,8 +18,8 @@ const sendWelcomeEmail = async (to, name, zoomLink) => {
       <!-- Header -->
       <tr>
         <td style="background:#232323; text-align:center; padding:30px 20px;">
-          <img src="https://content.jdmagicbox.com/v2/comp/surat/v4/0261px261.x261.230116134549.v5v4/catalogue/mendel-academy-ring-road-surat-institutes-op38wx54xr.jpg" 
-               alt="Mendel Academy Logo" 
+          <img src="https://content.jdmagicbox.com/v2/comp/surat/v4/0261px261.x261.230116134549.v5v4/catalogue/Upleex-academy-ring-road-surat-institutes-op38wx54xr.jpg" 
+               alt="Upleex Logo" 
                style="width:100%; height:100%; margin-bottom:10px;"/>
           <h1 style="color:#F1C232; margin:0; font-size:26px; font-weight:bold;">
             Complete Your Registration
@@ -32,16 +32,15 @@ const sendWelcomeEmail = async (to, name, zoomLink) => {
         <td style="padding:25px 30px; color:#333;">
           <h2 style="margin-top:0;">Hi ${name}, 👋</h2>
           <p style="font-size:15px; line-height:1.6;">
-            Welcome to <b>Mendel Academy</b>! Your account has been created successfully.
+            Welcome to <b>Upleex</b>! Your account has been created successfully.
           </p>
           <p style="font-size:15px; line-height:1.6;">
             We’re excited to have you with us! Here are your details:
           </p>
 
           <!-- Zoom Section -->
-          ${
-            zoomLink
-              ? `
+          ${zoomLink
+        ? `
               <div style="margin:20px 0; padding:15px; background:#f0f7ff; border-left:4px solid #007bff;">
                 <p style="margin:0 0 10px;"><b>Your welcome meeting is ready!</b></p>
                 <a href="${zoomLink}" target="_blank" 
@@ -55,14 +54,14 @@ const sendWelcomeEmail = async (to, name, zoomLink) => {
                 </p>
               </div>
             `
-              : `
+        : `
               <div style="margin:20px 0; padding:15px; background:#fff8e1; border-left:4px solid #f1c232;">
                 <p style="margin:0; font-size:14px;">
                   <i>Zoom meeting link is not available yet. We’ll send it as soon as it’s ready.</i>
                 </p>
               </div>
             `
-          }
+      }
 
           <p style="font-size:15px; margin-top:20px;">
             If you have any questions, feel free to reply to this email!
@@ -70,7 +69,7 @@ const sendWelcomeEmail = async (to, name, zoomLink) => {
 
           <p style="margin-top:25px; font-size:15px;">
             Best regards,<br/>
-            <b>The Mendel Academy Team</b>
+            <b>The Upleex Team</b>
           </p>
         </td>
       </tr>
@@ -79,7 +78,7 @@ const sendWelcomeEmail = async (to, name, zoomLink) => {
       <tr>
         <td style="background:#232323; padding:15px; text-align:center;">
           <p style="color:#F1C232; margin:0; font-size:13px;">
-            © ${new Date().getFullYear()} Mendel Academy. All rights reserved.
+            © ${new Date().getFullYear()} Upleex. All rights reserved.
           </p>
         </td>
       </tr>
@@ -242,11 +241,10 @@ const sendLeaveRequestEmail = async (to, token, leaveData) => {
                     <h2>Leave Request</h2>
                 </div>
                 <div class="pg_template_content">
-                    <p>Employee Name: <span>${
-                      leaveData?.user?.firstName +
-                      " " +
-                      leaveData?.user?.lastName
-                    }</span></p>
+                    <p>Employee Name: <span>${leaveData?.user?.firstName +
+    " " +
+    leaveData?.user?.lastName
+    }</span></p>
                     <p>Employee Email: <span>${leaveData.user.email}</span></p>
                     <div class="pg_success">
                         <div class="pg_success_content">
@@ -281,10 +279,10 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
   zoomData = null,
   orderId = "",
 ) => {
-  const subject = `Enrollment Confirmed! Welcome to ${productName} at Mendel Academy 🎉`;
+  const subject = `Enrollment Confirmed! Welcome to ${productName} at Upleex 🎉`;
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -294,7 +292,7 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
     <!-- Header -->
     <tr>
       <td style="background:#232323; text-align:center; padding:35px 20px;">
-        <img src="https://mendelacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80"
+        <img src="https://Upleexacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80"
              style="max-width:180px; border-radius:8px;" />
         <h1 style="color:#F1C232; margin-top:15px;">Enrollment Confirmed!</h1>
       </td>
@@ -310,9 +308,8 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
           ${orderId ? `(Order ID: <strong>${orderId}</strong>)` : ""}.
         </p>
 
-        ${
-          zoomData
-            ? `
+        ${zoomData
+        ? `
           <!-- Zoom Details -->
           <div style="margin:30px 0; padding:25px; background:#f0f7ff; border-left:5px solid #007bff; border-radius:8px;">
             <h3 style="margin-top:0; color:#007bff;">
@@ -336,13 +333,13 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
             </p>
           </div>
           `
-            : `
+        : `
           <div style="margin:30px 0; padding:20px; background:#fff8e1; border-left:5px solid #F1C232;">
             <p><strong>Zoom link coming soon!</strong><br/>
             We will email your class link within 24 hours.</p>
           </div>
           `
-        }
+      }
 
         <p>
           For any help, just reply to this email — we’re here for you.
@@ -350,7 +347,7 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
 
         <p style="margin-top:30px;">
           Best regards,<br/>
-          <strong>Mendel Academy Team</strong>
+          <strong>Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -358,7 +355,7 @@ const sendEnrollmentConfirmationEmailforCreateLink = async (
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:20px; text-align:center; color:#F1C232; font-size:13px;">
-        © ${new Date().getFullYear()} Mendel Academy
+        © ${new Date().getFullYear()} Upleex
       </td>
     </tr>
 
@@ -377,10 +374,10 @@ const sendEnrollmentConfirmationEmail = async (
   zoomLink = "",
   orderId = "",
 ) => {
-  const subject = `Enrollment Confirmed! Welcome to ${productName} at Mendel Academy 🎉`;
+  const subject = `Enrollment Confirmed! Welcome to ${productName} at Upleex 🎉`;
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -390,8 +387,8 @@ const sendEnrollmentConfirmationEmail = async (
     <!-- Header -->
     <tr>
       <td style="background:#232323; text-align:center; padding:35px 20px;">
-        <img src="https://mendelacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80" 
-             alt="Mendel Academy" 
+        <img src="https://Upleexacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80" 
+             alt="Upleex" 
              style="max-width:180px; height:auto; margin-bottom:15px; border-radius:8px;" />
         <h1 style="color:#F1C232; margin:10px 0 0; font-size:28px; font-weight:bold;">
           Enrollment Confirmed!
@@ -405,18 +402,16 @@ const sendEnrollmentConfirmationEmail = async (
         <h2 style="margin:0 0 20px; color:#232323;">Hi ${name}, 🎓</h2>
         
         <p>Thank you for enrolling in <strong>${productName}</strong>!</p>
-        <p>Your payment has been successfully processed ${
-          orderId ? ` (Order ID: <strong>${orderId}</strong>)` : ""
-        }.</p>
+        <p>Your payment has been successfully processed ${orderId ? ` (Order ID: <strong>${orderId}</strong>)` : ""
+      }.</p>
         
         <p style="margin:25px 0 15px;">
-          You're now officially part of <strong>Mendel Academy</strong> — we're excited to help you succeed!
+          You're now officially part of <strong>Upleex</strong> — we're excited to help you succeed!
         </p>
 
         <!-- Zoom / Meeting Section -->
-        ${
-          zoomLink
-            ? `
+        ${zoomLink
+        ? `
             <div style="margin:30px 0; padding:25px; background:#f0f7ff; border-left:5px solid #007bff; border-radius:8px;">
               <p style="margin:0 0 12px; font-size:17px; font-weight:bold; color:#007bff;">
                 Your Welcome/Orientation Session is Ready!
@@ -435,7 +430,7 @@ const sendEnrollmentConfirmationEmail = async (
               </p>
             </div>
             `
-            : `
+        : `
             <div style="margin:30px 0; padding:20px; background:#fff8e1; border-left:5px solid #F1C232; border-radius:8px;">
               <p style="margin:0; font-size:15px; color:#856404;">
                 <strong>Zoom link coming soon!</strong><br>
@@ -443,7 +438,7 @@ const sendEnrollmentConfirmationEmail = async (
               </p>
             </div>
             `
-        }
+      }
 
         <p style="margin:30px 0 10px;">
           If you have any questions about your course, schedule, or anything else — just reply to this email.
@@ -451,7 +446,7 @@ const sendEnrollmentConfirmationEmail = async (
 
         <p style="margin-top:35px;">
           Best wishes for your success,<br>
-          <strong>The Mendel Academy Team</strong>
+          <strong>The Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -459,8 +454,8 @@ const sendEnrollmentConfirmationEmail = async (
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:20px; text-align:center; color:#F1C232; font-size:13px;">
-        © ${new Date().getFullYear()} Mendel Academy. All rights reserved.<br>
-        <a href="https://mendelacademy.com/" style="color:#F1C232; text-decoration:underline;">mendelacademy.com</a>
+        © ${new Date().getFullYear()} Upleex. All rights reserved.<br>
+        <a href="https://Upleexacademy.com/" style="color:#F1C232; text-decoration:underline;">Upleexacademy.com</a>
       </td>
     </tr>
   </table>
@@ -477,10 +472,10 @@ const sendWelcomeAccountEmail = async (
   loginEmail,
   password
 ) => {
-  const subject = `Welcome to Mendel Academy 🎉 Your Login Details`;
+  const subject = `Welcome to Upleex 🎉 Your Login Details`;
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -491,7 +486,7 @@ const sendWelcomeAccountEmail = async (
     <!-- Header -->
     <tr>
       <td style="background:#232323; padding:30px; text-align:center;">
-        <h1 style="color:#F1C232; margin:0;">Welcome to Mendel Academy 🎓</h1>
+        <h1 style="color:#F1C232; margin:0;">Welcome to Upleex 🎓</h1>
       </td>
     </tr>
 
@@ -502,7 +497,7 @@ const sendWelcomeAccountEmail = async (
 
         <p>
           Your account has been successfully created at
-          <strong>Mendel Academy</strong>.
+          <strong>Upleex</strong>.
         </p>
 
         <p style="margin:20px 0;"><strong>Your Login Credentials:</strong></p>
@@ -524,7 +519,7 @@ const sendWelcomeAccountEmail = async (
 
         <p style="margin-top:30px;">
           Best regards,<br/>
-          <strong>Mendel Academy Team</strong>
+          <strong>Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -532,7 +527,7 @@ const sendWelcomeAccountEmail = async (
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:15px; text-align:center; color:#F1C232; font-size:12px;">
-        © ${new Date().getFullYear()} Mendel Academy
+        © ${new Date().getFullYear()} Upleex
       </td>
     </tr>
 
@@ -555,7 +550,7 @@ const sendPurchaseConfirmationEmail = async (
   const subject = `Purchase Confirmed! ${productName} 🎉`;
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -575,7 +570,7 @@ const sendPurchaseConfirmationEmail = async (
         <p>Hi <strong>${name}</strong>, 👋</p>
 
         <p>
-          Thank you for your purchase at <strong>Mendel Academy</strong>!
+          Thank you for your purchase at <strong>Upleex</strong>!
         </p>
 
         <div style="margin:25px 0; padding:20px; background:#f0f7ff; border-left:5px solid #007bff; border-radius:8px;">
@@ -595,7 +590,7 @@ const sendPurchaseConfirmationEmail = async (
 
         <p style="margin-top:30px;">
           Best regards,<br/>
-          <strong>Mendel Academy Team</strong>
+          <strong>Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -603,7 +598,7 @@ const sendPurchaseConfirmationEmail = async (
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:15px; text-align:center; color:#F1C232; font-size:12px;">
-        © ${new Date().getFullYear()} Mendel Academy
+        © ${new Date().getFullYear()} Upleex
       </td>
     </tr>
 
@@ -626,7 +621,7 @@ const sendEnrollmentConfirmationEmailForPreRecord = async (
   const subject = `Enrollment Confirmed! Access ${courseTitle} Now 🎉`;
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -636,7 +631,7 @@ const sendEnrollmentConfirmationEmailForPreRecord = async (
     <!-- Header -->
     <tr>
       <td style="background:#232323; text-align:center; padding:35px 20px;">
-        <img src="https://mendelacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80"
+        <img src="https://Upleexacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80"
              style="max-width:180px; border-radius:8px;" />
         <h1 style="color:#F1C232; margin-top:15px;">Enrollment Confirmed!</h1>
       </td>
@@ -678,7 +673,7 @@ const sendEnrollmentConfirmationEmailForPreRecord = async (
 
         <p style="margin-top:30px;">
           Best regards,<br/>
-          <strong>Mendel Academy Team</strong>
+          <strong>Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -686,7 +681,7 @@ const sendEnrollmentConfirmationEmailForPreRecord = async (
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:20px; text-align:center; color:#F1C232; font-size:13px;">
-        © ${new Date().getFullYear()} Mendel Academy
+        © ${new Date().getFullYear()} Upleex
       </td>
     </tr>
 
@@ -708,18 +703,17 @@ const sendCombinedPurchaseEmail = async (to, name, orderId, items) => {
       <p style="margin: 0; font-weight: bold; color: #232323; font-size: 16px;">${item.productName}</p>
       <p style="margin: 5px 0 0; font-size: 14px; color: #666;"><strong>Type:</strong> ${item.productType}</p>
       ${item.details ? `<p style="margin: 5px 0 0; font-size: 14px; color: #666;">${item.details}</p>` : ""}
-      ${
-        item.link
+      ${item.link
           ? `<p style="margin: 10px 0 0;"><a href="${item.link}" style="display: inline-block; background: #007bff; color: #fff; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 14px;">Access Link →</a></p>`
           : ""
-      }
+        }
     </div>
   `,
     )
     .join("");
 
   const mailOptions = {
-    from: `"Mendel Academy" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
     to,
     subject,
     html: `
@@ -729,8 +723,8 @@ const sendCombinedPurchaseEmail = async (to, name, orderId, items) => {
     <!-- Header -->
     <tr>
       <td style="background:#232323; text-align:center; padding:35px 20px;">
-        <img src="https://mendelacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80" 
-             alt="Mendel Academy" 
+        <img src="https://Upleexacademy.com/_next/image?url=%2Fblog-images%2FTop%206%20Best%20USMLE%20Coaching%20Centers%20in%20India.jpg&w=3840&q=80" 
+             alt="Upleex" 
              style="max-width:180px; height:auto; margin-bottom:15px; border-radius:8px;" />
         <h1 style="color:#F1C232; margin:10px 0 0; font-size:28px; font-weight:bold;">
           Purchase Confirmed! 🎉
@@ -744,7 +738,7 @@ const sendCombinedPurchaseEmail = async (to, name, orderId, items) => {
       <td style="padding:35px 30px; color:#333; font-size:15px; line-height:1.7;">
         <h2 style="margin:0 0 20px; color:#232323;">Hi ${name}, 🎓</h2>
         
-        <p>Thank you for your purchase at <strong>Mendel Academy</strong>! We've successfully processed your enrollment for the following items:</p>
+        <p>Thank you for your purchase at <strong>Upleex</strong>! We've successfully processed your enrollment for the following items:</p>
         
         <div style="margin-top: 30px;">
           ${itemsHtml}
@@ -756,7 +750,7 @@ const sendCombinedPurchaseEmail = async (to, name, orderId, items) => {
 
         <p style="margin-top:35px;">
           Best wishes for your success,<br>
-          <strong>The Mendel Academy Team</strong>
+          <strong>The Upleex Team</strong>
         </p>
       </td>
     </tr>
@@ -764,8 +758,8 @@ const sendCombinedPurchaseEmail = async (to, name, orderId, items) => {
     <!-- Footer -->
     <tr>
       <td style="background:#232323; padding:20px; text-align:center; color:#F1C232; font-size:13px;">
-        © ${new Date().getFullYear()} Mendel Academy. All rights reserved.<br>
-        <a href="https://mendelacademy.com/" style="color:#F1C232; text-decoration:underline;">mendelacademy.com</a>
+        © ${new Date().getFullYear()} Upleex. All rights reserved.<br>
+        <a href="https://Upleexacademy.com/" style="color:#F1C232; text-decoration:underline;">Upleexacademy.com</a>
       </td>
     </tr>
   </table>
@@ -903,6 +897,166 @@ const sendOrderConfirmationEmail = async (to, orderData) => {
   await transporter.sendMail(mailOptions);
 };
 
+// Email when admin approves/rejects product
+const sendProductApprovalEmail = async (to, vendorName, productName, status, reason = '', productDetails = null) => {
+  try {
+    console.log(`\n========== EMAIL SENDING START =========`);
+    console.log(`To Vendor Email: ${to}`);
+    console.log(`Vendor: ${vendorName}`);
+    console.log(`Product: ${productName}`);
+    console.log(`Status: ${status}`);
+    console.log(`Reason: ${reason}`);
+
+    const isApproved = status.toLowerCase() === 'approved';
+    const subject = isApproved
+      ? `✅ Your Product "${productName}" Has Been Approved!`
+      : `Product Review: "${productName}" - Action Required`;
+
+    const headerBg = isApproved ? '#059669' : '#dc2626';
+    const headerText = isApproved ? 'Product Approved! 🎉' : 'Product Rejected ⚠️';
+    const statusColor = isApproved ? '#d1fae5' : '#fee2e2';
+    const statusBg = isApproved ? '#f0fdf4' : '#fef2f2';
+    const statusBorder = isApproved ? '#059669' : '#dc2626';
+    const statusTextColor = isApproved ? '#166534' : '#991b1b';
+    const icon = isApproved ? '✅' : '❌';
+
+    const mailOptions = {
+      from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+      to,
+      subject,
+      html: `
+<div style="margin:0; padding:0; background-color:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="max-width:620px; margin:20px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    
+    <!-- Header -->
+    <tr>
+      <td style="background:${headerBg}; text-align:center; padding:35px 20px;">
+        <h1 style="color:#fff; margin:0; font-size:24px; font-weight:bold;">
+          ${icon} ${headerText}
+        </h1>
+        <p style="color:${statusColor}; margin:10px 0 0; font-size:14px;">Product review completed</p>
+      </td>
+    </tr>
+
+    <!-- Body -->
+    <tr>
+      <td style="padding:35px 30px; color:#333; font-size:15px; line-height:1.7;">
+        <h2 style="margin:0 0 20px; color:#232323;">Hi ${vendorName}, 👋</h2>
+        
+        <p>
+          Your product <strong>"${productName}"</strong> has been reviewed by our admin team and the decision is below.
+        </p>
+
+        <!-- Status Details -->
+        <div style="margin:30px 0; padding:20px; background:${statusBg}; border-left:5px solid ${statusBorder}; border-radius:8px;">
+          <h3 style="margin:0 0 15px; color:${statusTextColor};">📋 Review Status</h3>
+          <table width="100%" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="padding: 8px 0; color: #666;"><strong>Product Name:</strong></td>
+              <td style="padding: 8px 0; text-align: right; color: #232323;"><strong>${productName}</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #666;"><strong>Status:</strong></td>
+              <td style="padding: 8px 0; text-align: right;">
+                <span style="background: ${statusColor}; color: ${statusTextColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                  ${status.toUpperCase()}
+                </span>
+              </td>
+            </tr>
+            ${reason ? `
+            <tr>
+              <td style="padding: 8px 0; color: #666; vertical-align: top;"><strong>Reason:</strong></td>
+              <td style="padding: 8px 0; text-align: right; color: #232323;">${reason}</td>
+            </tr>
+            ` : ''}
+          </table>
+        </div>
+
+        ${productDetails ? `
+        <!-- Product Card -->
+        <div style="margin:30px 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+              ${productDetails.image ? `
+              <td style="width: 140px; padding: 25px; vertical-align: top;">
+                <img src="${productDetails.image}" alt="${productName}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid #eee; display: block;" />
+              </td>
+              ` : ''}
+              <td style="padding: 25px 25px 25px ${productDetails.image ? '0' : '25px'}; vertical-align: top;">
+                <h4 style="margin: 0 0 10px 0; font-size: 18px; color: #1e293b;">${productName}</h4>
+                <p style="margin: 5px 0; font-size: 14px; color: #64748b;">
+                  <strong style="color: #475569;">Category:</strong> ${productDetails.category || 'N/A'}
+                </p>
+                ${productDetails.price ? `
+                <p style="margin: 10px 0; font-size: 20px; color: #059669; font-weight: bold;">
+                  ₹${!isNaN(Number(productDetails.price)) ? Number(productDetails.price).toLocaleString('en-IN') : productDetails.price}
+                </p>
+                ` : ''}
+                ${productDetails.sku ? `
+                <p style="margin: 5px 0; font-size: 12px; color: #94a3b8;">
+                  <span style="color: #cbd5e1;">SKU:</span> ${productDetails.sku}
+                </p>
+                ` : ''}
+              </td>
+            </tr>
+          </table>
+        </div>
+        ` : ''}
+
+        ${isApproved ? `
+        <!-- Approved Message -->
+        <div style="margin:30px 0; padding:20px; background:#f0fdf4; border-left:5px solid #059669; border-radius:8px;">
+          <h3 style="margin:0 0 15px; color:#166534;">🎉 Congratulations!</h3>
+          <p style="margin:0; color:#166534; font-size:14px;">
+            Your product <strong>"${productName}"</strong> has been approved and is now live on Upleex. Customers can now view and request quotes for your product.
+          </p>
+        </div>
+        ` : `
+        <!-- Rejection Message -->
+        <div style="margin:30px 0; padding:20px; background:#fef2f2; border-left:5px solid #dc2626; border-radius:8px;">
+          <h3 style="margin:0 0 15px; color:#991b1b;">⚠️ Product Rejected</h3>
+          <p style="margin:0; color:#991b1b; font-size:14px;">
+            Your product <strong>"${productName}"</strong> did not meet our quality standards or guidelines. Please review the reason above and make necessary corrections before resubmitting.
+          </p>
+        </div>
+        `}
+
+        <p style="margin:30px 0 10px;">
+          If you have any questions, please don't hesitate to contact our support team.
+        </p>
+
+        <p style="margin-top:35px;">
+          Best regards,<br>
+          <strong>The Upleex Team</strong>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background:#232323; padding:20px; text-align:center; color:#fff; font-size:13px;">
+        © ${new Date().getFullYear()} Upleex. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>
+    `,
+    };
+
+    console.log(`Sending email with subject: ${subject}`);
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent successfully to: ${to}`);
+    console.log(`Response: ${result.response}`);
+    console.log(`========== EMAIL SENDING END =========\n`);
+    return result;
+  } catch (error) {
+    console.error(`\n❌ EMAIL SENDING FAILED TO: ${to}`);
+    console.error(`Error: ${error.message}`);
+    console.error(`========== EMAIL SENDING END =========\n`);
+    throw error;
+  }
+};
+
 module.exports = {
   sendWelcomeEmail,
   transport,
@@ -917,5 +1071,6 @@ module.exports = {
   sendPurchaseConfirmationEmail,
   sendCombinedPurchaseEmail,
   sendOrderConfirmationEmail,
+  sendProductApprovalEmail,
   ...kycEmailService,
 };

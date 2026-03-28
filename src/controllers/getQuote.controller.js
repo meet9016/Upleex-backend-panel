@@ -13,7 +13,6 @@ const createGetQuote = {
   validation: {
     body: Joi.object().keys({
       product_id: Joi.string().required(),
-      delivery_date: Joi.date().optional(),
       number_of_days: Joi.number().min(0).optional(),
       months_id: Joi.string().allow('').optional(),
       qty: Joi.number().optional(),
@@ -23,6 +22,8 @@ const createGetQuote = {
         .optional(),
       start_date: Joi.date().optional(),
       end_date: Joi.date().optional(),
+      start_time: Joi.string().allow('').optional(),
+      end_time: Joi.string().allow('').optional(),
     }),
   },
 
@@ -73,12 +74,34 @@ const createGetQuote = {
         };
       }
 
+      // Extract time from ISO datetime strings if provided
+      let startTime = data.start_time || '';
+      let endTime = data.end_time || '';
+      
+      // If start_date is ISO string with time, extract it
+      if (data.start_date && typeof data.start_date === 'string' && data.start_date.includes('T')) {
+        const startDateTime = new Date(data.start_date);
+        const hours = String(startDateTime.getHours()).padStart(2, '0');
+        const minutes = String(startDateTime.getMinutes()).padStart(2, '0');
+        startTime = `${hours}:${minutes}`;
+      }
+      
+      // If end_date is ISO string with time, extract it
+      if (data.end_date && typeof data.end_date === 'string' && data.end_date.includes('T')) {
+        const endDateTime = new Date(data.end_date);
+        const hours = String(endDateTime.getHours()).padStart(2, '0');
+        const minutes = String(endDateTime.getMinutes()).padStart(2, '0');
+        endTime = `${hours}:${minutes}`;
+      }
+
       const quote = await GetQuote.create({
         ...data,
         user_id,
         calculated_price: calculatedPrice,
         price_details: priceDetails,
         status: data.status || 'pending',
+        start_time: startTime,
+        end_time: endTime,
       });
 
       // Fetch the created quote with populated product details
@@ -454,16 +477,17 @@ const updateQuote = {
   validation: {
     body: Joi.object().keys({
       product_id: Joi.string().optional(),
-      delivery_date: Joi.date().optional(),
       number_of_days: Joi.number().min(0).optional(),
       months_id: Joi.string().optional(),
       qty: Joi.number().optional(),
       note: Joi.string().allow('').optional(),
       status: Joi.string()
-        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful')
+        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful', 'delivery')
         .optional(),
       start_date: Joi.date().optional(),
       end_date: Joi.date().optional(),
+      start_time: Joi.string().allow('').optional(),
+      end_time: Joi.string().allow('').optional(),
     }),
   },
   handler: async (req, res) => {
@@ -493,6 +517,12 @@ const updateQuote = {
         }
       }
 
+      // Get the existing quote to check current status
+      const existingQuote = await GetQuote.findById(_id).lean();
+      if (!existingQuote) {
+        return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
+      }
+
       // Update the quote and get the populated result
       const quote = await GetQuote.findByIdAndUpdate(
         _id, 
@@ -500,10 +530,38 @@ const updateQuote = {
         { new: true } // Return the updated document
       )
         .populate('product_id') // Populate product details
-        .lean(); // Convert to plain JavaScript object
+        .lean();
 
       if (!quote) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
+      }
+
+      // Handle stock management if status changed
+      if (updateData.status && updateData.status !== existingQuote.status) {
+        const product = quote.product_id;
+        if (product) {
+          const qty = quote.qty || 1;
+          
+          // If status becomes 'approval' (Approved), reduce stock
+          if (updateData.status === 'approval' && existingQuote.status === 'pending') {
+            if (product.available_quantity >= qty) {
+              await Product.findByIdAndUpdate(product._id, {
+                $inc: { available_quantity: -qty }
+              });
+              console.log(`Reduced stock for product ${product._id} by ${qty}`);
+            }
+          } 
+          // If status becomes 'successful' or 'complete', return stock
+          else if (['successful', 'complete'].includes(updateData.status)) {
+            // Only return if it was previously approved/active/delivery (when stock was actually reduced)
+            if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
+              await Product.findByIdAndUpdate(product._id, {
+                $inc: { available_quantity: qty }
+              });
+              console.log(`Returned stock for product ${product._id} by ${qty}`);
+            }
+          }
+        }
       }
 
       res.status(httpStatus.OK).json({
@@ -557,15 +615,187 @@ const changeStatus = {
       else if (s.includes('reject')) internal = 'reject';
       else if (s.includes('complete')) internal = 'complete';
       else if (s.includes('success')) internal = 'successful';
+      else if (s.includes('deliver')) internal = 'delivery';
+
+      const existingQuote = await GetQuote.findById(quote_id).lean();
+      if (!existingQuote) {
+        return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
+      }
 
       const updated = await GetQuote.findByIdAndUpdate(
         quote_id,
         { status: internal },
         { new: true }
-      ).lean();
+      )
+        .populate('user_id')
+        .populate('product_id')
+        .lean();
 
       if (!updated) {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
+      }
+
+      // Stock Management
+      if (internal !== existingQuote.status) {
+        const product = updated.product_id;
+        const qty = updated.qty || 1;
+
+        if (product) {
+          // If status becomes 'approval' (Approved), reduce stock
+          if (internal === 'approval' && existingQuote.status === 'pending') {
+            if (product.available_quantity >= qty) {
+              await Product.findByIdAndUpdate(product._id, {
+                $inc: { available_quantity: -qty }
+              });
+              console.log(`Reduced quantity for product ${product._id} by ${qty}`);
+            }
+          }
+          // If status becomes 'successful' or 'complete', return stock
+          else if (['successful', 'complete'].includes(internal)) {
+             // Only return if it was previously approved/active/delivery (when stock was actually reduced)
+             if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
+              await Product.findByIdAndUpdate(product._id, {
+                $inc: { available_quantity: qty }
+              });
+              console.log(`Returned stock for product ${product._id} by ${qty}`);
+            }
+          }
+        }
+      }
+
+      // Send email to user based on status
+      try {
+        const emailService = require('../services/email.service');
+        const user = updated.user_id;
+        const product = updated.product_id;
+        
+        if (user && user.email) {
+          const userName = user.first_name || user.firstName || 'User';
+          const productName = product?.product_name || 'Your Product';
+          const startDate = updated.start_date ? new Date(updated.start_date).toLocaleDateString('en-GB') : 'N/A';
+          const endDate = updated.end_date ? new Date(updated.end_date).toLocaleDateString('en-GB') : 'N/A';
+          
+          if (internal === 'approval') {
+            // Send approval email
+            const subject = `Quote Approved! 🎉 - ${productName}`;
+            const html = `
+<div style="margin:0; padding:0; background-color:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="max-width:620px; margin:20px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <tr>
+      <td style="background:#059669; text-align:center; padding:35px 20px;">
+        <h1 style="color:#fff; margin:0; font-size:28px; font-weight:bold;">Quote Approved! 🎉</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:35px 30px; color:#333; font-size:15px; line-height:1.7;">
+        <h2 style="margin:0 0 20px; color:#232323;">Hi ${userName}, 👋</h2>
+        <p>Great news! Your quote for <strong>${productName}</strong> has been <strong style="color:#059669;">APPROVED</strong> by the vendor.</p>
+        
+        <div style="margin:30px 0; padding:20px; background:#f0fdf4; border-left:5px solid #059669; border-radius:8px;">
+          <h3 style="margin:0 0 15px; color:#059669;">📋 Quote Details</h3>
+          <table width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;">
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Product:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${productName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Start Date:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${startDate}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>End Date:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${endDate}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Status:</strong></td>
+              <td style="padding:8px 0; text-align:right;"><span style="background:#059669; color:white; padding:4px 12px; border-radius:4px; font-size:12px; font-weight:bold;">APPROVED</span></td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="margin:25px 0;">You can now proceed with the rental. Please check your dashboard for more details.</p>
+        <p style="margin-top:35px;">Best regards,<br><strong>The Upleex Team</strong></p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#059669; padding:20px; text-align:center; color:#fff; font-size:13px;">
+        © ${new Date().getFullYear()} Upleex. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>
+            `;
+            await emailService.sendEmail(user.email, subject, '');
+            // Send HTML email
+            const transporter = emailService.transport;
+            await transporter.sendMail({
+              from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
+              to: user.email,
+              subject,
+              html
+            });
+          } else if (internal === 'reject') {
+            // Send rejection email
+            const subject = `Quote Rejected - ${productName}`;
+            const html = `
+<div style="margin:0; padding:0; background-color:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="max-width:620px; margin:20px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <tr>
+      <td style="background:#dc2626; text-align:center; padding:35px 20px;">
+        <h1 style="color:#fff; margin:0; font-size:28px; font-weight:bold;">Quote Rejected</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:35px 30px; color:#333; font-size:15px; line-height:1.7;">
+        <h2 style="margin:0 0 20px; color:#232323;">Hi ${userName}, 👋</h2>
+        <p>We regret to inform you that your quote for <strong>${productName}</strong> has been <strong style="color:#dc2626;">REJECTED</strong> by the vendor.</p>
+        
+        <div style="margin:30px 0; padding:20px; background:#fef2f2; border-left:5px solid #dc2626; border-radius:8px;">
+          <h3 style="margin:0 0 15px; color:#dc2626;">📋 Quote Details</h3>
+          <table width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;">
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Product:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${productName}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Start Date:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${startDate}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>End Date:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333;">${endDate}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Status:</strong></td>
+              <td style="padding:8px 0; text-align:right;"><span style="background:#dc2626; color:white; padding:4px 12px; border-radius:4px; font-size:12px; font-weight:bold;">REJECTED</span></td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="margin:25px 0;">You can try requesting a new quote or contact the vendor for more information.</p>
+        <p style="margin-top:35px;">Best regards,<br><strong>The Upleex Team</strong></p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#dc2626; padding:20px; text-align:center; color:#fff; font-size:13px;">
+        © ${new Date().getFullYear()} Upleex. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>
+            `;
+            const transporter = emailService.transport;
+            await transporter.sendMail({
+              from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
+              to: user.email,
+              subject,
+              html
+            });
+          }
+        }
+      } catch (emailError) {
+        console.log('Email sending error:', emailError);
+        // Don't fail the request if email fails
       }
 
       res.status(httpStatus.OK).json({ status: 200, message: 'Status updated', data: updated });
