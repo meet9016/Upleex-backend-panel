@@ -1,8 +1,10 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
-const { Product } = require('../models');
+const { Product, ProductMonth, ProductType, Category, SubCategory } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
+const { sendProductApprovalEmail } = require('../services/email.service');
 
 // Get all vendors with pending product count
 const getAllVendors = {
@@ -62,10 +64,16 @@ const getVendorProducts = {
 
 // Approve single product
 const approveProduct = {
+  validation: {
+    body: Joi.object().keys({
+      approval_status: Joi.string().valid('approved', 'rejected').optional(),
+      rejection_reason: Joi.string().allow('').optional()
+    })
+  },
   handler: async (req, res) => {
     try {
       const { productId } = req.params;
-      const { approval_status } = req.body;
+      const { approval_status, rejection_reason } = req.body;
       
       const product = await Product.findById(productId);
       if (!product) {
@@ -113,9 +121,79 @@ const approveProduct = {
       // Update product approval status
       const updatedProduct = await Product.findByIdAndUpdate(
         productId,
-        { approval_status: newStatus },
+        { 
+          approval_status: newStatus,
+          rejection_reason: newStatus === 'rejected' ? (rejection_reason || '') : ''
+        },
         { new: true }
       );
+
+      // Send email notification to vendor
+      let vendorEmail = '';
+      let vendorName = 'Vendor';
+      try {
+        console.log(`\n--- DEBUG: EMAIL NOTIFICATION LOGIC START ---`);
+        console.log(`Product Name: ${updatedProduct.product_name}`);
+        console.log(`Product Vendor ID (from DB): "${updatedProduct.vendor_id}"`);
+        
+        // 1. Primary source: Vendor model
+        let vendorDoc = await Vendor.findById(updatedProduct.vendor_id);
+        if (vendorDoc) {
+          console.log(`✅ Found Vendor document: ${vendorDoc.email}`);
+          vendorEmail = vendorDoc.email;
+          vendorName = vendorDoc.full_name || 'Vendor';
+        } else {
+          console.log(`❌ Vendor document not found by ID, searching by vendor_id field...`);
+          vendorDoc = await Vendor.findOne({ vendor_id: updatedProduct.vendor_id });
+          if (vendorDoc) {
+            console.log(`✅ Found Vendor document by field: ${vendorDoc.email}`);
+            vendorEmail = vendorDoc.email;
+            vendorName = vendorDoc.full_name || 'Vendor';
+          }
+        }
+
+        // 2. Secondary source / Fallback: VendorKyc
+        if (!vendorEmail) {
+          console.log(`Searching in VendorKyc as fallback...`);
+          let kycDoc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': updatedProduct.vendor_id });
+          if (!kycDoc) {
+            kycDoc = await VendorKyc.findOne({ vendor_id: updatedProduct.vendor_id });
+          }
+
+          if (kycDoc && kycDoc.ContactDetails && kycDoc.ContactDetails.email) {
+            console.log(`✅ Found VendorKyc fallback email: ${kycDoc.ContactDetails.email}`);
+            vendorEmail = kycDoc.ContactDetails.email;
+            vendorName = vendorName === 'Vendor' ? (kycDoc.ContactDetails.full_name || 'Vendor') : vendorName;
+          }
+        }
+        
+        if (vendorEmail) {
+          // If rejection reason is missing, provide a professional default
+          const finalReason = (newStatus === 'rejected' && (!rejection_reason || rejection_reason.trim() === ''))
+            ? 'Product does not meet our quality standards or guidelines.'
+            : rejection_reason;
+
+          console.log(`CRITICAL: Sending ${newStatus} email to: ${vendorEmail}`);
+          await sendProductApprovalEmail(
+            vendorEmail,
+            vendorName,
+            updatedProduct.product_name,
+            newStatus,
+            finalReason || '',
+            {
+              image: updatedProduct.product_main_image,
+              category: updatedProduct.category_name,
+              price: updatedProduct.price,
+              sku: updatedProduct.sku
+            }
+          );
+        } else {
+          console.warn(`CRITICAL WARNING: No email found for vendor_id: "${updatedProduct.vendor_id}" in Vendor or VendorKyc!`);
+        }
+        console.log(`--- DEBUG: EMAIL NOTIFICATION LOGIC END ---\n`);
+      } catch (emailError) {
+        console.error('ERROR in email notification logic:', emailError);
+      }
 
       const vendorId = updatedProduct.vendor_id;
       const pending = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'pending' });
@@ -130,6 +208,7 @@ const approveProduct = {
         status: 200,
         message: message,
         vendor_id: vendorId,
+        vendor_email: vendorEmail,
         counts: { pending, approved, rejected },
         data: updatedProduct
       });
@@ -190,8 +269,73 @@ const bulkApproveProducts = {
       // Update all products to approved
       await Product.updateMany(
         { _id: { $in: product_ids } },
-        { $set: { approval_status: 'approved' } }
+        { $set: { approval_status: 'approved', rejection_reason: '' } }
       );
+
+      // Send email notifications (background-ish)
+      const sendEmails = async () => {
+        try {
+          const approvedProducts = await Product.find({ _id: { $in: product_ids } });
+          const vendorIds = [...new Set(approvedProducts.map(p => p.vendor_id))];
+          
+          // Fetch vendors from both models for robustness
+          const [vendors, kycs] = await Promise.all([
+            Vendor.find({ _id: { $in: vendorIds } }),
+            VendorKyc.find({
+              $or: [
+                { 'ContactDetails.vendor_id': { $in: vendorIds } },
+                { 'vendor_id': { $in: vendorIds } }
+              ]
+            })
+          ]);
+          
+          const vendorMap = {};
+          
+          // Kyc as fallback
+          kycs.forEach(v => {
+            const vid = v.ContactDetails?.vendor_id || v.vendor_id;
+            if (vid) {
+              vendorMap[vid] = {
+                email: v.ContactDetails?.email,
+                name: v.ContactDetails?.full_name || 'Vendor'
+              };
+            }
+          });
+
+          // Vendor model takes precedence
+          vendors.forEach(v => {
+            vendorMap[v._id.toString()] = {
+              email: v.email,
+              name: v.full_name || 'Vendor'
+            };
+          });
+  
+          for (const product of approvedProducts) {
+            const vendorInfo = vendorMap[product.vendor_id];
+            if (vendorInfo && vendorInfo.email) {
+              console.log(`Sending approval email to vendor: ${vendorInfo.email} for product: ${product.product_name}`);
+              await sendProductApprovalEmail(
+                vendorInfo.email,
+                vendorInfo.name,
+                product.product_name,
+                'approved',
+                '',
+                {
+                  image: product.product_main_image,
+                  category: product.category_name,
+                  price: product.price,
+                  sku: product.sku
+                }
+              );
+            } else {
+              console.warn(`Could not find vendor email for product ${product._id} (vendor_id: ${product.vendor_id})`);
+            }
+          }
+        } catch (emailError) {
+          console.error('Error sending bulk approval emails:', emailError);
+        }
+      };
+      sendEmails(); // Run in background
 
       const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
@@ -225,17 +369,90 @@ const bulkApproveProducts = {
 const bulkRejectProducts = {
   validation: {
     body: Joi.object().keys({
-      product_ids: Joi.array().items(Joi.string().required()).min(1).required()
+      product_ids: Joi.array().items(Joi.string().required()).min(1).required(),
+      rejection_reason: Joi.string().allow('').optional()
     })
   },
   handler: async (req, res) => {
     try {
-      const { product_ids } = req.body;
+      const { product_ids, rejection_reason } = req.body;
 
       await Product.updateMany(
         { _id: { $in: product_ids } },
-        { $set: { approval_status: 'rejected' } }
+        { $set: { approval_status: 'rejected', rejection_reason: rejection_reason || '' } }
       );
+
+      // Send email notifications (background-ish)
+      const sendEmails = async () => {
+        try {
+          const rejectedProducts = await Product.find({ _id: { $in: product_ids } });
+          const vendorIds = [...new Set(rejectedProducts.map(p => p.vendor_id))];
+          
+          // Fetch vendors from both models for robustness
+          const [vendors, kycs] = await Promise.all([
+            Vendor.find({ _id: { $in: vendorIds } }),
+            VendorKyc.find({
+              $or: [
+                { 'ContactDetails.vendor_id': { $in: vendorIds } },
+                { 'vendor_id': { $in: vendorIds } }
+              ]
+            })
+          ]);
+          
+          const vendorMap = {};
+          
+          // Kyc as fallback
+          kycs.forEach(v => {
+            const vid = v.ContactDetails?.vendor_id || v.vendor_id;
+            if (vid) {
+              vendorMap[vid] = {
+                email: v.ContactDetails?.email,
+                name: v.ContactDetails?.full_name || 'Vendor'
+              };
+            }
+          });
+
+          // Vendor model takes precedence
+          vendors.forEach(v => {
+            vendorMap[v._id.toString()] = {
+              email: v.email,
+              name: v.full_name || 'Vendor'
+            };
+          });
+ 
+          for (const product of rejectedProducts) {
+            const vendorInfo = vendorMap[product.vendor_id];
+            if (vendorInfo && vendorInfo.email) {
+              const vendorEmail = vendorInfo.email;
+              
+              // If rejection reason is missing, provide a professional default
+              const finalReason = (!rejection_reason || rejection_reason.trim() === '')
+                ? 'Product does not meet our quality standards or guidelines.'
+                : rejection_reason;
+
+              console.log(`Sending rejection email to vendor: ${vendorEmail} for product: ${product.product_name}`);
+              await sendProductApprovalEmail(
+                vendorEmail,
+                vendorInfo.name,
+                product.product_name,
+                'rejected',
+                finalReason || '',
+                {
+                  image: product.product_main_image,
+                  category: product.category_name,
+                  price: product.price,
+                  sku: product.sku
+                }
+              );
+            } else {
+              console.warn(`Could not find vendor email for product ${product._id} (vendor_id: ${product.vendor_id})`);
+            }
+          }
+        } catch (emailError) {
+          console.error('Error sending bulk rejection emails:', emailError);
+        }
+      };
+      sendEmails(); // Run in background
 
       const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);

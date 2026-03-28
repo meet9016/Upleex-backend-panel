@@ -101,6 +101,7 @@ router.get(
 router.put(
   '/approve/:productId',
   auth(),
+  validate(productApprovalController.approveProduct.validation),
   catchAsync(productApprovalController.approveProduct.handler)
 );
 

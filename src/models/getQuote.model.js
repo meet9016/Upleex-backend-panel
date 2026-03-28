@@ -7,6 +7,7 @@ const STATUS = {
   REJECT: 'reject',
   COMPLETE: 'complete',
   SUCCESSFUL: 'successful',
+  DELIVERY: 'delivery',
 };
 
 const getQuoteSchema = new mongoose.Schema(
@@ -69,6 +70,14 @@ const getQuoteSchema = new mongoose.Schema(
     },
     end_date: {
       type: Date,
+    },
+    start_time: {
+      type: String,
+      trim: true,
+    },
+    end_time: {
+      type: String,
+      trim: true,
     },
     upload_image: {
       type: String,
