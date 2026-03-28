@@ -72,12 +72,13 @@ const approveProduct = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
-      if (product.approval_status === 'approved') {
+      const newStatus = approval_status || 'approved';
+      
+      // If the product is already approved and we are trying to approve it again, return early
+      if (product.approval_status === 'approved' && newStatus === 'approved') {
         return res.status(400).json({ message: 'Product is already approved' });
       }
 
-      const newStatus = approval_status || 'approved';
-      
       // If approving a paid product, deduct money from wallet
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
         const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);

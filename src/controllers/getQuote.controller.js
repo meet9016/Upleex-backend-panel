@@ -152,12 +152,22 @@ const getAllQuotes = {
         }
       }
 
-      // Search by note or status
+      // Search by note, status, or product name
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
+        
+        // Find matching products within current user scope
+        const productSearchQuery = { product_name: searchRegex };
+        if (user.userType === 'vendor') {
+          productSearchQuery.vendor_id = user._id;
+        }
+        const matchingProducts = await Product.find(productSearchQuery).select('_id');
+        const productIds = matchingProducts.map(p => p._id);
+
         query.$or = [
           { note: searchRegex },
           { status: searchRegex },
+          { product_id: { $in: productIds } }
         ];
       }
 
@@ -327,12 +337,18 @@ const getAllQuotesForAdmin = {
         }
       }
 
-      // Search by note or status
+      // Search by note, status, or product name
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
+        
+        // Find matching products
+        const matchingProducts = await Product.find({ product_name: searchRegex }).select('_id');
+        const productIds = matchingProducts.map(p => p._id);
+
         query.$or = [
           { note: searchRegex },
           { status: searchRegex },
+          { product_id: { $in: productIds } }
         ];
       }
 
