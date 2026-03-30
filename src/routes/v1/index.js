@@ -27,6 +27,7 @@ const servicesRoute = require('./services.route');
 const serviceCategoriesRoute = require('./serviceCategories.route');
 const walletRoute = require('./wallet.route');
 const bannersRoute = require('./banners.route');
+const vendorDashboardRoute = require('./vendorDashboard.route');
 
 const router = express.Router();
 
@@ -140,6 +141,10 @@ const defaultRoutes = [
   {
     path: '/banners',
     route: bannersRoute,
+  },
+  {
+    path: '/vendor/dashboard',
+    route: vendorDashboardRoute,
   },
 ];
 

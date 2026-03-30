@@ -165,7 +165,7 @@ const sendKycApprovalEmail = async (to, vendorName) => {
 
         <!-- CTA Button -->
         <div style="text-align:center; margin:30px 0;">
-          <a href="${process.env.VENDOR_PANEL_URL || 'https://vendor.upleex.com'}/dashboard" 
+          <a href="${process.env.VENDOR_PANEL_URL || 'https://vendor.upleex.com'}" 
              style="display:inline-block; background:#059669; color:#fff; padding:15px 30px; 
                     text-decoration:none; border-radius:8px; font-size:16px; font-weight:bold;">
             Go to Dashboard →
