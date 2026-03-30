@@ -61,6 +61,12 @@ const getVendorServices = {
 
 // Approve single service
 const approveService = {
+  validation: {
+    body: Joi.object().keys({
+      approval_status: Joi.string().valid('approved', 'rejected', 'pending').optional(),
+      rejection_reason: Joi.string().allow('').optional()
+    })
+  },
   handler: async (req, res) => {
     try {
       const { serviceId } = req.params;

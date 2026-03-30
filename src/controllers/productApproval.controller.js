@@ -66,7 +66,7 @@ const getVendorProducts = {
 const approveProduct = {
   validation: {
     body: Joi.object().keys({
-      approval_status: Joi.string().valid('approved', 'rejected').optional(),
+      approval_status: Joi.string().valid('approved', 'rejected', 'pending').optional(),
       rejection_reason: Joi.string().allow('').optional()
     })
   },
