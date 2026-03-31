@@ -101,7 +101,8 @@ const getAllCategories = {
           // Fetch approved product count for this category
           const productCount = await Product.countDocuments({ 
             category_id: String(catId),
-            approval_status: 'approved'
+            approval_status: 'approved',
+            is_visible: true
           });
 
           // Fetch subcategories for this category
@@ -156,7 +157,8 @@ const getCategoryById = {
       // Fetch approved product count for this category
       const productCount = await Product.countDocuments({ 
         category_id: String(catId),
-        approval_status: 'approved'
+        approval_status: 'approved',
+        is_visible: true
       });
 
       // Fetch subcategories for this category
