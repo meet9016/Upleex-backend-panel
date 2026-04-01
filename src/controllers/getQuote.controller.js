@@ -133,6 +133,12 @@ const getAllQuotes = {
         month,
         delivery_start_date,
         delivery_end_date,
+        vendor_id,
+        user_id,
+        price_min,
+        price_max,
+        sort_by,
+        sort_order,
         page = 1,
         limit = 10
       } = req.query;
@@ -154,14 +160,35 @@ const getAllQuotes = {
         query.user_id = user._id;
       }
 
-      // Filter by status
+      // Multiple status filter support
       if (status) {
-        query.status = status;
+        const statusValues = Array.isArray(status) ? status : status.split(',');
+        query.status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
       }
 
-      // Filter by month (direct field in GetQuote)
+      // Multiple month filter support
       if (month) {
-        query.months_id = month;
+        const monthValues = Array.isArray(month) ? month : month.split(',');
+        query.months_id = monthValues.length === 1 ? monthValues[0] : { $in: monthValues };
+      }
+
+      // Vendor filter (for admin)
+      if (vendor_id && user.userType === 'admin') {
+        const vendorProducts = await Product.find({ vendor_id }).select('_id');
+        const productIds = vendorProducts.map(p => p._id);
+        query.product_id = { $in: productIds };
+      }
+
+      // User filter (for admin)
+      if (user_id && user.userType === 'admin') {
+        query.user_id = user_id;
+      }
+
+      // Price range filter
+      if (price_min || price_max) {
+        query.calculated_price = {};
+        if (price_min) query.calculated_price.$gte = Number(price_min);
+        if (price_max) query.calculated_price.$lte = Number(price_max);
       }
 
       // Filter by delivery date range
@@ -201,35 +228,94 @@ const getAllQuotes = {
       const limitNum = parseInt(limit) || 10;
       const skip = (pageNum - 1) * limitNum;
 
+      // Sorting
+      let sortOptions = { createdAt: -1 }; // default sort
+      if (sort_by) {
+        const sortOrderValue = sort_order === 'asc' ? 1 : -1;
+        switch (sort_by) {
+          case 'price':
+            sortOptions = { calculated_price: sortOrderValue };
+            break;
+          case 'date':
+            sortOptions = { createdAt: sortOrderValue };
+            break;
+          case 'status':
+            sortOptions = { status: sortOrderValue };
+            break;
+          case 'delivery_date':
+            sortOptions = { delivery_date: sortOrderValue };
+            break;
+          default:
+            sortOptions = { createdAt: -1 };
+        }
+      }
+
       // If we have product-related filters, we need to handle differently
       if (product_type || listing_type) {
+        console.log('🔍 Product-based filtering:', { product_type, listing_type });
+        
         // Get all quotes matching basic criteria with populated product
         let quotesQuery = GetQuote.find(query)
           .populate({
             path: 'product_id',
           })
+          .sort(sortOptions)
           .lean();
 
         const allQuotes = await quotesQuery;
+        console.log('📊 All quotes before product filtering:', allQuotes.length);
         
         // Apply product-based filters
         const filteredQuotes = allQuotes.filter(quote => {
           const product = quote.product_id;
-          if (!product) return false;
-
-          // Filter by product type
-          if (product_type && product.product_type_id !== product_type) {
+          if (!product) {
+            console.log('❌ Quote without product:', quote._id);
             return false;
           }
 
-          // Filter by listing type
-          if (listing_type && product.product_listing_type_id !== listing_type) {
-            return false;
+          // Multiple product type filter
+          if (product_type) {
+            const productTypes = Array.isArray(product_type) ? product_type : product_type.split(',');
+            console.log('🔍 Checking product type:', {
+              productTypes,
+              productTypeId: product.product_type_id,
+              productTypeName: product.product_type_name
+            });
+            
+            const matchesType = productTypes.includes(product.product_type_id) || 
+                               productTypes.includes(product.product_type_name) ||
+                               productTypes.includes(String(product.product_type_id));
+            
+            if (!matchesType) {
+              console.log('❌ Product type mismatch for quote:', quote._id);
+              return false;
+            }
+          }
+
+          // Multiple listing type filter
+          if (listing_type) {
+            const listingTypes = Array.isArray(listing_type) ? listing_type : listing_type.split(',');
+            console.log('🔍 Checking listing type:', {
+              listingTypes,
+              productListingTypeId: product.product_listing_type_id,
+              productListingTypeName: product.product_listing_type_name
+            });
+            
+            const matchesListing = listingTypes.includes(product.product_listing_type_id) || 
+                                  listingTypes.includes(product.product_listing_type_name) ||
+                                  listingTypes.includes(String(product.product_listing_type_id));
+            
+            if (!matchesListing) {
+              console.log('❌ Listing type mismatch for quote:', quote._id);
+              return false;
+            }
           }
 
           return true;
         });
 
+        console.log('✅ Filtered quotes count:', filteredQuotes.length);
+        
         // Apply pagination manually
         const total = filteredQuotes.length;
         const paginatedQuotes = filteredQuotes.slice(skip, skip + limitNum);
@@ -306,7 +392,7 @@ const getAllQuotes = {
         };
 
         // Use handlePagination
-        await handlePagination(GetQuote, req, res, query, { createdAt: -1 });
+        await handlePagination(GetQuote, req, res, query, sortOptions);
       }
 
     } catch (error) {

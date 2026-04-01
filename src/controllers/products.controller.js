@@ -460,11 +460,19 @@ const getAllProducts = {
       filter_rent_sell,
       filter_tenure,
       search,
-      vendor_id: queryVendorId, // Explicit vendor_id from query
+      vendor_id: queryVendorId,
       status: queryStatus,
+      approval_status,
+      product_type,
+      listing_type,
+      price_min,
+      price_max,
+      city,
+      sort_by,
+      sort_order
     } = req.query;
 
-    const bodyVendorId = req.body.vendor_id; // Support vendor_id from POST body
+    const bodyVendorId = req.body.vendor_id;
     const vendor_id = queryVendorId || bodyVendorId;
     const bodyStatus = req.body.status;
     const statusFilter = queryStatus || bodyStatus;
@@ -491,51 +499,93 @@ const getAllProducts = {
       query.is_visible = true;
     }
 
+    // Multiple filter support
+    const searchConditions = [];
+    
     // Add search functionality
     if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i'); // Case-insensitive search
-      query.$or = [
-        { product_name: searchRegex },
-        { description: searchRegex },
-        { product_type_name: searchRegex },
-        { category_name: searchRegex },
-        { sub_category_name: searchRegex },
-        { brand: searchRegex },
-        { model: searchRegex },
-        { sku: searchRegex },
-        { tags: { $in: [searchRegex] } } // Search in tags array if exists
-      ];
+      const searchRegex = new RegExp(search.trim(), 'i');
+      searchConditions.push({
+        $or: [
+          { product_name: searchRegex },
+          { description: searchRegex },
+          { product_type_name: searchRegex },
+          { category_name: searchRegex },
+          { sub_category_name: searchRegex },
+          { brand: searchRegex },
+          { model: searchRegex },
+          { sku: searchRegex },
+          { tags: { $in: [searchRegex] } }
+        ]
+      });
     }
 
+    // Category filter
     if (category_id) {
-      query.category_id = category_id;
+      const categoryIds = Array.isArray(category_id) ? category_id : category_id.split(',');
+      query.category_id = { $in: categoryIds };
     }
 
+    // Sub-category filter
     if (sub_category_id && sub_category_id !== 'all') {
-      query.sub_category_id = sub_category_id;
-    }
-    if (statusFilter && ['active', 'draft', 'inactive'].includes(String(statusFilter))) {
-      query.status = String(statusFilter);
+      const subCategoryIds = Array.isArray(sub_category_id) ? sub_category_id : sub_category_id.split(',');
+      query.sub_category_id = { $in: subCategoryIds };
     }
 
-    // Rent / Sell filter - filter_rent_sell: 1 = Rent, 2 = Sell
-    if (filter_rent_sell === '1') {
-      query.product_type_name = 'Rent';
-    } else if (filter_rent_sell === '2') {
-      query.product_type_name = 'Sell';
-    }
-
-    if (filter_tenure && filter_tenure !== '0') {
-      const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
-      const tenureName = tenureMap[filter_tenure];
-      if (tenureName) {
-        const orArr = query.$or ? [...query.$or] : [];
-        orArr.push({ product_listing_type_id: filter_tenure });
-        orArr.push({ product_listing_type_name: tenureName });
-        query.$or = orArr;
-      } else {
-        query.product_listing_type_id = filter_tenure;
+    // Status filter
+    if (statusFilter) {
+      const statusValues = Array.isArray(statusFilter) ? statusFilter : statusFilter.split(',');
+      const validStatuses = statusValues.filter(s => ['active', 'draft', 'inactive'].includes(String(s)));
+      if (validStatuses.length > 0) {
+        query.status = validStatuses.length === 1 ? validStatuses[0] : { $in: validStatuses };
       }
+    }
+
+    // Approval status filter
+    if (approval_status) {
+      const approvalValues = Array.isArray(approval_status) ? approval_status : approval_status.split(',');
+      query.approval_status = approvalValues.length === 1 ? approvalValues[0] : { $in: approvalValues };
+    }
+
+    // Product type filter (Rent/Sell)
+    if (filter_rent_sell || product_type) {
+      const typeFilter = filter_rent_sell || product_type;
+      const typeValues = Array.isArray(typeFilter) ? typeFilter : typeFilter.split(',');
+      const types = typeValues.map(t => t === '1' ? 'Rent' : t === '2' ? 'Sell' : t);
+      query.product_type_name = types.length === 1 ? types[0] : { $in: types };
+    }
+
+    // Listing type filter (tenure)
+    if (filter_tenure || listing_type) {
+      const tenureFilter = filter_tenure || listing_type;
+      const tenureValues = Array.isArray(tenureFilter) ? tenureFilter : tenureFilter.split(',');
+      const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
+      
+      const tenureNames = tenureValues.map(t => tenureMap[t] || t).filter(Boolean);
+      if (tenureNames.length > 0) {
+        query.$or = query.$or || [];
+        query.$or.push(
+          { product_listing_type_name: tenureNames.length === 1 ? tenureNames[0] : { $in: tenureNames } },
+          { product_listing_type_id: tenureValues.length === 1 ? tenureValues[0] : { $in: tenureValues } }
+        );
+      }
+    }
+
+    // Price range filter
+    if (price_min || price_max) {
+      query.price = {};
+      if (price_min) query.price.$gte = Number(price_min);
+      if (price_max) query.price.$lte = Number(price_max);
+    }
+
+    // City filter
+    if (city) {
+      searchConditions.push({ vendor_city_name: new RegExp(city, 'i') });
+    }
+
+    // Combine search conditions with AND logic
+    if (searchConditions.length > 0) {
+      query.$and = (query.$and || []).concat(searchConditions);
     }
 
     try {
@@ -543,10 +593,32 @@ const getAllProducts = {
       const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 100);
       const skip = (pageNum - 1) * limitNum;
 
-      console.log("Product query:", JSON.stringify(query, null, 2)); // Debug log
+      console.log("Product query:", JSON.stringify(query, null, 2));
+
+      // Sorting
+      let sortOptions = { createdAt: -1 }; // default sort
+      if (sort_by) {
+        const sortOrder = sort_order === 'asc' ? 1 : -1;
+        switch (sort_by) {
+          case 'price':
+            sortOptions = { price: sortOrder };
+            break;
+          case 'name':
+            sortOptions = { product_name: sortOrder };
+            break;
+          case 'date':
+            sortOptions = { createdAt: sortOrder };
+            break;
+          case 'popularity':
+            sortOptions = { views: sortOrder };
+            break;
+          default:
+            sortOptions = { createdAt: -1 };
+        }
+      }
 
       const total = await Product.countDocuments(query);
-      let dataQuery = Product.find(query).sort({ createdAt: -1 });
+      let dataQuery = Product.find(query).sort(sortOptions);
 
       if (limitNum) {
         dataQuery = dataQuery.skip(skip).limit(limitNum);
