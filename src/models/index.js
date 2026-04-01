@@ -19,4 +19,5 @@ module.exports.ServiceCategory = require('./serviceCategory.model');
 module.exports.KycNotification = require('./vendor/kycNotification.model');
 module.exports.Wallet = require('./wallet.model');
 module.exports.Banner = require('./banner.model');
+module.exports.Contact = require('./contact.model');
 
