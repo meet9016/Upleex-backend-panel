@@ -14,3 +14,4 @@ module.exports.serviceCategoriesController = require('./serviceCategories.contro
 module.exports.productApprovalController = require('./productApproval.controller');
 module.exports.serviceApprovalController = require('./serviceApproval.controller');
 module.exports.bannerController = require('./banner.controller');
+module.exports.contactsController = require('./contacts.controller');
