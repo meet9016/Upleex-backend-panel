@@ -555,8 +555,27 @@ const getAllProducts = {
       query.product_type_name = types.length === 1 ? types[0] : { $in: types };
     }
 
+    let customSortOptions = null;
+    let isSpecialTenureFilter = false;
+
+    if (filter_tenure) {
+      if (filter_tenure === 'Price: Low to High') {
+        customSortOptions = { price: 1 };
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Price: High to Low') {
+        customSortOptions = { price: -1 };
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Product: New') {
+        query.is_new = true;
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Product: Old') {
+        query.is_new = false;
+        isSpecialTenureFilter = true;
+      }
+    }
+
     // Listing type filter (tenure)
-    if (filter_tenure || listing_type) {
+    if ((filter_tenure || listing_type) && !isSpecialTenureFilter) {
       const tenureFilter = filter_tenure || listing_type;
       const tenureValues = Array.isArray(tenureFilter) ? tenureFilter : tenureFilter.split(',');
       const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
@@ -597,7 +616,9 @@ const getAllProducts = {
 
       // Sorting
       let sortOptions = { createdAt: -1 }; // default sort
-      if (sort_by) {
+      if (customSortOptions) {
+        sortOptions = customSortOptions;
+      } else if (sort_by) {
         const sortOrder = sort_order === 'asc' ? 1 : -1;
         switch (sort_by) {
           case 'price':
@@ -618,7 +639,7 @@ const getAllProducts = {
       }
 
       const total = await Product.countDocuments(query);
-      let dataQuery = Product.find(query).sort(sortOptions);
+      let dataQuery = Product.find(query).collation({ locale: 'en_US', numericOrdering: true }).sort(sortOptions);
 
       if (limitNum) {
         dataQuery = dataQuery.skip(skip).limit(limitNum);
@@ -755,7 +776,26 @@ const getVendorProducts = {
     } else if (filter_rent_sell === '2') {
       query.product_type_name = 'Sell';
     }
-    if (filter_tenure && filter_tenure !== '0') {
+    let customSortOptions = null;
+    let isSpecialTenureFilter = false;
+
+    if (filter_tenure) {
+      if (filter_tenure === 'Price: Low to High') {
+        customSortOptions = { price: 1 };
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Price: High to Low') {
+        customSortOptions = { price: -1 };
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Product: New') {
+        query.is_new = true;
+        isSpecialTenureFilter = true;
+      } else if (filter_tenure === 'Product: Old') {
+        query.is_new = false;
+        isSpecialTenureFilter = true;
+      }
+    }
+
+    if (filter_tenure && filter_tenure !== '0' && !isSpecialTenureFilter) {
       const tenureMap = { '1': 'Daily', '2': 'Monthly', '3': 'Hourly' };
       const tenureName = tenureMap[filter_tenure];
       if (tenureName) {
@@ -774,7 +814,7 @@ const getVendorProducts = {
       const skip = (page - 1) * limit;
 
       const total = await Product.countDocuments(query);
-      let dataQuery = Product.find(query).sort({ createdAt: -1 });
+      let dataQuery = Product.find(query).collation({ locale: 'en_US', numericOrdering: true }).sort(customSortOptions ? customSortOptions : { createdAt: -1 });
       if (limit) {
         dataQuery = dataQuery.skip(skip).limit(limit);
       }
