@@ -7,28 +7,79 @@ const VendorPayment = require('../models/vendorPayment.model');
 const getVendorOrders = {
   handler: catchAsync(async (req, res) => {
     const vendorId = req.user.id;
-    const { page = 1, limit = 10, status, search } = req.query;
+    const { 
+      page = 1, 
+      limit = 10, 
+      status, 
+      search,
+      payment_status,
+      date_from,
+      date_to,
+      sort_by,
+      sort_order
+    } = req.query;
     
     const filter = {
       'items.vendor_id': vendorId
     };
     
+    // Multiple status filter support
     if (status) {
-      filter.vendor_status = status;
+      const statusValues = Array.isArray(status) ? status : status.split(',');
+      filter.vendor_status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
     }
     
+    // Payment status filter
+    if (payment_status) {
+      const paymentValues = Array.isArray(payment_status) ? payment_status : payment_status.split(',');
+      filter.payment_status = paymentValues.length === 1 ? paymentValues[0] : { $in: paymentValues };
+    }
+    
+    // Date range filter
+    if (date_from || date_to) {
+      filter.createdAt = {};
+      if (date_from) filter.createdAt.$gte = new Date(date_from);
+      if (date_to) filter.createdAt.$lte = new Date(date_to);
+    }
+    
+    // Search filter
     if (search) {
+      const searchRegex = new RegExp(search, 'i');
       filter.$or = [
-        { order_id: { $regex: search, $options: 'i' } },
-        { user_name: { $regex: search, $options: 'i' } },
-        { user_email: { $regex: search, $options: 'i' } }
+        { order_id: searchRegex },
+        { user_name: searchRegex },
+        { user_email: searchRegex },
+        { 'user_id.name': searchRegex },
+        { 'user_id.email': searchRegex }
       ];
     }
     
     const skip = (page - 1) * limit;
     
+    // Sorting
+    let sortOptions = { createdAt: -1 }; // default sort
+    if (sort_by) {
+      const sortOrderValue = sort_order === 'asc' ? 1 : -1;
+      switch (sort_by) {
+        case 'date':
+          sortOptions = { createdAt: sortOrderValue };
+          break;
+        case 'amount':
+          sortOptions = { total_amount: sortOrderValue };
+          break;
+        case 'status':
+          sortOptions = { vendor_status: sortOrderValue };
+          break;
+        case 'order_id':
+          sortOptions = { order_id: sortOrderValue };
+          break;
+        default:
+          sortOptions = { createdAt: -1 };
+      }
+    }
+    
     const orders = await Order.find(filter)
-      .sort({ createdAt: -1 })
+      .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit))
       .populate('user_id', 'name email phone')

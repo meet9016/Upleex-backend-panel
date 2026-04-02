@@ -16,7 +16,7 @@ const auth = (isOptional = false) => async (req, res, next) => {
     // Verify and decode the token
     const decoded = jwt.verify(token, config.jwt.secret);
     
-    // Attach user info to request object
+    // Attach user info to request objectweb-login-register
     req.user = {
       id: decoded.sub,
       _id: decoded.sub,

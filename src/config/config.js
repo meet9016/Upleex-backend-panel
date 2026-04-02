@@ -24,9 +24,13 @@ const envVarsSchema = Joi.object()
     SMTP_PASSWORD: Joi.string().description('password for email server'),
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     FILE_UPLOAD_PATH: Joi.string().description('the path where the files will be uploaded'),
-    BACKEND_URL : Joi.string().description('the backend url'),
+    BACKEND_URL: Joi.string().description('the backend url'),
     RAZORPAY_KEY_ID: Joi.string().description('Razorpay Key ID'),
-    RAZORPAY_KEY_SECRET: Joi.string().description('Razorpay Key Secret')
+    RAZORPAY_KEY_SECRET: Joi.string().description('Razorpay Key Secret'),
+    SMS_GATEWAY_HUB_API_KEY: Joi.string().description('SMS Gateway Hub API Key'),
+    SMS_GATEWAY_HUB_SENDER_ID: Joi.string().description('SMS Gateway Hub Sender ID'),
+    SMS_GATEWAY_HUB_ENTITY_ID: Joi.string().allow('').optional().description('DLT Entity ID'),
+    SMS_GATEWAY_HUB_TEMPLATE_ID: Joi.string().allow('').optional().description('DLT Template ID'),
   })
   .unknown();
 
@@ -68,5 +72,11 @@ module.exports = {
   razorpay: {
     keyId: envVars.RAZORPAY_KEY_ID,
     keySecret: envVars.RAZORPAY_KEY_SECRET,
+  },
+  sms: {
+    apiKey: envVars.SMS_GATEWAY_HUB_API_KEY,
+    senderId: envVars.SMS_GATEWAY_HUB_SENDER_ID,
+    entityId: envVars.SMS_GATEWAY_HUB_ENTITY_ID,
+    templateId: envVars.SMS_GATEWAY_HUB_TEMPLATE_ID,
   },
 };
