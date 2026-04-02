@@ -1,9 +1,9 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { authService, tokenService, emailService } = require('../services');
+const { authService, tokenService, emailService, smsService } = require('../services');
 const Joi = require('joi');
 const ApiError = require('../utils/ApiError');
-const { User, Cart, Payment } = require('../models');
+const { User, Cart, Payment, Otp } = require('../models');
 const { sendWelcomeEmail } = require('../services/email.service');
 const multer = require('multer');
 const path = require('path');
@@ -177,7 +177,7 @@ const getUserProfile = {
         else if (item.cart_type === 'hyperspecialist') identifier = `hyper_${item.hyperspecialist_id?._id || item.hyperspecialist_id}`;
         else if (item.cart_type === 'livecourses') identifier = `live_${item.livecourse_id?._id || item.livecourse_id}_${item.livecourse_module_id}`;
         else if (item.cart_type === 'rapid_tool') identifier = `rapid_${item.exam_category_id?._id || item.exam_category_id}_${item.tool_id}`;
-        
+
         // Use createdAt as a secondary identifier to distinguish between multiple purchases of the same item if they happened at different times
         // But the user wants to see only one if they purchased only one. 
         // If there are duplicates with the same identifier, we only take the first one.
@@ -328,125 +328,142 @@ const webLoginRegister = {
     }),
   },
   handler: async (req, res) => {
-  try {
-    const { number, country_id, otp, name, email } = req.body;
+    try {
+      const { number, country_id, otp, name, email } = req.body;
 
-    const user = await User.findOne({ phone: number });
+      const user = await User.findOne({ phone: number });
 
-    // ✅ SIMPLE OTP CHECK
-    const isOtpProvided = otp && otp.trim() !== '';
+      // ✅ SIMPLE OTP CHECK
+      const isOtpProvided = otp && otp.trim() !== '';
 
-    // ===============================
-    // STEP 1 → SEND OTP
-    // ===============================
-    if (!isOtpProvided) {
-      const userType = user ? 'existing' : 'new';
+      // ===============================
+      // STEP 1 → SEND OTP
+      // ===============================
+      if (!isOtpProvided) {
+        const userType = user ? 'existing' : 'new';
 
-      // TODO: Generate & Send Real OTP here
+        // Generate a random 6-digit OTP
+        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      return res.status(200).send({
-        status: 200,
-        success: true,
-        message: 'OTP sent successfully',
-        data: {
-          user_type: userType
+        // Save/Update OTP in database
+        await Otp.findOneAndUpdate(
+          { phone: number },
+          { otp: generatedOtp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+          { upsert: true, new: true }
+        );
+
+        // Send OTP via SMS
+        await smsService.sendOtp(number, generatedOtp);
+
+        return res.status(200).send({
+          status: 200,
+          success: true,
+          message: 'OTP sent successfully',
+          data: {
+            user_type: userType
+          }
+        });
+      }
+
+      // ===============================
+      // STEP 2 → VERIFY OTP
+      // ===============================
+
+      // Check OTP in database
+      const otpRecord = await Otp.findOne({ phone: number, otp: otp });
+
+      if (!otpRecord) {
+        return res.status(400).send({
+          status: 400,
+          success: false,
+          message: 'Invalid or expired OTP'
+        });
+      }
+
+      // OTP is valid, delete it so it can't be reused
+      await Otp.deleteOne({ _id: otpRecord._id });
+
+      // ===============================
+      // NEW USER REGISTRATION
+      // ===============================
+      if (!user) {
+        if (!name || !email) {
+          return res.status(400).send({
+            status: 400,
+            success: false,
+            message: 'Name and email are required for new users'
+          });
         }
-      });
-    }
+        const existingEmailUser = await User.findOne({ email: email.toLowerCase().trim() });
 
-    // ===============================
-    // STEP 2 → VERIFY OTP
-    // ===============================
+        if (existingEmailUser) {
+          return res.status(400).send({
+            status: 400,
+            success: false,
+            message: 'This email is already registered with another account.'
+          });
+        }
 
-    if (String(otp) !== '123456') {
-      return res.status(400).send({
-        status: 400,
-        success: false,
-        message: 'Invalid OTP'
-      });
-    }
+        // Handle name splitting for first_name and last_name
+        const nameParts = name.trim().split(' ');
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || '.';
 
-    // ===============================
-    // NEW USER REGISTRATION
-    // ===============================
-    if (!user) {
-      if (!name || !email) {
-        return res.status(400).send({
-          status: 400,
-          success: false,
-          message: 'Name and email are required for new users'
+        const newUser = await User.create({
+          phone: number,
+          name: name,
+          // last_name: lastName,
+          email,
+          password: 'otp_user_no_password'
+        });
+
+        const token = await tokenService.generateAuthTokens(newUser, 'user');
+
+        return res.status(200).send({
+          status: 200,
+          success: true,
+          message: 'Registration successful',
+          data: {
+            token: token.access, // token.access is the string itself
+            user: {
+              _id: newUser._id,
+              name: newUser.name,
+              email: newUser.email,
+              phone: newUser.phone
+            }
+          }
         });
       }
- const existingEmailUser = await User.findOne({ email: email.toLowerCase().trim() });
-      
-      if (existingEmailUser) {
-        return res.status(400).send({
-          status: 400,
-          success: false,
-          message: 'This email is already registered with another account.'
-        });
-      }
 
-      // Handle name splitting for first_name and last_name
-      const nameParts = name.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || '.';
-
-      const newUser = await User.create({
-        phone: number,
-        name: name,
-        // last_name: lastName,
-        email,
-        password: 'otp_user_no_password'
-      });
-
-      const token = await tokenService.generateAuthTokens(newUser, 'user');
+      // ===============================
+      // EXISTING USER LOGIN
+      // ===============================
+      const token = await tokenService.generateAuthTokens(user, 'user');
 
       return res.status(200).send({
         status: 200,
         success: true,
-        message: 'Registration successful',
+        message: 'Login successful',
         data: {
           token: token.access, // token.access is the string itself
           user: {
-            _id: newUser._id,
-            name: newUser.name,
-            email: newUser.email,
-            phone: newUser.phone
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone
           }
         }
       });
+
+    } catch (error) {
+      console.error("Web Login Register Error:", error);
+      return res.status(500).send({
+        status: 500,
+        success: false,
+        message: error.message || 'Internal Server Error'
+      });
     }
-
-    // ===============================
-    // EXISTING USER LOGIN
-    // ===============================
-    const token = await tokenService.generateAuthTokens(user, 'user');
-
-    return res.status(200).send({
-      status: 200,
-      success: true,
-      message: 'Login successful',
-      data: {
-        token: token.access, // token.access is the string itself
-        user: {
-          _id: user._id,
-           name: user.name,
-          email: user.email,
-          phone: user.phone
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error("Web Login Register Error:", error);
-    return res.status(500).send({
-      status: 500,
-      success: false,
-      message: error.message || 'Internal Server Error'
-    });
   }
-}
 };
 
 module.exports = {
