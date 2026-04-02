@@ -677,12 +677,22 @@ const getAllProducts = {
       const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
       let vendorMap = {};
       if (vendorIds.length) {
-        const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
+        const kycs = await VendorKyc.find({ 'ContactDetails.vendor_id': { $in: vendorIds } }, { 
+          'ContactDetails.vendor_id': 1, 
+          'ContactDetails.city_id': 1, 
+          'ContactDetails.city_name': 1, 
+          'ContactDetails.full_name': 1, 
+          'ContactDetails.address': 1,
+          'Identity.business_name': 1 
+        });
         kycs.forEach((k) => {
-          vendorMap[String(k.vendor_id)] = {
-            city_id: k.city_id || '',
-            city_name: k.city_name || '',
-            vendor_name: (k.business_name || k.full_name || ''),
+          const contact = k.ContactDetails || {};
+          const identity = k.Identity || {};
+          vendorMap[String(contact.vendor_id)] = {
+            city_id: contact.city_id || '',
+            city_name: contact.city_name || '',
+            vendor_name: (identity.business_name || contact.full_name || ''),
+            vendor_address: contact.address || '',
           };
         });
       }
@@ -703,6 +713,7 @@ const getAllProducts = {
           vendor_name: p.vendor_name || v.vendor_name || '',
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
+          vendor_address: v.vendor_address || '',
         };
       });
       
@@ -842,12 +853,22 @@ const getVendorProducts = {
       const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
       let vendorMap = {};
       if (vendorIds.length) {
-        const kycs = await VendorKyc.find({ vendor_id: { $in: vendorIds } }, { vendor_id: 1, city_id: 1, city_name: 1, full_name: 1, business_name: 1 });
+        const kycs = await VendorKyc.find({ 'ContactDetails.vendor_id': { $in: vendorIds } }, { 
+          'ContactDetails.vendor_id': 1, 
+          'ContactDetails.city_id': 1, 
+          'ContactDetails.city_name': 1, 
+          'ContactDetails.full_name': 1, 
+          'ContactDetails.address': 1,
+          'Identity.business_name': 1 
+        });
         kycs.forEach((k) => {
-          vendorMap[String(k.vendor_id)] = {
-            city_id: k.city_id || '',
-            city_name: k.city_name || '',
-            vendor_name: (k.business_name || k.full_name || ''),
+          const contact = k.ContactDetails || {};
+          const identity = k.Identity || {};
+          vendorMap[String(contact.vendor_id)] = {
+            city_id: contact.city_id || '',
+            city_name: contact.city_name || '',
+            vendor_name: (identity.business_name || contact.full_name || ''),
+            vendor_address: contact.address || '',
           };
         });
       }
@@ -868,6 +889,7 @@ const getVendorProducts = {
           vendor_name: p.vendor_name || v.vendor_name || '',
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
+          vendor_address: v.vendor_address || '',
         };
       });
 
@@ -902,6 +924,28 @@ const getProductById = {
 
       if (!product) {
         return res.status(404).json({ message: 'Product not found' });
+      }
+
+      // Add vendor address from KYC data
+      if (product.vendor_id) {
+        const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': product.vendor_id }, {
+          'ContactDetails.address': 1,
+          'ContactDetails.full_name': 1,
+          'ContactDetails.city_id': 1,
+          'ContactDetails.city_name': 1,
+          'Identity.business_name': 1
+        });
+        
+        if (vendorKyc) {
+          const contact = vendorKyc.ContactDetails || {};
+          const identity = vendorKyc.Identity || {};
+          const productObj = product.toObject();
+          productObj.vendor_address = contact.address || '';
+          productObj.vendor_city_id = contact.city_id || '';
+          productObj.vendor_city_name = contact.city_name || '';
+          productObj.vendor_name = productObj.vendor_name || identity.business_name || contact.full_name || '';
+          return res.status(200).json({ status: 200, data: productObj });
+        }
       }
 
       res.status(200).json({ status: 200, data: product });
