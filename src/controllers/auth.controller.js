@@ -341,9 +341,15 @@ const webLoginRegister = {
       // ===============================
       if (!isOtpProvided) {
         const userType = user ? 'existing' : 'new';
+        
+        // Check if request is from upleex.com
+        const origin = req.get('origin') || req.get('referer') || '';
+        const isUpleex = origin.includes('upleex.com');
 
-        // Generate a random 6-digit OTP
-        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generate OTP: random for upleex.com, static 123456 otherwise
+        const generatedOtp = isUpleex 
+          ? Math.floor(100000 + Math.random() * 900000).toString() 
+          : '123456';
 
         // Save/Update OTP in database
         await Otp.findOneAndUpdate(
@@ -352,13 +358,15 @@ const webLoginRegister = {
           { upsert: true, new: true }
         );
 
-        // Send OTP via SMS
-        await smsService.sendOtp(number, generatedOtp);
+        // Send OTP via SMS only if it's from upleex.com
+        if (isUpleex) {
+           await smsService.sendOtp(number, generatedOtp);
+        }
 
         return res.status(200).send({
           status: 200,
           success: true,
-          message: 'OTP sent successfully',
+          message: isUpleex ? 'OTP sent successfully' : 'OTP generated (Static)',
           data: {
             user_type: userType
           }
