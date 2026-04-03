@@ -164,6 +164,15 @@ const productSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    is_priority: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    priority_expiry: {
+      type: Date,
+      index: true,
+    },
   },
   {
     timestamps: true,

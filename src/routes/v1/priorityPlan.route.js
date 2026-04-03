@@ -35,4 +35,17 @@ router.delete(
   catchAsync(priorityPlanController.deletePriorityPlan.handler)
 );
 
+router.post(
+  '/purchase',
+  auth(),
+  validate(priorityPlanController.purchasePriorityPlan.validation),
+  catchAsync(priorityPlanController.purchasePriorityPlan.handler)
+);
+
+router.get(
+  '/vendor/purchases',
+  auth(),
+  catchAsync(priorityPlanController.getVendorPriorityPurchases.handler)
+);
+
 module.exports = router;
