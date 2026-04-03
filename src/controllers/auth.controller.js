@@ -325,11 +325,12 @@ const webLoginRegister = {
       otp: Joi.string().optional(),
       name: Joi.string().optional(),
       email: Joi.string().optional(),
+      url: Joi.string().optional(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { number, country_id, otp, name, email } = req.body;
+      const { number, country_id, otp, name, email, url } = req.body;
 
       const user = await User.findOne({ phone: number });
 
@@ -341,14 +342,20 @@ const webLoginRegister = {
       // ===============================
       if (!isOtpProvided) {
         const userType = user ? 'existing' : 'new';
-        
-        // Check if request is from upleex.com
-        const origin = req.get('origin') || req.get('referer') || '';
-        const isUpleex = origin.includes('upleex.com');
 
-        // Generate OTP: random for upleex.com, static 123456 otherwise
-        const generatedOtp = isUpleex 
-          ? Math.floor(100000 + Math.random() * 900000).toString() 
+        // Identify the source (Web vs Mobile) based on user's latest examples
+        const origin = req.get('origin') || '';
+        const referer = req.get('referer') || '';
+
+        // Case 1: Web Frontend (url matches 'upleex.com' or standard headers)
+        const isFromWebsite = (url === 'upleex.com') || origin.includes('upleex.com') || referer.includes('upleex.com');
+  
+        // Case 2: Mobile App (url is the full API path, e.g. with 'api/api/v1')
+        const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== 'upleex.com');
+    
+        // Real random OTP for the website, static 123456 for mobile app and others
+        const generatedOtp = (isFromWebsite && !isFromMobileApp)
+          ? Math.floor(100000 + Math.random() * 900000).toString()
           : '123456';
 
         // Save/Update OTP in database
@@ -358,15 +365,16 @@ const webLoginRegister = {
           { upsert: true, new: true }
         );
 
-        // Send OTP via SMS only if it's from upleex.com
-        if (isUpleex) {
-           await smsService.sendOtp(number, generatedOtp);
+        // Send real OTP via SMS ONLY for the website
+        const shouldSendSms = (isFromWebsite && !isFromMobileApp);
+        if (shouldSendSms) {
+          await smsService.sendOtp(number, generatedOtp);
         }
 
         return res.status(200).send({
           status: 200,
           success: true,
-          message: isUpleex ? 'OTP sent successfully' : 'OTP generated (Static)',
+          message: shouldSendSms ? 'OTP sent successfully' : 'Static OTP generated (123456)',
           data: {
             user_type: userType
           }

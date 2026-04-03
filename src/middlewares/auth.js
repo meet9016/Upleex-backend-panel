@@ -24,7 +24,6 @@ const auth = (isOptional = false) => async (req, res, next) => {
       userType: decoded.userType || 'user'
     };
     
-    console.log('User authenticated via manual JWT:', req.user);
     next();
   } catch (error) {
     if (isOptional) return next();
