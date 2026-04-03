@@ -66,7 +66,17 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
   if (dateFilter) rentalQuery.createdAt = dateFilter;
   const rentalOrdersCount = await GetQuote.countDocuments(rentalQuery);
 
-  // 5. Total Products (All products count)
+  // 5. Total Products breakdown (Sell vs Rent) with visibility sub-counts
+  const [
+    sellActive, sellInactive,
+    rentActive, rentInactive
+  ] = await Promise.all([
+    Product.countDocuments({ vendor_id: vId, product_type_name: { $regex: /sell/i }, is_visible: true }),
+    Product.countDocuments({ vendor_id: vId, product_type_name: { $regex: /sell/i }, is_visible: false }),
+    Product.countDocuments({ vendor_id: vId, product_type_name: { $regex: /rent/i }, is_visible: true }),
+    Product.countDocuments({ vendor_id: vId, product_type_name: { $regex: /rent/i }, is_visible: false })
+  ]);
+
   const totalProducts = await Product.countDocuments({ vendor_id: vId });
 
   // 6. Total Customers (Unique customers who ordered from this vendor)
@@ -148,6 +158,12 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
         activeListings,
         rentalOrdersActive: rentalOrdersCount,
         totalProducts,
+        sellProducts: sellActive + sellInactive,
+        rentProducts: rentActive + rentInactive,
+        sellActive,
+        sellInactive,
+        rentActive,
+        rentInactive,
         totalCustomers,
         monthlyTarget: 20000, // Static as requested
       },

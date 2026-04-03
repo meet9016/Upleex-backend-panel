@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const auth = require('../../middlewares/auth');
 const adminController = require('../../controllers/admin.controller');
 const walletController = require('../../controllers/wallet.controller');
+const dashboardStatsController = require('../../controllers/dashboardStats.controller');
 
 const router = express.Router();
 
@@ -62,6 +63,13 @@ router.get(
   '/vendor-wallets/:vendorId/transactions',
   auth(),
   catchAsync(walletController.getVendorWalletTransactions)
+);
+
+// Dashboard Stats
+router.get(
+  '/dashboard-stats',
+  auth(),
+  catchAsync(dashboardStatsController.getDashboardStats)
 );
 
 module.exports = router;
