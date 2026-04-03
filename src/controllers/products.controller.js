@@ -615,26 +615,26 @@ const getAllProducts = {
       console.log("Product query:", JSON.stringify(query, null, 2));
 
       // Sorting
-      let sortOptions = { createdAt: -1 }; // default sort
+      let sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 }; // default sort
       if (customSortOptions) {
-        sortOptions = customSortOptions;
+        sortOptions = { is_priority: -1, ...customSortOptions };
       } else if (sort_by) {
         const sortOrder = sort_order === 'asc' ? 1 : -1;
         switch (sort_by) {
           case 'price':
-            sortOptions = { price: sortOrder };
+            sortOptions = { is_priority: -1, price: sortOrder };
             break;
           case 'name':
-            sortOptions = { product_name: sortOrder };
+            sortOptions = { is_priority: -1, product_name: sortOrder };
             break;
           case 'date':
-            sortOptions = { createdAt: sortOrder };
+            sortOptions = { is_priority: -1, createdAt: sortOrder };
             break;
           case 'popularity':
-            sortOptions = { views: sortOrder };
+            sortOptions = { is_priority: -1, views: sortOrder };
             break;
           default:
-            sortOptions = { createdAt: -1 };
+            sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 };
         }
       }
 
@@ -699,6 +699,12 @@ const getAllProducts = {
       // Auto-draft expired listings
       const now = new Date();
       for (const p of data) {
+        // Reset priority status if expired
+        if (p.is_priority && p.priority_expiry && now > new Date(p.priority_expiry)) {
+          p.is_priority = false;
+          await p.save();
+        }
+
         if (p.expires_at && now > new Date(p.expires_at) && p.status !== 'draft') {
           p.status = 'draft';
           await p.save();

@@ -20,4 +20,6 @@ module.exports.KycNotification = require('./vendor/kycNotification.model');
 module.exports.Wallet = require('./wallet.model');
 module.exports.Banner = require('./banner.model');
 module.exports.Contact = require('./contact.model');
+module.exports.PriorityPlan = require('./priorityPlan.model');
+module.exports.PriorityPlanPurchase = require('./priorityPlanPurchase.model');
 
