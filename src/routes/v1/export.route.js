@@ -4,7 +4,13 @@ const {
   exportProductsToExcel,
   exportProductsToPDF,
   exportQuotesToExcel,
-  exportQuotesToPDF
+  exportQuotesToPDF,
+  exportOrdersToExcel,
+  exportOrdersToPDF,
+  exportPaymentsToExcel,
+  exportPaymentsToPDF,
+  exportWalletTransactionsToExcel,
+  exportWalletTransactionsToPDF
 } = require('../../controllers/export.controller');
 
 const router = express.Router();
@@ -16,5 +22,15 @@ router.get('/products/pdf', auth(), exportProductsToPDF.handler);
 // Quote export routes  
 router.get('/quotes/excel', auth(), exportQuotesToExcel.handler);
 router.get('/quotes/pdf', auth(), exportQuotesToPDF.handler);
+
+// Order & Payment export routes
+router.get('/orders/excel', auth(), exportOrdersToExcel.handler);
+router.get('/orders/pdf', auth(), exportOrdersToPDF.handler);
+router.get('/payments/excel', auth(), exportPaymentsToExcel.handler);
+router.get('/payments/pdf', auth(), exportPaymentsToPDF.handler);
+
+// Wallet Transactions export routes
+router.get('/wallet-transactions/excel', auth(), exportWalletTransactionsToExcel.handler);
+router.get('/wallet-transactions/pdf', auth(), exportWalletTransactionsToPDF.handler);
 
 module.exports = router;
