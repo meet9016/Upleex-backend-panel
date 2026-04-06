@@ -599,7 +599,27 @@ const getAllProducts = {
 
     // City filter
     if (city) {
-      searchConditions.push({ vendor_city_name: new RegExp(city, 'i') });
+      const raw = String(city).trim();
+      const parts = raw.split('-');
+      const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+      const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+      const vendors = await VendorKyc.find(
+        {
+          $or: [
+            { 'ContactDetails.city_id': raw },
+            { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+            { 'ContactDetails.city_name': cityNameRegex },
+          ],
+        },
+        { 'ContactDetails.vendor_id': 1 }
+      );
+      const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+      if (vendorIds.length > 0) {
+        searchConditions.push({ vendor_id: { $in: vendorIds } });
+      } else {
+        // If no vendors found in that city, force empty result
+        searchConditions.push({ _id: null });
+      }
     }
 
     // Combine search conditions with AND logic
@@ -1539,14 +1559,14 @@ const webProductSuggestionList = {
       const vendors = await VendorKyc.find(
         {
           $or: [
-            { city_id: raw },
-            { city_id: { $regex: cityNameRegex } },
-            { city_name: { $regex: cityNameRegex } },
+            { 'ContactDetails.city_id': raw },
+            { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+            { 'ContactDetails.city_name': { $regex: cityNameRegex } },
           ],
         },
-        { vendor_id: 1 }
+        { 'ContactDetails.vendor_id': 1 }
       );
-      vendorFilterIds = vendors.map(v => v.vendor_id).filter(Boolean);
+      vendorFilterIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
       if (vendorFilterIds.length === 0) {
         return res.status(200).json({ status: 200, data: [] });
       }
@@ -1591,14 +1611,14 @@ const webSearchProductList = {
       const vendors = await VendorKyc.find(
         {
           $or: [
-            { city_id: raw },
-            { city_id: { $regex: cityNameRegex } },
-            { city_name: { $regex: cityNameRegex } },
+            { 'ContactDetails.city_id': raw },
+            { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+            { 'ContactDetails.city_name': { $regex: cityNameRegex } },
           ],
         },
-        { vendor_id: 1 }
+        { 'ContactDetails.vendor_id': 1 }
       );
-      vendorFilterIds = vendors.map(v => v.vendor_id).filter(Boolean);
+      vendorFilterIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
       if (vendorFilterIds.length === 0) {
         return res.status(200).json({
           success: true,

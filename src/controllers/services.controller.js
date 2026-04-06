@@ -1,7 +1,8 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
 const mongoose = require('mongoose');
-const { Service, ServiceCategory } = require('../models');
+const { Service, ServiceCategory, VendorKyc } = require('../models');
+
 const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExternalService } = require('../utils/fileUpload');
 const catchAsync = require('../utils/catchAsync');
 
@@ -82,13 +83,37 @@ const createService = {
 const getAllServices = {
   handler: async (req, res) => {
     try {
-      const { search, category_id, status, sortBy, order } = req.query;
+      const { search, category_id, status, sortBy, order, city } = req.query;
       const query = {};
 
       if (req.user && req.user.userType === 'vendor') {
         query.vendor_id = req.user.id || req.user._id;
       } else {
         query.approval_status = 'approved';
+      }
+
+      if (city) {
+        const raw = String(city).trim();
+        const parts = raw.split('-');
+        const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+        const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+        const vendors = await VendorKyc.find(
+          {
+            $or: [
+              { 'ContactDetails.city_id': raw },
+              { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+              { 'ContactDetails.city_name': cityNameRegex },
+            ],
+          },
+          { 'ContactDetails.vendor_id': 1 }
+        );
+        const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        } else {
+          // If no vendors found in that city, force empty result
+          query._id = null;
+        }
       }
 
       if (search && search.trim() !== '') {
@@ -115,9 +140,44 @@ const getAllServices = {
 
       const services = await Service.find(query).sort(sort);
 
+      // Enrich with vendor KYC details
+      const vendorIds = [...new Set(services.map((s) => s.vendor_id).filter((id) => !!id))];
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const kycs = await VendorKyc.find({ 'ContactDetails.vendor_id': { $in: vendorIds } }, { 
+          'ContactDetails.vendor_id': 1, 
+          'ContactDetails.city_id': 1, 
+          'ContactDetails.city_name': 1, 
+          'ContactDetails.full_name': 1, 
+          'ContactDetails.address': 1,
+          'Identity.business_name': 1 
+        });
+        kycs.forEach((k) => {
+          const contact = k.ContactDetails || {};
+          const identity = k.Identity || {};
+          vendorMap[String(contact.vendor_id)] = {
+            city_id: contact.city_id || '',
+            city_name: contact.city_name || '',
+            vendor_name: (identity.business_name || contact.full_name || ''),
+            vendor_address: contact.address || '',
+          };
+        });
+      }
+
+      const normalized = services.map((s) => {
+        const v = vendorMap[String(s.vendor_id)] || {};
+        return {
+          ...s.toObject(),
+          vendor_city_id: v.city_id || '',
+          vendor_city_name: v.city_name || '',
+          vendor_address: v.vendor_address || '',
+          vendor_name: s.vendor_name || v.vendor_name || '',
+        };
+      });
+
       return res.status(200).json({
         success: true,
-        data: services,
+        data: normalized,
       });
     } catch (error) {
       console.error('Get all services error:', error);

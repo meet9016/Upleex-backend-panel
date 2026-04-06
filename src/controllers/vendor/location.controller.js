@@ -99,8 +99,28 @@ const cityList = {
       }
 
       const needle = String(search).toLowerCase();
-      const filtered = needle
+      const filtered = needle 
         ? allCities.filter((c) => c.name.toLowerCase().includes(needle))
+            .sort((a, b) => {
+                const aName = a.name.toLowerCase();
+                const bName = b.name.toLowerCase();
+                
+                // 1. Exact match first
+                if (aName === needle && bName !== needle) return -1;
+                if (bName === needle && aName !== needle) return 1;
+                
+                // 2. Starts with needle
+                const aStarts = aName.startsWith(needle);
+                const bStarts = bName.startsWith(needle);
+                if (aStarts && !bStarts) return -1;
+                if (!aStarts && bStarts) return 1;
+                
+                // 3. Shorter name first (prioritize main city over sub-areas/districts)
+                if (aName.length !== bName.length) return aName.length - bName.length;
+                
+                // 4. Alphabetical
+                return aName.localeCompare(bName);
+            })
         : allCities;
         
       const paginated = paginate(filtered, page, limit);
@@ -142,6 +162,26 @@ const indiaCityList = {
       
       const filtered = needle 
         ? allCities.filter((c) => c.name.toLowerCase().includes(needle))
+            .sort((a, b) => {
+                const aName = a.name.toLowerCase();
+                const bName = b.name.toLowerCase();
+                
+                // 1. Exact match first
+                if (aName === needle && bName !== needle) return -1;
+                if (bName === needle && aName !== needle) return 1;
+                
+                // 2. Starts with needle
+                const aStarts = aName.startsWith(needle);
+                const bStarts = bName.startsWith(needle);
+                if (aStarts && !bStarts) return -1;
+                if (!aStarts && bStarts) return 1;
+                
+                // 3. Shorter name first (prioritize main city over sub-areas/districts)
+                if (aName.length !== bName.length) return aName.length - bName.length;
+                
+                // 4. Alphabetical
+                return aName.localeCompare(bName);
+            })
         : allCities;
         
       const startIndex = (page - 1) * limit;
