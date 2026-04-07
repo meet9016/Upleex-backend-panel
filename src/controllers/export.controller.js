@@ -1,7 +1,14 @@
 const httpStatus = require('http-status');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
-const { Product, GetQuote, Category, SubCategory, Order, VendorPayment, Wallet } = require('../models');
+const Product = require('../models/product.model');
+const GetQuote = require('../models/getQuote.model');
+const Category = require('../models/category.model');
+const SubCategory = require('../models/subcategory.model');
+const Order = require('../models/order.model');
+const VendorPayment = require('../models/vendorPayment.model');
+const Wallet = require('../models/wallet.model');
+const Service = require('../models/service.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 
 // Export Products to Excel
@@ -962,6 +969,138 @@ const exportWalletTransactionsToPDF = {
   }
 };
 
+// Export Services to Excel
+const exportServicesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+      const user = req.user;
+      const vendorId = user.id || user._id;
+
+      const query = { vendor_id: vendorId };
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [{ service_name: searchRegex }, { category_name: searchRegex }];
+      }
+
+      const services = await Service.find(query).sort({ createdAt: -1 });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Services');
+
+      worksheet.columns = [
+        { header: 'Service Name', key: 'service_name', width: 30 },
+        { header: 'Category', key: 'category_name', width: 20 },
+        { header: 'Price (₹)', key: 'price', width: 15 },
+        { header: 'Duration', key: 'duration', width: 15 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Approval Status', key: 'approval_status', width: 15 },
+        { header: 'Created Date', key: 'createdAt', width: 20 }
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A90E2' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      services.forEach((s) => {
+        worksheet.addRow({
+          service_name: s.service_name || '',
+          category_name: s.category_name || '',
+          price: s.price || 0,
+          duration: s.duration || '',
+          status: s.status || '',
+          approval_status: s.approval_status || '',
+          createdAt: new Date(s.createdAt).toLocaleDateString()
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=services_${Date.now()}.xlsx`);
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Services to PDF
+const exportServicesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+      const user = req.user;
+      const vendorId = user.id || user._id;
+
+      const query = { vendor_id: vendorId };
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [{ service_name: searchRegex }, { category_name: searchRegex }];
+      }
+
+      const services = await Service.find(query).sort({ createdAt: -1 });
+
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=services_${Date.now()}.pdf`);
+      doc.pipe(res);
+
+      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
+      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
+      doc.text('Services Report', 50, 45);
+
+      doc.fillColor('black').fontSize(10).font('Helvetica');
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
+
+      let yPosition = 120;
+      const headers = ['Service Name', 'Category', 'Price', 'Status', 'Duration'];
+      const columnWidths = [150, 100, 80, 80, 90];
+      let xPosition = 50;
+      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+
+      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
+      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
+      headers.forEach((h, i) => {
+        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
+        xPosition += columnWidths[i];
+      });
+
+      yPosition += 30;
+      doc.fillColor('black').fontSize(9).font('Helvetica');
+
+      services.forEach((s, index) => {
+        if (yPosition > 750) {
+          doc.addPage();
+          yPosition = 50;
+        }
+
+        if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
+        doc.fillColor('black');
+        
+        let xPos = 50;
+        doc.text(s.service_name || '', xPos + 5, yPosition + 9, { width: columnWidths[0] - 10, ellipsis: true });
+        xPos += columnWidths[0];
+        doc.text(s.category_name || '', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
+        xPos += columnWidths[1];
+        doc.text(`₹${(s.price || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
+        xPos += columnWidths[2];
+        doc.text(s.status || '', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
+        xPos += columnWidths[3];
+        doc.text(s.duration || '', xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
+
+        yPosition += 28;
+      });
+
+      doc.end();
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
 module.exports = {
   exportProductsToExcel,
   exportProductsToPDF,
@@ -972,5 +1111,7 @@ module.exports = {
   exportPaymentsToExcel,
   exportPaymentsToPDF,
   exportWalletTransactionsToExcel,
-  exportWalletTransactionsToPDF
+  exportWalletTransactionsToPDF,
+  exportServicesToExcel,
+  exportServicesToPDF
 };

@@ -1,7 +1,9 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
 const mongoose = require('mongoose');
-const { Service, ServiceCategory, VendorKyc } = require('../models');
+const Service = require('../models/service.model');
+const ServiceCategory = require('../models/serviceCategory.model');
+const VendorKyc = require('../models/vendor/vendorKyc.model');
 
 const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExternalService } = require('../utils/fileUpload');
 const catchAsync = require('../utils/catchAsync');

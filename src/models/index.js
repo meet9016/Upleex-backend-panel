@@ -16,6 +16,7 @@ module.exports.Order = require('./order.model');
 module.exports.VendorPayment = require('./vendorPayment.model');
 module.exports.Service = require('./service.model');
 module.exports.ServiceCategory = require('./serviceCategory.model');
+module.exports.VendorKyc = require('./vendor/vendorKyc.model');
 module.exports.KycNotification = require('./vendor/kycNotification.model');
 module.exports.Wallet = require('./wallet.model');
 module.exports.Banner = require('./banner.model');
