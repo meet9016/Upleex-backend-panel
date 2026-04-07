@@ -33,7 +33,7 @@ const createOrder = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to create order');
   }
 
-  const { delivery_address, order_notes } = req.body;
+  const { delivery_address, order_notes, payment_type } = req.body;
 
   console.log('👤 User data during order creation:', {
     user_id: req.user.id,
@@ -128,7 +128,12 @@ const createOrder = catchAsync(async (req, res) => {
   const depositAmount = 0; // No deposit for now
   const totalAmount = subtotal + gstAmount + deliveryCharges + installationCharges + depositAmount;
 
-  console.log('Order totals:', { subtotal, gstAmount, totalAmount });
+  let amountToPay = totalAmount;
+  if (payment_type === '30_percent') {
+    amountToPay = totalAmount * 0.3;
+  }
+
+  console.log('Order totals:', { subtotal, gstAmount, totalAmount, amountToPay });
 
   // Create order ID
   const orderId = generateOrderId();
@@ -148,7 +153,7 @@ const createOrder = catchAsync(async (req, res) => {
   try {
     // Create Razorpay order
     const razorpayOrder = await razorpay.orders.create({
-      amount: Math.round(totalAmount * 100), // Amount in paise
+      amount: Math.round(amountToPay * 100), // Amount in paise
       currency: 'INR',
       receipt: orderId,
       notes: {
@@ -172,6 +177,7 @@ const createOrder = catchAsync(async (req, res) => {
       installation_charges: installationCharges,
       deposit_amount: depositAmount,
       total_amount: totalAmount,
+      payment_type: payment_type || 'full',
       razorpay_order_id: razorpayOrder.id,
       delivery_address: delivery_address || {
         address_line_1: '123 Main Street',
@@ -198,7 +204,7 @@ const createOrder = catchAsync(async (req, res) => {
       data: {
         order_id: orderId,
         razorpay_order_id: razorpayOrder.id,
-        amount: totalAmount,
+        amount: amountToPay,
         currency: 'INR',
         key: razorpayKeyId,
         order_details: order,
@@ -250,7 +256,7 @@ const verifyPayment = catchAsync(async (req, res) => {
   });
 
   // Update order with payment details
-  order.payment_status = 'paid';
+  order.payment_status = order.payment_type === '30_percent' ? 'hold' : 'paid';
   order.order_status = 'confirmed';
   order.razorpay_payment_id = razorpay_payment_id;
   order.razorpay_signature = razorpay_signature;
@@ -515,8 +521,9 @@ const getVendorPaymentHistory = catchAsync(async (req, res) => {
       vendor_gst_amount: vendorGstAmount,
       vendor_total_amount: vendorTotalAmount,
       vendor_amount: vendorPayment ? vendorPayment.vendor_amount : 0,
-      payment_status: order.payment_status === 'paid' ? 'paid' : 'pending',
-      paid_at: order.payment_status === 'paid' ? (vendorPayment?.paid_at || order.updatedAt) : null,
+      payment_type: order.payment_type || 'full',
+      payment_status: order.payment_status,
+      paid_at: (order.payment_status === 'paid' || order.payment_status === 'hold') ? (vendorPayment?.paid_at || order.updatedAt) : null,
       order_status: order.order_status,
       razorpay_payment_id: order.razorpay_payment_id || '',
       vendor_payment_info: vendorPayment
