@@ -173,6 +173,15 @@ const productSchema = new mongoose.Schema(
       type: Date,
       index: true,
     },
+    is_boosted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    boost_expiry: {
+      type: Date,
+      index: true,
+    },
   },
   {
     timestamps: true,

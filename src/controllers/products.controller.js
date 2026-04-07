@@ -725,6 +725,12 @@ const getAllProducts = {
           await p.save();
         }
 
+        // Reset boost status if expired
+        if (p.is_boosted && p.boost_expiry && now > new Date(p.boost_expiry)) {
+          p.is_boosted = false;
+          await p.save();
+        }
+
         if (p.expires_at && now > new Date(p.expires_at) && p.status !== 'draft') {
           p.status = 'draft';
           await p.save();
