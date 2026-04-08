@@ -9,6 +9,7 @@ const faqsRoute = require('./faqs.route');
 const getQuoteRoute = require('./getquote.route');
 const cartRoute = require('./cart.route');
 const wishlistRoute = require('./wishlist.route');
+const reviewRoute = require('./review.route');
 const vendorKycRoute = require('./vendorKyc.route');
 const vendorAuthRoute = require('../../routes/vendor/auth.route');
 const adminRoute = require('./admin.route');
@@ -96,6 +97,10 @@ const defaultRoutes = [
   {  
     path: '/wishlist',
     route: wishlistRoute,
+  },
+  {  
+    path: '/reviews',
+    route: reviewRoute,
   },
   {
     path: '/admin',

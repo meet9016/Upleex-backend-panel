@@ -24,4 +24,5 @@ module.exports.Contact = require('./contact.model');
 module.exports.Otp = require('./otp.model');
 module.exports.PriorityPlan = require('./priorityPlan.model');
 module.exports.PriorityPlanPurchase = require('./priorityPlanPurchase.model');
+module.exports.Review = require('./review.model');
 
