@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Review, Product, User, Order } = require('../models');
+const { Review, Product, User, Order, GetQuote } = require('../models');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 
@@ -11,21 +11,33 @@ const addReview = catchAsync(async (req, res) => {
   const { product_id, rating, review } = req.body;
   const userId = req.user.id;
 
-  // Check if user has purchased this product
+  // Check if user has purchased this product (buy orders)
   const hasPurchased = await Order.findOne({
-    user_id: userId,
-    'items.product_id': product_id,
-    order_status: { $in: ['delivered', 'completed'] },
+    user_id: new mongoose.Types.ObjectId(userId),
+    'items.product_id': new mongoose.Types.ObjectId(product_id),
+    $or: [
+      { order_status: { $in: ['delivered', 'completed', 'successfully'] } },
+      { vendor_status: { $in: ['delivered', 'completed', 'successfully'] } },
+    ],
   });
 
-  if (!hasPurchased) {
-    throw new ApiError(httpStatus.FORBIDDEN, 'You can only review products you have purchased');
+  // Check if user has rented this product (GetQuote/rent orders)
+  const hasRented = !hasPurchased
+    ? await GetQuote.findOne({
+        user_id: new mongoose.Types.ObjectId(userId),
+        product_id: new mongoose.Types.ObjectId(product_id),
+        status: { $in: ['successful', 'complete', 'completed', 'delivered'] },
+      })
+    : null;
+
+  if (!hasPurchased && !hasRented) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You can only review products you have purchased or rented');
   }
 
   // Check if user already reviewed this product
   const existingReview = await Review.findOne({
-    product_id,
-    user_id: userId,
+    product_id: new mongoose.Types.ObjectId(product_id),
+    user_id: new mongoose.Types.ObjectId(userId),
   });
 
   if (existingReview) {
@@ -111,35 +123,46 @@ const deleteReview = catchAsync(async (req, res) => {
 const getProductReviews = catchAsync(async (req, res) => {
   const { product_id, page = 1, limit = 10, includeStats = true } = req.body;
 
-  const reviews = await Review.paginate(
-    { product_id, isActive: true },
-    {
-      page: parseInt(page, 10),
-      limit: parseInt(limit, 10),
-      sort: { createdAt: -1 },
-    }
-  );
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+  const skip = (pageNum - 1) * limitNum;
 
-  // Populate after pagination - include _id for user comparison
-  await Review.populate(reviews.docs, [
-    { path: 'user_id', select: '_id name email' },
-    { path: 'product_id', select: '_id product_name product_main_image' },
+  // Use find directly to avoid populate issues with paginate plugin
+  const [reviewDocs, totalDocs] = await Promise.all([
+    Review.find({ product_id, isActive: true })
+      .populate('user_id', '_id name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    Review.countDocuments({ product_id, isActive: true }),
   ]);
+
+  // Normalize _id to id for frontend compatibility
+  const reviews = reviewDocs.map((r) => ({
+    ...r,
+    id: r._id.toString(),
+    user_id: r.user_id
+      ? { ...r.user_id, id: r.user_id._id?.toString() }
+      : null,
+  }));
+
+  const totalPages = Math.ceil(totalDocs / limitNum);
 
   const response = {
     success: true,
     data: {
-      reviews: reviews.docs,
+      reviews,
       pagination: {
-        total: reviews.totalDocs,
-        pages: reviews.totalPages,
-        page: reviews.page,
-        limit: reviews.limit,
+        total: totalDocs,
+        pages: totalPages,
+        page: pageNum,
+        limit: limitNum,
       },
     },
   };
 
-  // Include stats if requested (reduces API calls)
+  // Include stats if requested
   if (includeStats) {
     const stats = await Review.aggregate([
       {
@@ -160,8 +183,8 @@ const getProductReviews = catchAsync(async (req, res) => {
 
     const ratingBreakdown = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     if (stats.length > 0) {
-      stats[0].ratingBreakdown.forEach((rating) => {
-        ratingBreakdown[rating] = (ratingBreakdown[rating] || 0) + 1;
+      stats[0].ratingBreakdown.forEach((r) => {
+        ratingBreakdown[r] = (ratingBreakdown[r] || 0) + 1;
       });
     }
 
@@ -176,20 +199,40 @@ const getProductReviews = catchAsync(async (req, res) => {
 });
 
 /**
- * Check if user has reviewed a product
+ * Check if user has purchased & reviewed a product
  */
 const checkUserReview = catchAsync(async (req, res) => {
   const { product_id } = req.body;
   const userId = req.user.id;
 
+  // Check if user has purchased this product (buy orders)
+  const hasPurchased = await Order.findOne({
+    user_id: new mongoose.Types.ObjectId(userId),
+    'items.product_id': new mongoose.Types.ObjectId(product_id),
+    $or: [
+      { order_status: { $in: ['delivered', 'complete', 'successful'] } },
+      { vendor_status: { $in: ['delivered', 'complete', 'successful'] } },
+    ],
+  });
+
+  // Check if user has rented this product (GetQuote/rent orders)
+  const hasRented = !hasPurchased
+    ? await GetQuote.findOne({
+        user_id: new mongoose.Types.ObjectId(userId),
+        product_id: new mongoose.Types.ObjectId(product_id),
+        status: { $in: ['successful', 'complete', 'completed', 'delivered'] },
+      })
+    : null;
+
   const review = await Review.findOne({
-    product_id,
-    user_id: userId,
-  }).populate('user_id', 'name email');
+    product_id: new mongoose.Types.ObjectId(product_id),
+    user_id: new mongoose.Types.ObjectId(userId),
+  }).populate('user_id', '_id name email');
 
   res.send({
     success: true,
     data: {
+      hasPurchased: !!(hasPurchased || hasRented),
       hasReviewed: !!review,
       review: review || null,
     },
