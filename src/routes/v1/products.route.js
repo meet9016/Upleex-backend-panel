@@ -27,12 +27,14 @@ router.get(
 
 router.get(
   '/related-products',
+  auth(true),
   validate(productsController.getRelatedProducts.validation),
   catchAsync(productsController.getRelatedProducts.handler)
 );
 
 router.get(
   '/getById/:_id',
+  auth(true),
   catchAsync(productsController.getProductById.handler)
 );
 
@@ -78,14 +80,15 @@ router.post(
 // );
 router.post(
   '/web-vendor-product-list',
+  auth(true),
   upload.none(),
   validate(productsController.getVendorProducts.validation),
-  catchAsync(productsController.getVendorProducts.handler),
   catchAsync(productsController.getVendorProducts.handler)
 );
 
 router.post(
   '/web-vendor-products',
+  auth(true),
   upload.none(),
   validate(productsController.getVendorProducts.validation),
   catchAsync(productsController.getVendorProducts.handler)

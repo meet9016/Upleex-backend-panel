@@ -31,6 +31,7 @@ const bannersRoute = require('./banners.route');
 const contactsRoute = require('./contacts.route');
 const vendorDashboardRoute = require('./vendorDashboard.route');
 const rentalBoostPlanRoute = require('./rentalBoostPlan.route');
+const auth = require('../../middlewares/auth');
 
 
 const router = express.Router();
@@ -44,6 +45,7 @@ router.post(
 
 router.post(
   '/web-search-product-list',
+  auth(true),
   upload.none(),
   validate(productsController.webSearchProductList.validation),
   catchAsync(productsController.webSearchProductList.handler)
@@ -82,23 +84,23 @@ const defaultRoutes = [
     path: '/',
     route: vendorKycRoute,
   },
-  {  
+  {
     path: '/vendor/auth',
     route: vendorAuthRoute,
   },
-  {  
+  {
     path: '/quote',
     route: getQuoteRoute,
   },
-  {  
+  {
     path: '/cart',
     route: cartRoute,
   },
-  {  
+  {
     path: '/wishlist',
     route: wishlistRoute,
   },
-  {  
+  {
     path: '/reviews',
     route: reviewRoute,
   },

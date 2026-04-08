@@ -10,6 +10,7 @@ const {
   Category,
   SubCategory,
   Wallet,
+  Wishlist,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const {
@@ -736,6 +737,14 @@ const getAllProducts = {
           await p.save();
         }
       }
+      // Check wishlist status if user is logged in
+      let userWishlistSet = new Set();
+      if (req.user) {
+        const userId = req.user.id || req.user._id;
+        const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: data.map(p => p._id) } });
+        wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
+      }
+
       const normalized = data.map((p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
         return {
@@ -746,6 +755,7 @@ const getAllProducts = {
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
+          is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
       
@@ -912,6 +922,14 @@ const getVendorProducts = {
           await p.save();
         }
       }
+      // Check wishlist status if user is logged in
+      let userWishlistSet = new Set();
+      if (req.user) {
+        const userId = req.user.id || req.user._id;
+        const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: data.map(p => p._id) } });
+        wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
+      }
+
       const normalized = data.map((p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
         return {
@@ -922,6 +940,7 @@ const getVendorProducts = {
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
+          is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
 
@@ -958,6 +977,14 @@ const getProductById = {
         return res.status(404).json({ message: 'Product not found' });
       }
 
+      // Check wishlist status if user is logged in
+      let is_wishlist = false;
+      if (req.user && product) {
+        const userId = req.user.id || req.user._id;
+        const wishlistEntry = await Wishlist.findOne({ user_id: userId, product_id: product._id });
+        is_wishlist = !!wishlistEntry;
+      }
+
       // Add vendor address from KYC data
       if (product.vendor_id) {
         const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': product.vendor_id }, {
@@ -976,11 +1003,14 @@ const getProductById = {
           productObj.vendor_city_id = contact.city_id || '';
           productObj.vendor_city_name = contact.city_name || '';
           productObj.vendor_name = productObj.vendor_name || identity.business_name || contact.full_name || '';
+          productObj.is_wishlist = is_wishlist;
           return res.status(200).json({ status: 200, data: productObj });
         }
       }
 
-      res.status(200).json({ status: 200, data: product });
+      const productObj = product.toObject();
+      productObj.is_wishlist = is_wishlist;
+      res.status(200).json({ status: 200, data: productObj });
     } catch (error) {
       res
         .status(httpStatus.INTERNAL_SERVER_ERROR)
@@ -1678,12 +1708,21 @@ const webSearchProductList = {
           await p.save();
         }
       }
+
+    // Check wishlist status if user is logged in
+    let userWishlistSet = new Set();
+    if (req.user) {
+      const userId = req.user.id || req.user._id;
+      const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: data.map(p => p._id) } });
+      wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
+    }
     const normalized = data.map((p) => ({
     
 
       ...p.toObject(),
       category_name: p.category_name || catMap[p.category_id] || '',
       sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+      is_wishlist: userWishlistSet.has(p._id.toString()),
     }));
     
     return res.status(200).json({
@@ -2064,10 +2103,20 @@ const getRelatedProducts = {
         ...shuffleArray(t3),
         ...shuffleArray(t4)
       ];
+      // Check wishlist status if user is logged in
+      let userWishlistSet = new Set();
+      if (req.user) {
+        const userId = req.user.id || req.user._id;
+        const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: finalPool.slice(0, 4).map(p => p._id) } });
+        wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
+      }
 
       res.status(200).json({
         success: true,
-        data: finalPool.slice(0, 4)
+        data: finalPool.slice(0, 4).map(p => ({
+          ...p,
+          is_wishlist: userWishlistSet.has(p._id.toString())
+        }))
       });
     } catch (error) {
       console.error("Error in getRelatedProducts:", error);
