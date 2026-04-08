@@ -26,6 +26,12 @@ router.get(
 );
 
 router.get(
+  '/related-products',
+  validate(productsController.getRelatedProducts.validation),
+  catchAsync(productsController.getRelatedProducts.handler)
+);
+
+router.get(
   '/getById/:_id',
   catchAsync(productsController.getProductById.handler)
 );

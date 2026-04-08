@@ -8,6 +8,19 @@ const {
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const { uploadToExternalService } = require('../utils/fileUpload');
+const Razorpay = require('razorpay');
+const config = require('../config/config');
+
+// Initialize Razorpay
+let razorpay;
+try {
+  razorpay = new Razorpay({
+    key_id: config.razorpay.keyId || process.env.RAZORPAY_KEY_ID,
+    key_secret: config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET,
+  });
+} catch (error) {
+  console.error('Failed to initialize Razorpay in getquote controller:', error);
+}
 
 const createGetQuote = {
   validation: {
@@ -737,19 +750,57 @@ const changeStatus = {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
       }
 
-      // Stock Management
+      // Stock Management + Payment Link Generation
       if (internal !== existingQuote.status) {
         const product = updated.product_id;
         const qty = updated.qty || 1;
 
         if (product) {
-          // If status becomes 'approval' (Approved), reduce stock
+          // If status becomes 'approval' (Approved), reduce stock and generate payment link
           if (internal === 'approval' && existingQuote.status === 'pending') {
             if (product.available_quantity >= qty) {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: -qty }
               });
               console.log(`Reduced quantity for product ${product._id} by ${qty}`);
+            }
+
+            // Generate Razorpay Payment Link
+            if (razorpay && updated.calculated_price > 0) {
+              try {
+                const amount = Math.round(updated.calculated_price * 100); // in paise
+                const paymentLink = await razorpay.paymentLink.create({
+                  amount,
+                  currency: 'INR',
+                  accept_partial: false,
+                  description: `Payment for ${product.product_name} - Quote #${updated._id}`,
+                  customer: {
+                    name: updated.user_id?.first_name || 'Customer',
+                    email: updated.user_id?.email || '',
+                    contact: updated.user_id?.mobile || '',
+                  },
+                  notify: {
+                    sms: true,
+                    email: true,
+                  },
+                  reminder_enable: true,
+                  notes: {
+                    quote_id: updated._id.toString(),
+                  },
+                  callback_url: `${process.env.FRONTEND_URL || 'https://upleex.in'}/payment-success`,
+                  callback_method: 'get',
+                });
+
+                if (paymentLink && paymentLink.short_url) {
+                  await GetQuote.findByIdAndUpdate(quote_id, {
+                    razorpay_payment_link: paymentLink.short_url
+                  });
+                  updated.razorpay_payment_link = paymentLink.short_url;
+                  console.log('Payment link generated:', paymentLink.short_url);
+                }
+              } catch (rlError) {
+                console.error('Razorpay link generation error:', rlError);
+              }
             }
           }
           // If status becomes 'successful' or 'complete', return stock
@@ -776,6 +827,7 @@ const changeStatus = {
           const productName = product?.product_name || 'Your Product';
           const startDate = updated.start_date ? new Date(updated.start_date).toLocaleDateString('en-GB') : 'N/A';
           const endDate = updated.end_date ? new Date(updated.end_date).toLocaleDateString('en-GB') : 'N/A';
+          const paymentLink = updated.razorpay_payment_link;
           
           if (internal === 'approval') {
             // Send approval email
@@ -809,13 +861,25 @@ const changeStatus = {
               <td style="padding:8px 0; text-align:right; color:#333;">${endDate}</td>
             </tr>
             <tr>
+              <td style="padding:8px 0; color:#666;"><strong>Amount to Pay:</strong></td>
+              <td style="padding:8px 0; text-align:right; color:#333; font-weight:bold;">₹${updated.calculated_price.toLocaleString('en-IN')}</td>
+            </tr>
+            <tr>
               <td style="padding:8px 0; color:#666;"><strong>Status:</strong></td>
               <td style="padding:8px 0; text-align:right;"><span style="background:#059669; color:white; padding:4px 12px; border-radius:4px; font-size:12px; font-weight:bold;">APPROVED</span></td>
             </tr>
           </table>
         </div>
+
+        ${paymentLink ? `
+        <div style="text-align:center; margin:35px 0;">
+          <p style="margin-bottom:15px; color:#666;">To confirm your rental, please complete the payment using the link below:</p>
+          <a href="${paymentLink}" style="background:#059669; color:white; padding:14px 30px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:16px; display:inline-block; box-shadow:0 4px 6px rgba(5,150,105,0.2);">Complete Payment Now</a>
+          <p style="margin-top:12px; font-size:12px; color:#999;">If the button doesn't work, copy this link: ${paymentLink}</p>
+        </div>
+        ` : ''}
         
-        <p style="margin:25px 0;">You can now proceed with the rental. Please check your dashboard for more details.</p>
+        <p style="margin:25px 0;">You can also check your dashboard for more details and to manage your rentals.</p>
         <p style="margin-top:35px;">Best regards,<br><strong>The Upleex Team</strong></p>
       </td>
     </tr>

@@ -91,6 +91,9 @@ const getQuoteSchema = new mongoose.Schema(
     return_video: {
       type: String,
     },
+    razorpay_payment_link: {
+      type: String,
+    },
   },
   {
     timestamps: true,

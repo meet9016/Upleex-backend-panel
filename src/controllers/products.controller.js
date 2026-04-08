@@ -1956,6 +1956,129 @@ const toggleProductVisibility = {
   },
 };
 
+const getRelatedProducts = {
+  validation: {
+    query: Joi.object().keys({
+      category_id: Joi.string().required(),
+      sub_category_id: Joi.string().allow(''),
+      vendor_id: Joi.string().allow(''),
+      current_product_id: Joi.string().allow(''),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { category_id, sub_category_id, vendor_id, current_product_id } = req.query;
+
+      if (!category_id) {
+        return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: 'category_id is required' });
+      }
+
+      // Parallel fetch for Category products AND Vendor-specific products
+      const [categoryProducts, vendorProducts] = await Promise.all([
+        Product.find({ 
+          category_id, 
+          approval_status: 'approved', 
+          is_visible: true 
+        }).lean(),
+        vendor_id ? Product.find({ 
+          vendor_id, 
+          approval_status: 'approved', 
+          is_visible: true 
+        }).lean() : Promise.resolve([])
+      ]);
+
+      const currentIdStr = String(current_product_id || '');
+
+      // --- Priority Tiers ---
+
+      // Tier 0: Same Vendor + Boosted (Top Priority, Any Category)
+      const t0 = vendorProducts.filter((p) => 
+        p.is_boosted === true && 
+        String(p._id) !== currentIdStr
+      );
+
+      // Tier 1: Other Vendors + Boosted (Same Category)
+      const t1 = categoryProducts.filter((p) => 
+        p.is_boosted === true && 
+        String(p.vendor_id) !== String(vendor_id) &&
+        String(p._id) !== currentIdStr
+      );
+
+      // Tier 2: Other Vendors + Same Category + Same Subcategory + Priority
+      const t2 = categoryProducts.filter((p) => 
+        String(p.sub_category_id) === String(sub_category_id) && 
+        p.is_priority === true && 
+        p.is_boosted !== true && 
+        String(p.vendor_id) !== String(vendor_id) &&
+        String(p._id) !== currentIdStr
+      );
+
+      // Tier 3: Same Vendor + Same Category + Priority (Not Boosted)
+      const t3 = categoryProducts.filter((p) => 
+        p.is_priority === true && 
+        p.is_boosted !== true && 
+        String(p.vendor_id) === String(vendor_id) &&
+        String(p._id) !== currentIdStr
+      );
+
+      // Tier 4: Fallback - General Category Products
+      const t0Ids = new Set(t0.map(p => String(p._id)));
+      const t1Ids = new Set(t1.map(p => String(p._id)));
+      const t2Ids = new Set(t2.map(p => String(p._id)));
+      const t3Ids = new Set(t3.map(p => String(p._id)));
+
+      const t4 = categoryProducts.filter((p) => 
+        String(p._id) !== currentIdStr &&
+        !p.is_priority &&
+        !p.is_boosted &&
+        !t0Ids.has(String(p._id)) &&
+        !t1Ids.has(String(p._id)) &&
+        !t2Ids.has(String(p._id)) &&
+        !t3Ids.has(String(p._id))
+      );
+
+      // --- Shuffle Logic ---
+      const shuffleArray = (array) => {
+        const timestamp = Math.floor(Date.now() / (5 * 60 * 1000));
+        const seededRandom = (seed) => {
+          const x = Math.sin(seed++) * 10000;
+          return x - Math.floor(x);
+        };
+
+        let m = array.length, t, i;
+        let seed = timestamp;
+        while (m) {
+          i = Math.floor(seededRandom(seed++) * m--);
+          t = array[m];
+          array[m] = array[i];
+          array[i] = t;
+        }
+        return array;
+      };
+
+      // Combine tiers and pick top 4
+      const finalPool = [
+        ...shuffleArray(t0),
+        ...shuffleArray(t1),
+        ...shuffleArray(t2),
+        ...shuffleArray(t3),
+        ...shuffleArray(t4)
+      ];
+
+      res.status(200).json({
+        success: true,
+        data: finalPool.slice(0, 4)
+      });
+    } catch (error) {
+      console.error("Error in getRelatedProducts:", error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -1975,4 +2098,5 @@ module.exports = {
   updateProductStock,
   getProductsByType,
   toggleProductVisibility,
+  getRelatedProducts,
 };
