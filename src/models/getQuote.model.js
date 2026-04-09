@@ -94,6 +94,14 @@ const getQuoteSchema = new mongoose.Schema(
     razorpay_payment_link: {
       type: String,
     },
+    razorpay_payment_id: {
+      type: String,
+    },
+    payment_status: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
   },
   {
     timestamps: true,

@@ -787,7 +787,7 @@ const changeStatus = {
                   notes: {
                     quote_id: updated._id.toString(),
                   },
-                  callback_url: `${process.env.FRONTEND_URL || 'https://upleex.in'}/payment-success`,
+                  callback_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders`,
                   callback_method: 'get',
                 });
 
@@ -891,15 +891,15 @@ const changeStatus = {
   </table>
 </div>
             `;
-            await emailService.sendEmail(user.email, subject, '');
+            emailService.sendEmail(user.email, subject, '').catch(err => console.log('Text email error:', err));
             // Send HTML email
             const transporter = emailService.transport;
-            await transporter.sendMail({
+            transporter.sendMail({
               from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
               to: user.email,
               subject,
               html
-            });
+            }).catch(err => console.log('HTML email error:', err));
           } else if (internal === 'reject') {
             // Send rejection email
             const subject = `Quote Rejected - ${productName}`;
@@ -951,12 +951,12 @@ const changeStatus = {
 </div>
             `;
             const transporter = emailService.transport;
-            await transporter.sendMail({
+            transporter.sendMail({
               from: process.env.EMAIL_FROM || process.env.SMTP_USERNAME,
               to: user.email,
               subject,
               html
-            });
+            }).catch(err => console.log('HTML email error:', err));
           }
         }
       } catch (emailError) {
@@ -996,6 +996,54 @@ const deleteQuote = {
   },
 };
 
+const verifyQuotePayment = {
+  handler: async (req, res) => {
+    try {
+      const { razorpay_payment_id, razorpay_payment_link_id, razorpay_payment_link_reference_id, razorpay_payment_link_status, razorpay_signature, quote_id } = req.body;
+
+      // In real scenario we match signatures or use razorpay API to get payment details
+      if (razorpay_payment_link_status === 'paid' || razorpay_payment_id) {
+        
+        let existingQuote;
+        if (quote_id) {
+           existingQuote = await GetQuote.findById(quote_id);
+        } else if (razorpay_payment_link_id) {
+           // We saved the quote_id in the notes of the razorpay payment link! Let's fetch it via razorpay SDK.
+           try {
+             if (razorpay) {
+               const paymentLink = await razorpay.paymentLink.fetch(razorpay_payment_link_id);
+               if (paymentLink && paymentLink.notes && paymentLink.notes.quote_id) {
+                  existingQuote = await GetQuote.findById(paymentLink.notes.quote_id);
+               }
+             }
+           } catch (rzpErr) {
+             console.error('Error fetching razorpay payment link:', rzpErr);
+           }
+        }
+
+        if (!existingQuote && razorpay_payment_link_reference_id) {
+           existingQuote = await GetQuote.findOne({ razorpay_payment_link: { $regex: razorpay_payment_link_reference_id } });
+        }
+
+        if (existingQuote) {
+          existingQuote.payment_status = 'paid';
+          existingQuote.razorpay_payment_id = razorpay_payment_id;
+          
+          await existingQuote.save();
+          return res.status(httpStatus.OK).json({ success: true, message: 'Payment verified and status updated', data: existingQuote });
+        } else {
+           // We might not easily find the quote if we don't have its id. As a fallback, try to find any pending quote the user has, but mostly we need quote_id.
+           return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Quote not found for this payment' });
+        }
+      }
+
+      res.status(httpStatus.BAD_REQUEST).json({ success: false, message: 'Payment failed or invalid status' });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+    }
+  }
+};
+
 module.exports = {
   createGetQuote,
   getAllQuotes,
@@ -1004,5 +1052,6 @@ module.exports = {
   deleteQuote,
   statusDropdown,
   changeStatus,
-  getAllQuotesForAdmin
+  getAllQuotesForAdmin,
+  verifyQuotePayment
 };

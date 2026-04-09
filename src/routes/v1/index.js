@@ -31,6 +31,7 @@ const bannersRoute = require('./banners.route');
 const contactsRoute = require('./contacts.route');
 const vendorDashboardRoute = require('./vendorDashboard.route');
 const rentalBoostPlanRoute = require('./rentalBoostPlan.route');
+const adminOrdersRoute = require('./adminOrders.route');
 const auth = require('../../middlewares/auth');
 
 
@@ -163,6 +164,10 @@ const defaultRoutes = [
   {
     path: '/rental-boost-plans',
     route: rentalBoostPlanRoute,
+  },
+  {
+    path: '/admin/orders',
+    route: adminOrdersRoute,
   },
 ];
 

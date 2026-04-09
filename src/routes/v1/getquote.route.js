@@ -62,5 +62,10 @@ router.delete(
   catchAsync(getQuoteController.deleteQuote.handler)
 );
 
+router.post(
+  '/verify-payment',
+  catchAsync(getQuoteController.verifyQuotePayment.handler)
+);
+
 module.exports = router;
 
