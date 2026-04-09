@@ -9,7 +9,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Configure multer for file upload
+// Configure multer for file upload 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // Use absolute path from project root, not from src
@@ -348,10 +348,10 @@ const webLoginRegister = {
         const referer = req.get('referer') || '';
 
         // Case 1: Web Frontend (url matches 'upleex.com' or standard headers)
-        const isFromWebsite = (url === 'upleex.com') || origin.includes('upleex.com') || referer.includes('upleex.com');
+        const isFromWebsite = (url === '1upleex.com') || origin.includes('1upleex.com') || referer.includes('1upleex.com');
   
         // Case 2: Mobile App (url is the full API path, e.g. with 'api/api/v1')
-        const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== 'upleex.com');
+        const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
     
         // Real random OTP for the website, static 123456 for mobile app and others
         const generatedOtp = (isFromWebsite && !isFromMobileApp)
