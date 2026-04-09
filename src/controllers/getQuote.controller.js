@@ -5,6 +5,7 @@ const {
   GetQuote,
   Product,
   GetQuoteStatus,
+  Order,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const { uploadToExternalService } = require('../utils/fileUpload');
@@ -1044,6 +1045,126 @@ const verifyQuotePayment = {
   }
 };
 
+const getUserDashboardData = {
+  handler: async (req, res) => {
+    try {
+      const user_id = req.user._id;
+      const now = new Date();
+      // Normalize now date to midnight for accurate day comparison
+      const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      // Fetch all quotes for this user
+      const quotes = await GetQuote.find({ user_id })
+        .populate('product_id')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      // Fetch all orders for this user
+      const orders = await Order.find({ user_id })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const currentRentals = [];
+      const pastRentals = [];
+      const purchases = [];
+      const cancellations = [];
+
+      // Categorize Quotes (Rentals)
+      quotes.forEach(rental => {
+        const status = (rental.status || '').toLowerCase();
+        const paymentStatus = (rental.payment_status || '').toLowerCase();
+        const productType = (rental.product_id?.product_type_name || '').toLowerCase();
+        
+        let startDateVal = 0;
+        let endDateVal = 0;
+
+        if (rental.start_date) {
+          const d = new Date(rental.start_date);
+          startDateVal = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        }
+        if (rental.end_date) {
+          const d = new Date(rental.end_date);
+          endDateVal = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        }
+
+        const isRent = productType === 'rent';
+
+        // 1. Current Rental
+        const isCurrent = isRent && (
+          (paymentStatus === 'paid' && status === 'delivery' && startDateVal && endDateVal && nowDate >= startDateVal && nowDate <= endDateVal) ||
+          (status === 'approval' || status === 'approve' || status === 'pending')
+        );
+
+        if (isCurrent) {
+          currentRentals.push(rental);
+        }
+        // 2. Past Rental
+        else if (isRent && paymentStatus === 'paid' && (status === 'complete' || status === 'successful') && endDateVal && nowDate > endDateVal) {
+          pastRentals.push(rental);
+        }
+        // 3. Cancellations (Rent)
+        else if (status === 'rejected' || status === 'reject' || status === 'cancelled') {
+          cancellations.push(rental);
+        }
+      });
+
+      // Categorize Orders (Purchases/Sell)
+      orders.forEach(order => {
+        const status = (order.order_status || '').toLowerCase();
+        const vendorStatus = (order.vendor_status || '').toLowerCase();
+        const paymentStatus = (order.payment_status || '').toLowerCase();
+
+        (order.items || []).forEach((item, idx) => {
+          const normalizedItem = {
+            _id: `${order._id}-${item.product_id || idx}`,
+            order_id: order.order_id,
+            product_id: {
+              _id: item.product_id,
+              product_name: item.product_name,
+              product_main_image: item.product_image,
+              price: item.price,
+              product_type_name: 'Sell'
+            },
+            qty: item.quantity,
+            calculated_price: item.final_amount,
+            status: order.order_status,
+            vendor_status: order.vendor_status,
+            payment_status: order.payment_status,
+            createdAt: order.createdAt,
+            razorpay_payment_id: order.razorpay_payment_id
+          };
+
+          // 3. Cancellations (Sell)
+          if (status === 'cancelled' || vendorStatus === 'cancelled') {
+            cancellations.push(normalizedItem);
+          }
+          // 4. Purchases
+          else if (paymentStatus === 'paid') {
+            purchases.push(normalizedItem);
+          }
+        });
+      });
+
+      res.status(httpStatus.OK).json({
+        success: true,
+        data: {
+          currentRentals,
+          pastRentals,
+          purchases,
+          cancellations
+        }
+      });
+    } catch (error) {
+      console.error('User Dashboard Error:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
+        success: false, 
+        message: 'Failed to fetch dashboard data',
+        error: error.message 
+      });
+    }
+  }
+};
+
 module.exports = {
   createGetQuote,
   getAllQuotes,
@@ -1053,5 +1174,6 @@ module.exports = {
   statusDropdown,
   changeStatus,
   getAllQuotesForAdmin,
-  verifyQuotePayment
+  verifyQuotePayment,
+  getUserDashboardData
 };

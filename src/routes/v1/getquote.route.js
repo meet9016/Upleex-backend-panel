@@ -20,6 +20,12 @@ router.get(
   auth(),
   catchAsync(getQuoteController.getAllQuotes.handler)
 );
+
+router.get(
+  '/user-dashboard',
+  auth(),
+  catchAsync(getQuoteController.getUserDashboardData.handler)
+);
 router.get(
   '/getallforadmin',
   catchAsync(getQuoteController.getAllQuotesForAdmin.handler)
