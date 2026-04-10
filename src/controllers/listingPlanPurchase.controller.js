@@ -6,6 +6,7 @@ const ListingPlan = require('../models/listingPlan.model');
 const { Product } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const walletService = require('../services/wallet.service');
+const moment = require('moment');
 
 const fallbackPlanOptions = [
   { plan_type: 'basic', months: 2, max_products: 1, amount: 39 },
@@ -46,7 +47,7 @@ const createPurchase = {
         if (!def && plan_type) {
           def = await ListingPlan.findOne({ plan_type: plan_type, status: 'active' });
         }
-      } catch (e) {}
+      } catch (e) { }
       if (!def) {
         def = fallbackPlanOptions.find((p) => p.plan_type === plan_type);
       }
@@ -59,7 +60,7 @@ const createPurchase = {
         amount = def.amount;
       }
     }
-    
+
     // Check wallet balance before deducting
     const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
     if (!hasBalance) {
@@ -67,7 +68,7 @@ const createPurchase = {
         message: `Insufficient wallet balance. Plan costs ₹${amount}. Please add money to your wallet.`
       });
     }
-    
+
     // Deduct amount from wallet
     let deductionResult;
     try {
@@ -89,15 +90,46 @@ const createPurchase = {
         message: 'Failed to process wallet payment. Please try again.'
       });
     }
-    
+
     // Ensure we don't exceed max_products limit, but allow all products if max_products is sufficient
-    const assignIds = max_products && max_products < product_ids.length 
-      ? product_ids.slice(0, max_products) 
+    const assignIds = max_products && max_products < product_ids.length
+      ? product_ids.slice(0, max_products)
       : product_ids;
-    const start = start_at ? new Date(start_at) : new Date();
-    const expire = expire_at ? new Date(expire_at) : new Date(start);
-    if (!expire_at) {
-      expire.setMonth(expire.getMonth() + (months || 1));
+
+    const start = start_at ? moment(start_at).toDate() : new Date();
+    const commonExpire = moment(start).add(months || 1, 'months').toDate();
+
+    // Fetch current products to check their expiry
+    const productsToUpdate = await Product.find({ _id: { $in: assignIds }, vendor_id });
+
+    const now = new Date();
+    const bulkOps = productsToUpdate.map(product => {
+      let currentExpiry = product.expires_at ? moment(product.expires_at) : null;
+      let newProductExpiry;
+
+      if (currentExpiry && currentExpiry.isAfter(now)) {
+        // Product is still active, extend from current expiry
+        newProductExpiry = currentExpiry.add(months, 'months').toDate();
+      } else {
+        // Product expired or no expiry, start from today
+        newProductExpiry = moment(start).add(months, 'months').toDate();
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: product._id },
+          update: {
+            $set: {
+              status: 'active',
+              expires_at: newProductExpiry
+            }
+          }
+        }
+      };
+    });
+
+    if (bulkOps.length > 0) {
+      await Product.bulkWrite(bulkOps);
     }
     const purchase = await ListingPlanPurchase.create({
       vendor_id,
@@ -107,24 +139,15 @@ const createPurchase = {
       amount,
       product_ids: assignIds,
       start_at: start,
-      expire_at: expire,
+      expire_at: expire_at ? new Date(expire_at) : commonExpire,
     });
-    await Product.updateMany(
-      { _id: { $in: assignIds }, vendor_id },
-      { 
-        $set: { 
-          status: 'active', 
-          expires_at: expire,
-        } 
-      }
-    );
-    
     // Get updated wallet balance
     const updatedBalance = await walletService.getWalletBalance(vendor_id);
-    
-    return res.status(201).json({ 
-      status: 201, 
-      message: `Plan applied successfully. ₹${amount} deducted from wallet.`, 
+
+    return res.status(201).json({
+      success: true,
+      status: 201,
+      message: `Plan applied successfully. ₹${amount} deducted from wallet.`,
       data: {
         ...purchase.toObject(),
         wallet_balance: updatedBalance,
@@ -151,7 +174,7 @@ const getAllPurchases = {
     const page = parseInt(req.query.page) || 1;
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
     const query = {};
-    
+
     // Auto-filter by logged-in vendor if applicable
     if (req.user && req.user.userType === 'vendor') {
       query.vendor_id = req.user.id || req.user._id;
@@ -162,10 +185,10 @@ const getAllPurchases = {
     if (amount) {
       query.amount = { $eq: Number(amount) };
     }
-    
+
     // Handle date filters - using OR condition to show purchases that either start in start_month OR expire in expire_month
     const dateConditions = [];
-    
+
     // Condition 1: Purchases that started in start_month
     if (start_month) {
       const sm = String(start_month).slice(0, 7); // YYYY-MM
@@ -189,13 +212,13 @@ const getAllPurchases = {
       endOfMonth.setHours(23, 59, 59, 999);
       dateConditions.push({ expire_at: { $gte: startOfMonth, $lte: endOfMonth } });
     }
-    
+
     // Apply OR condition if we have any date filters
     if (dateConditions.length > 0) {
       query.$or = dateConditions;
     }
 
-    let mongo = ListingPlanPurchase.find(query).populate('product_ids', 'product_name category_name').sort({ createdAt: -1 });
+    let mongo = ListingPlanPurchase.find(query).populate('product_ids', 'product_name category_name sub_category_name expires_at').sort({ createdAt: -1 });
     let data;
     if (searchText) {
       data = await mongo;
@@ -292,7 +315,7 @@ const updatePurchase = {
       let def = null;
       try {
         def = await ListingPlan.findOne({ plan_type: body.plan_type, status: 'active' });
-      } catch (e) {}
+      } catch (e) { }
       if (!def) {
         def = fallbackPlanOptions.find((p) => p.plan_type === body.plan_type);
       }
@@ -313,11 +336,11 @@ const updatePurchase = {
       const expire = updated.expire_at || new Date();
       await Product.updateMany(
         { _id: { $in: updated.product_ids }, vendor_id: updated.vendor_id },
-        { 
-          $set: { 
-            status: 'active', 
+        {
+          $set: {
+            status: 'active',
             expires_at: expire,
-          } 
+          }
         }
       );
     }
@@ -347,7 +370,7 @@ const getPlanOptions = {
       if (plans && plans.length) {
         return res.status(200).json({ success: true, data: plans });
       }
-    } catch (e) {}
+    } catch (e) { }
     return res.status(200).json({ success: true, data: fallbackPlanOptions });
   },
 };
