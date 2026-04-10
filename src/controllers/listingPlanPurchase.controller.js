@@ -61,6 +61,58 @@ const createPurchase = {
       }
     }
 
+    // 1. Check for active purchases of this type that are not expired
+    const activePurchases = await ListingPlanPurchase.find({
+      vendor_id,
+      plan_type,
+      expire_at: { $gt: new Date() }
+    });
+
+    // 2. Identify truly new products (filter out those already in some active plan of this type)
+    const allCurrentlyAssignedIds = activePurchases.flatMap(p => p.product_ids.map(id => String(id)));
+    const trulyNewProductIds = product_ids.filter(pid => !allCurrentlyAssignedIds.includes(String(pid)));
+
+    // 3. If no new products are being added, just return success
+    if (trulyNewProductIds.length === 0 && activePurchases.length > 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'All selected products are already part of your active listing plans',
+        data: activePurchases[0]
+      });
+    }
+
+    // 4. Try to find an existing purchase with space
+    const purchaseWithSpace = activePurchases.find(p => (p.max_products - p.product_ids.length) >= trulyNewProductIds.length);
+
+    if (purchaseWithSpace) {
+      // Add products to existing plan
+      purchaseWithSpace.product_ids.push(...trulyNewProductIds);
+      await purchaseWithSpace.save();
+
+      // Update product expiry
+      const productsToUpdate = await Product.find({ _id: { $in: trulyNewProductIds }, vendor_id });
+      const bulkOps = productsToUpdate.map(product => ({
+        updateOne: {
+          filter: { _id: product._id },
+          update: {
+            $set: {
+              status: 'active',
+              expires_at: purchaseWithSpace.expire_at
+            }
+          }
+        }
+      }));
+
+      if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Products added to your existing listing plan successfully',
+        data: purchaseWithSpace
+      });
+    }
+
+    // 5. If no space, create a new purchase (existing logic)
     // Check wallet balance before deducting
     const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
     if (!hasBalance) {
@@ -70,9 +122,8 @@ const createPurchase = {
     }
 
     // Deduct amount from wallet
-    let deductionResult;
     try {
-      deductionResult = await walletService.deductMoneyFromWallet(
+      await walletService.deductMoneyFromWallet(
         vendor_id,
         amount,
         `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
@@ -83,7 +134,6 @@ const createPurchase = {
           max_products: max_products,
         }
       );
-      console.log(`💰 Deducted ₹${amount} from vendor ${vendor_id} wallet for ${plan_type} plan`);
     } catch (walletError) {
       console.error('Wallet deduction failed:', walletError);
       return res.status(httpStatus.BAD_REQUEST).json({
@@ -91,7 +141,7 @@ const createPurchase = {
       });
     }
 
-    // Ensure we don't exceed max_products limit, but allow all products if max_products is sufficient
+    // Assign products to new plan
     const assignIds = max_products && max_products < product_ids.length
       ? product_ids.slice(0, max_products)
       : product_ids;
@@ -99,19 +149,14 @@ const createPurchase = {
     const start = start_at ? moment(start_at).toDate() : new Date();
     const commonExpire = moment(start).add(months || 1, 'months').toDate();
 
-    // Fetch current products to check their expiry
     const productsToUpdate = await Product.find({ _id: { $in: assignIds }, vendor_id });
-
-    const now = new Date();
     const bulkOps = productsToUpdate.map(product => {
       let currentExpiry = product.expires_at ? moment(product.expires_at) : null;
       let newProductExpiry;
 
-      if (currentExpiry && currentExpiry.isAfter(now)) {
-        // Product is still active, extend from current expiry
+      if (currentExpiry && currentExpiry.isAfter(new Date())) {
         newProductExpiry = currentExpiry.add(months, 'months').toDate();
       } else {
-        // Product expired or no expiry, start from today
         newProductExpiry = moment(start).add(months, 'months').toDate();
       }
 
@@ -128,9 +173,8 @@ const createPurchase = {
       };
     });
 
-    if (bulkOps.length > 0) {
-      await Product.bulkWrite(bulkOps);
-    }
+    if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
+
     const purchase = await ListingPlanPurchase.create({
       vendor_id,
       plan_type,

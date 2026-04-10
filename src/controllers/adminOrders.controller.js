@@ -90,7 +90,7 @@ const getRentOrders = {
           })
           .populate({
             path: 'product_id',
-            select: 'product_name product_main_image product_type_name product_listing_type_name vendor_id price',
+            select: 'product_name product_main_image product_type_name product_listing_type_name vendor_id price category_name sub_category_name',
           })
           .lean(),
       ]);
@@ -127,6 +127,8 @@ const getRentOrders = {
           vendor_email: vendor?.email || 'N/A',
           vendor_phone: vendor?.number || 'N/A',
           product_name: product?.product_name || 'N/A',
+          category_name: product?.category_name || 'N/A',
+          subcategory_name: product?.sub_category_name || 'N/A',
           product_image: product?.product_main_image || '',
           product_type: product?.product_type_name || 'Rent',
           product_listing_type_name: product?.product_listing_type_name || '',
@@ -209,8 +211,19 @@ const getSellOrders = {
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
+          .populate('user_id', 'mobile phone')
           .lean(),
       ]);
+
+      // ── Enrich with product info (Category / Subcategory) ──────────────────
+      const allProductIds = [...new Set(orders.flatMap(o => o.items.map(i => i.product_id)).filter(Boolean))];
+      let productMap = {};
+      if (allProductIds.length) {
+        const products = await Product.find({ _id: { $in: allProductIds } })
+          .select('category_name sub_category_name')
+          .lean();
+        products.forEach(p => { productMap[p._id.toString()] = p; });
+      }
 
       // ── Enrich with vendor info ────────────────────────────────────────────
       const allVendorIds = [
@@ -241,11 +254,13 @@ const getSellOrders = {
             order_id: order.order_id,
             user_name: order.user_name || 'N/A',
             user_email: order.user_email || 'N/A',
-            user_phone: order.user_phone || 'N/A',
+            user_phone: order.user_phone || order.user_id?.mobile || order.user_id?.phone || 'N/A',
             vendor_name: vendor?.business_name || vendor?.full_name || 'N/A',
             vendor_email: vendor?.email || 'N/A',
             vendor_phone: vendor?.number || 'N/A',
             product_name: item.product_name || 'N/A',
+            category_name: productMap[item.product_id?.toString()]?.category_name || 'N/A',
+            subcategory_name: productMap[item.product_id?.toString()]?.sub_category_name || 'N/A',
             product_image: item.product_image || '',
             quantity: item.quantity || 1,
             unit_price: item.price || 0,

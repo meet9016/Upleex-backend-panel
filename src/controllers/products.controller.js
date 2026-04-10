@@ -470,7 +470,9 @@ const getAllProducts = {
       price_max,
       city,
       sort_by,
-      sort_order
+      sort_order,
+      is_priority,
+      is_boosted,
     } = req.query;
 
     const bodyVendorId = req.body.vendor_id;
@@ -575,6 +577,12 @@ const getAllProducts = {
       }
     }
 
+    // Priority and Boost filters
+    if (is_priority === 'true') query.is_priority = true;
+    if (is_priority === 'false') query.is_priority = false;
+    if (is_boosted === 'true') query.is_boosted = true;
+    if (is_boosted === 'false') query.is_boosted = false;
+
     // Listing type filter (tenure)
     if ((filter_tenure || listing_type) && !isSpecialTenureFilter) {
       const tenureFilter = filter_tenure || listing_type;
@@ -630,7 +638,7 @@ const getAllProducts = {
 
     try {
       const pageNum = Math.max(parseInt(req.query.page || req.body.page) || 1, 1);
-      const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 100);
+      const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 1000);
       const skip = (pageNum - 1) * limitNum;
 
       console.log("Product query:", JSON.stringify(query, null, 2));
