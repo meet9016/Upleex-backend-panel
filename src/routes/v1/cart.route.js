@@ -27,4 +27,11 @@ router.post(
   catchAsync(cartController.removeFromCart)
 );
 
+router.post(
+  '/web-update-cart',
+  upload.none(),
+  auth(),
+  catchAsync(cartController.updateCartItem)
+);
+
 module.exports = router;
