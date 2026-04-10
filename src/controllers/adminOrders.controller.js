@@ -90,7 +90,7 @@ const getRentOrders = {
           })
           .populate({
             path: 'product_id',
-            select: 'product_name product_main_image product_type_name vendor_id price',
+            select: 'product_name product_main_image product_type_name product_listing_type_name vendor_id price',
           })
           .lean(),
       ]);
@@ -129,6 +129,7 @@ const getRentOrders = {
           product_name: product?.product_name || 'N/A',
           product_image: product?.product_main_image || '',
           product_type: product?.product_type_name || 'Rent',
+          product_listing_type_name: product?.product_listing_type_name || '',
           qty: q.qty || 1,
           number_of_days: q.number_of_days || 0,
           start_date: q.start_date || null,

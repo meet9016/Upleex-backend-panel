@@ -117,42 +117,44 @@ const purchasePriorityPlan = {
         return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Plan not found' });
       }
 
-      // Check if any of these products are already priority
-      const alreadyPriority = await Product.find({
-        _id: { $in: product_ids },
-        is_priority: true,
-        priority_expiry: { $gt: new Date() }
-      });
-
-      if (alreadyPriority.length > 0) {
-        const productNames = alreadyPriority.map(p => p.product_name).join(', ');
-        return res.status(httpStatus.BAD_REQUEST).json({
-          success: false,
-          message: `The following products already have an active priority plan: ${productNames}`
-        });
-      }
-
-      // Check for an existing active purchase for this plan
-      const activePurchase = await PriorityPlanPurchase.findOne({
+      // Check for all active purchases for this plan type
+      const activePurchases = await PriorityPlanPurchase.find({
         vendor_id,
         plan_id,
         status: 'active',
         expire_at: { $gt: new Date() }
       });
 
+      // Filter out products that are already assigned to ANY of these active plan instances
+      let newProductIds = [...product_ids];
+      const allAssignedIds = activePurchases.flatMap(p => p.product_ids.map(id => id.toString()));
+      newProductIds = product_ids.filter(pid => !allAssignedIds.includes(pid.toString()));
+
+      // If no new products are being added, just return success
+      if (newProductIds.length === 0 && activePurchases.length > 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'All selected products are already part of your active priority plans',
+          expiry: activePurchases[0].expire_at // Return the first one as a reference
+        });
+      }
+
       let expiryDate;
       let isNewPurchase = true;
 
-      if (activePurchase && (activePurchase.product_ids.length + product_ids.length) <= activePurchase.total_slots) {
-        // Reuse existing plan slots
+      // Try to find ONE existing active purchase that has enough remaining slots
+      const purchaseWithSpace = activePurchases.find(p => (p.total_slots - p.product_ids.length) >= newProductIds.length);
+
+      if (purchaseWithSpace) {
         isNewPurchase = false;
-        expiryDate = activePurchase.expire_at;
+        expiryDate = purchaseWithSpace.expire_at;
 
         // Update active purchase
-        activePurchase.product_ids.push(...product_ids);
-        await activePurchase.save();
+        purchaseWithSpace.product_ids.push(...newProductIds);
+        await purchaseWithSpace.save();
       } else {
-        // New purchase logic
+        // New purchase required (none of the existing instances have enough space)
+        // New purchase required
         if (product_ids.length > plan.product_slots) {
           return res.status(httpStatus.BAD_REQUEST).json({
             success: false,
@@ -160,7 +162,7 @@ const purchasePriorityPlan = {
           });
         }
 
-        // Deduct money
+        // Deduct money from wallet
         const description = `Priority Plan Purchase: ${plan.name}`;
         await walletService.deductMoneyFromWallet(vendor_id, price, description, {
           plan_id,
@@ -182,7 +184,7 @@ const purchasePriorityPlan = {
         });
       }
 
-      // Update products to be priority
+      // Update products to be priority (including existing ones to refresh expiry if it was a new purchase)
       await Product.updateMany(
         { _id: { $in: product_ids }, vendor_id },
         {
