@@ -829,15 +829,11 @@ const exportPaymentsToPDF = {
 const exportWalletTransactionsToExcel = {
   handler: async (req, res) => {
     try {
-      const { type, status, search, vendor_id } = req.query;
+      const { type, status, search } = req.query;
       const user = req.user;
-      let targetVendorId = user.id || user._id;
+      const vendorId = user.id || user._id;
 
-      if (vendor_id && user.userType === 'admin') {
-        targetVendorId = vendor_id;
-      }
-
-      const wallet = await Wallet.findOne({ vendor_id: targetVendorId });
+      const wallet = await Wallet.findOne({ vendor_id: vendorId });
       if (!wallet) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Wallet not found' });
       }
@@ -896,15 +892,11 @@ const exportWalletTransactionsToExcel = {
 const exportWalletTransactionsToPDF = {
   handler: async (req, res) => {
     try {
-      const { type, status, search, vendor_id } = req.query;
+      const { type, status, search } = req.query;
       const user = req.user;
-      let targetVendorId = user.id || user._id;
+      const vendorId = user.id || user._id;
 
-      if (vendor_id && user.userType === 'admin') {
-        targetVendorId = vendor_id;
-      }
-
-      const wallet = await Wallet.findOne({ vendor_id: targetVendorId });
+      const wallet = await Wallet.findOne({ vendor_id: vendorId });
       if (!wallet) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Wallet not found' });
       }

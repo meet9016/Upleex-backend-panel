@@ -57,6 +57,7 @@ const getAllCategories = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
+      const { city } = req.query;
       
       let query = {};
       
@@ -74,10 +75,49 @@ const getAllCategories = {
       const transformedData = await Promise.all(
         categories.map(async (cat) => {
           const catId = cat.id || cat._id;
-          const serviceCount = await Service.countDocuments({ 
+          
+          // Build service count query
+          const serviceQuery = { 
             category_id: String(catId),
             approval_status: 'approved'
-          });
+          };
+
+          // If city is provided, filter by city
+          if (city) {
+            const VendorKyc = require('../models').VendorKyc;
+            const raw = String(city).trim();
+            const parts = raw.split('-');
+            const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+            const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+            
+            const vendors = await VendorKyc.find(
+              {
+                $or: [
+                  { 'ContactDetails.city_id': raw },
+                  { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+                  { 'ContactDetails.city_name': cityNameRegex },
+                ],
+              },
+              { 'ContactDetails.vendor_id': 1 }
+            );
+            const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+            
+            if (vendorIds.length > 0) {
+              serviceQuery.vendor_id = { $in: vendorIds };
+            } else {
+              // If no vendors in this city, return 0 count
+              return {
+                categories_id: String(catId),
+                categories_name: cat.name,
+                image: cat.image || '',
+                service_count: '0',
+                created_at: cat.createdAt,
+                updated_at: cat.updatedAt,
+              };
+            }
+          }
+
+          const serviceCount = await Service.countDocuments(serviceQuery);
 
           return {
             categories_id: String(catId),
