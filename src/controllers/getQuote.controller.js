@@ -30,7 +30,9 @@ const createGetQuote = {
       number_of_days: Joi.number().min(0).optional(),
       months_id: Joi.string().allow('').optional(),
       qty: Joi.number().optional(),
-      note: Joi.string().allow('').optional(),
+      note: Joi.string().allow('').max(5000).optional().messages({
+        'string.max': 'Note is too long. Maximum allowed length is 5000 characters.'
+      }),
       status: Joi.string()
         .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful')
         .optional(),
@@ -129,9 +131,16 @@ const createGetQuote = {
         data: populatedQuote,
       });
     } catch (error) {
+      if (error.name === 'ValidationError') {
+        const message = Object.values(error.errors).map((e) => e.message).join(', ');
+        return res.status(httpStatus.BAD_REQUEST).json({
+          success: false,
+          message: message || error.message
+        });
+      }
       return res
         .status(httpStatus.INTERNAL_SERVER_ERROR)
-        .json({ message: error.message });
+        .json({ success: false, message: error.message });
     }
   },
 };
@@ -596,7 +605,9 @@ const updateQuote = {
       number_of_days: Joi.number().min(0).optional(),
       months_id: Joi.string().optional(),
       qty: Joi.number().optional(),
-      note: Joi.string().allow('').optional(),
+      note: Joi.string().allow('').max(5000).optional().messages({
+        'string.max': 'Note is too long. Maximum allowed length is 5000 characters.'
+      }),
       status: Joi.string()
         .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful', 'delivery')
         .optional(),
@@ -743,6 +754,7 @@ const changeStatus = {
         { status: internal },
         { new: true }
       )
+      
         .populate('user_id')
         .populate('product_id')
         .lean();
@@ -750,6 +762,7 @@ const changeStatus = {
       if (!updated) {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
       }
+      console.log("updated",updated);
 
       // Stock Management + Payment Link Generation
       if (internal !== existingQuote.status) {

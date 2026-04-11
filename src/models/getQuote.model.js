@@ -46,7 +46,7 @@ const getQuoteSchema = new mongoose.Schema(
     note: {
       type: String,
       trim: true,
-      maxlength: 1000,
+      maxlength: 5000,
     },
     
     calculated_price: {

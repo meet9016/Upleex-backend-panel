@@ -60,22 +60,32 @@ const buildDropdownResponse = async () => {
     products_type: types.map((t) => ({
       id: t.id,
       product_type: t.product_type,
+      created_at: t.createdAt,
+      updated_at: t.updatedAt,
     })),
     products_listing_type: listingTypes.map((lt) => ({
       id: lt.id,
       name: lt.name,
+      created_at: lt.createdAt,
+      updated_at: lt.updatedAt,
     })),
     products_months: months.map((m) => ({
       id: m.id,
       month_name: m.month_name,
+      created_at: m.createdAt,
+      updated_at: m.updatedAt,
     })),
     account_type: accountTypes.map((at) => ({
       id: at.id,
       type_name: at.type_name,
+      created_at: at.createdAt,
+      updated_at: at.updatedAt,
     })),
     getquote_status: quoteStatuses.map((qs) => ({
       id: qs.id,
       status_name: qs.status_name,
+      created_at: qs.createdAt,
+      updated_at: qs.updatedAt,
     })),
   };
 };
