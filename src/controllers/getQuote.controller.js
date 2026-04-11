@@ -32,7 +32,7 @@ const createGetQuote = {
       qty: Joi.number().optional(),
       note: Joi.string().allow('').optional(),
       status: Joi.string()
-        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'successful')
+        .valid('pending', 'approval', 'approved', 'active', 'reject', 'complete', 'completed', 'delivery', 'successful')
         .optional(),
       start_date: Joi.date().optional(),
       end_date: Joi.date().optional(),
@@ -45,7 +45,7 @@ const createGetQuote = {
     try {
       const data = req.body;
       const user_id = req.user._id;
-      
+
       console.log('Create quote request data:', data);
       console.log('User ID:', user_id);
 
@@ -61,10 +61,10 @@ const createGetQuote = {
       // Calculate price based on product type
       let calculatedPrice = 0;
       let priceDetails = {};
-      
+
       if (data.months_id && product.month_arr && product.month_arr.length > 0) {
         // Monthly product - find price from month_arr
-        const selectedMonth = product.month_arr.find(m => 
+        const selectedMonth = product.month_arr.find(m =>
           m.months_id === data.months_id || m.product_months_id === data.months_id
         );
         if (selectedMonth) {
@@ -91,7 +91,7 @@ const createGetQuote = {
       // Extract time from ISO datetime strings if provided
       let startTime = data.start_time || '';
       let endTime = data.end_time || '';
-      
+
       // If start_date is ISO string with time, extract it
       if (data.start_date && typeof data.start_date === 'string' && data.start_date.includes('T')) {
         const startDateTime = new Date(data.start_date);
@@ -99,7 +99,7 @@ const createGetQuote = {
         const minutes = String(startDateTime.getMinutes()).padStart(2, '0');
         startTime = `${hours}:${minutes}`;
       }
-      
+
       // If end_date is ISO string with time, extract it
       if (data.end_date && typeof data.end_date === 'string' && data.end_date.includes('T')) {
         const endDateTime = new Date(data.end_date);
@@ -219,7 +219,7 @@ const getAllQuotes = {
       // Search by note, status, or product name
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
-        
+
         // Find matching products within current user scope
         const productSearchQuery = { product_name: searchRegex };
         if (user.userType === 'vendor') {
@@ -267,7 +267,7 @@ const getAllQuotes = {
       // If we have product-related filters, we need to handle differently
       if (product_type || listing_type) {
         console.log('🔍 Product-based filtering:', { product_type, listing_type });
-        
+
         // Get all quotes matching basic criteria with populated product
         let quotesQuery = GetQuote.find(query)
           .populate({
@@ -278,7 +278,7 @@ const getAllQuotes = {
 
         const allQuotes = await quotesQuery;
         console.log('📊 All quotes before product filtering:', allQuotes.length);
-        
+
         // Apply product-based filters
         const filteredQuotes = allQuotes.filter(quote => {
           const product = quote.product_id;
@@ -295,11 +295,11 @@ const getAllQuotes = {
               productTypeId: product.product_type_id,
               productTypeName: product.product_type_name
             });
-            
-            const matchesType = productTypes.includes(product.product_type_id) || 
-                               productTypes.includes(product.product_type_name) ||
-                               productTypes.includes(String(product.product_type_id));
-            
+
+            const matchesType = productTypes.includes(product.product_type_id) ||
+              productTypes.includes(product.product_type_name) ||
+              productTypes.includes(String(product.product_type_id));
+
             if (!matchesType) {
               console.log('❌ Product type mismatch for quote:', quote._id);
               return false;
@@ -314,11 +314,11 @@ const getAllQuotes = {
               productListingTypeId: product.product_listing_type_id,
               productListingTypeName: product.product_listing_type_name
             });
-            
-            const matchesListing = listingTypes.includes(product.product_listing_type_id) || 
-                                  listingTypes.includes(product.product_listing_type_name) ||
-                                  listingTypes.includes(String(product.product_listing_type_id));
-            
+
+            const matchesListing = listingTypes.includes(product.product_listing_type_id) ||
+              listingTypes.includes(product.product_listing_type_name) ||
+              listingTypes.includes(String(product.product_listing_type_id));
+
             if (!matchesListing) {
               console.log('❌ Listing type mismatch for quote:', quote._id);
               return false;
@@ -329,7 +329,7 @@ const getAllQuotes = {
         });
 
         console.log('✅ Filtered quotes count:', filteredQuotes.length);
-        
+
         // Apply pagination manually
         const total = filteredQuotes.length;
         const paginatedQuotes = filteredQuotes.slice(skip, skip + limitNum);
@@ -363,18 +363,18 @@ const getAllQuotes = {
           totalPages: Math.ceil(total / limitNum),
           data: enrichedQuotes
         });
-      } 
-      
+      }
+
       // No product filters, use handlePagination
       else {
         // Override the json method to populate product details
         const originalJson = res.json.bind(res);
         res.json = async (payload) => {
           if (payload && payload.success && Array.isArray(payload.data)) {
-            
+
             // Get quote IDs
             const quoteIds = payload.data.map(q => q._id);
-            
+
             // Fetch populated quotes
             const populatedQuotes = await GetQuote.find({ _id: { $in: quoteIds } })
               .populate('product_id')
@@ -389,7 +389,7 @@ const getAllQuotes = {
             // Add month_name to each quote
             payload.data = payload.data.map(quote => {
               const populated = quoteMap[quote._id.toString()] || quote;
-              
+
               if (populated.months_id && populated.product_id?.month_arr) {
                 const month = populated.product_id.month_arr.find(
                   m => m.months_id === populated.months_id || m.product_months_id === populated.months_id
@@ -398,7 +398,7 @@ const getAllQuotes = {
                   populated.month_name = month.month_name;
                 }
               }
-              
+
               return populated;
             });
           }
@@ -463,7 +463,7 @@ const getAllQuotesForAdmin = {
       // Search by note, status, or product name
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
-        
+
         // Find matching products
         const matchingProducts = await Product.find({ product_name: searchRegex }).select('_id');
         const productIds = matchingProducts.map(p => p._id);
@@ -492,7 +492,7 @@ const getAllQuotesForAdmin = {
           .lean();
 
         const allQuotes = await quotesQuery;
-        
+
         // Apply product-based filters
         const filteredQuotes = allQuotes.filter(quote => {
           const product = quote.product_id;
@@ -544,8 +544,8 @@ const getAllQuotesForAdmin = {
           totalPages: Math.ceil(total / limitNum),
           data: enrichedQuotes
         });
-      } 
-      
+      }
+
       // No product filters, use handlePagination
       else {
         // Use handlePagination directly without overriding res.json
@@ -641,8 +641,8 @@ const updateQuote = {
 
       // Update the quote and get the populated result
       const quote = await GetQuote.findByIdAndUpdate(
-        _id, 
-        updateData, 
+        _id,
+        updateData,
         { new: true } // Return the updated document
       )
         .populate('product_id') // Populate product details
@@ -657,7 +657,7 @@ const updateQuote = {
         const product = quote.product_id;
         if (product) {
           const qty = quote.qty || 1;
-          
+
           // If status becomes 'approval' (Approved), reduce stock
           if (updateData.status === 'approval' && existingQuote.status === 'pending') {
             if (product.available_quantity >= qty) {
@@ -666,7 +666,7 @@ const updateQuote = {
               });
               console.log(`Reduced stock for product ${product._id} by ${qty}`);
             }
-          } 
+          }
           // If status becomes 'successful' or 'complete', return stock
           else if (['successful', 'complete'].includes(updateData.status)) {
             // Only return if it was previously approved/active/delivery (when stock was actually reduced)
@@ -730,7 +730,6 @@ const changeStatus = {
       else if (s.includes('approve')) internal = 'approval';
       else if (s.includes('reject')) internal = 'reject';
       else if (s.includes('complete')) internal = 'complete';
-      else if (s.includes('success')) internal = 'successful';
       else if (s.includes('deliver')) internal = 'delivery';
 
       const existingQuote = await GetQuote.findById(quote_id).lean();
@@ -806,8 +805,8 @@ const changeStatus = {
           }
           // If status becomes 'successful' or 'complete', return stock
           else if (['successful', 'complete'].includes(internal)) {
-             // Only return if it was previously approved/active/delivery (when stock was actually reduced)
-             if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
+            // Only return if it was previously approved/active/delivery (when stock was actually reduced)
+            if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
@@ -822,14 +821,14 @@ const changeStatus = {
         const emailService = require('../services/email.service');
         const user = updated.user_id;
         const product = updated.product_id;
-        
+
         if (user && user.email) {
           const userName = user.first_name || user.firstName || 'User';
           const productName = product?.product_name || 'Your Product';
           const startDate = updated.start_date ? new Date(updated.start_date).toLocaleDateString('en-GB') : 'N/A';
           const endDate = updated.end_date ? new Date(updated.end_date).toLocaleDateString('en-GB') : 'N/A';
           const paymentLink = updated.razorpay_payment_link;
-          
+
           if (internal === 'approval') {
             // Send approval email
             const subject = `Quote Approved! 🎉 - ${productName}`;
@@ -1004,37 +1003,37 @@ const verifyQuotePayment = {
 
       // In real scenario we match signatures or use razorpay API to get payment details
       if (razorpay_payment_link_status === 'paid' || razorpay_payment_id) {
-        
+
         let existingQuote;
         if (quote_id) {
-           existingQuote = await GetQuote.findById(quote_id);
+          existingQuote = await GetQuote.findById(quote_id);
         } else if (razorpay_payment_link_id) {
-           // We saved the quote_id in the notes of the razorpay payment link! Let's fetch it via razorpay SDK.
-           try {
-             if (razorpay) {
-               const paymentLink = await razorpay.paymentLink.fetch(razorpay_payment_link_id);
-               if (paymentLink && paymentLink.notes && paymentLink.notes.quote_id) {
-                  existingQuote = await GetQuote.findById(paymentLink.notes.quote_id);
-               }
-             }
-           } catch (rzpErr) {
-             console.error('Error fetching razorpay payment link:', rzpErr);
-           }
+          // We saved the quote_id in the notes of the razorpay payment link! Let's fetch it via razorpay SDK.
+          try {
+            if (razorpay) {
+              const paymentLink = await razorpay.paymentLink.fetch(razorpay_payment_link_id);
+              if (paymentLink && paymentLink.notes && paymentLink.notes.quote_id) {
+                existingQuote = await GetQuote.findById(paymentLink.notes.quote_id);
+              }
+            }
+          } catch (rzpErr) {
+            console.error('Error fetching razorpay payment link:', rzpErr);
+          }
         }
 
         if (!existingQuote && razorpay_payment_link_reference_id) {
-           existingQuote = await GetQuote.findOne({ razorpay_payment_link: { $regex: razorpay_payment_link_reference_id } });
+          existingQuote = await GetQuote.findOne({ razorpay_payment_link: { $regex: razorpay_payment_link_reference_id } });
         }
 
         if (existingQuote) {
           existingQuote.payment_status = 'paid';
           existingQuote.razorpay_payment_id = razorpay_payment_id;
-          
+
           await existingQuote.save();
           return res.status(httpStatus.OK).json({ success: true, message: 'Payment verified and status updated', data: existingQuote });
         } else {
-           // We might not easily find the quote if we don't have its id. As a fallback, try to find any pending quote the user has, but mostly we need quote_id.
-           return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Quote not found for this payment' });
+          // We might not easily find the quote if we don't have its id. As a fallback, try to find any pending quote the user has, but mostly we need quote_id.
+          return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Quote not found for this payment' });
         }
       }
 
@@ -1074,7 +1073,7 @@ const getUserDashboardData = {
         const status = (rental.status || '').toLowerCase();
         const paymentStatus = (rental.payment_status || '').toLowerCase();
         const productType = (rental.product_id?.product_type_name || '').toLowerCase();
-        
+
         let startDateVal = 0;
         let endDateVal = 0;
 
@@ -1156,10 +1155,10 @@ const getUserDashboardData = {
       });
     } catch (error) {
       console.error('User Dashboard Error:', error);
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
-        success: false, 
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
         message: 'Failed to fetch dashboard data',
-        error: error.message 
+        error: error.message
       });
     }
   }
