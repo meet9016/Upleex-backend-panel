@@ -48,4 +48,10 @@ router.get(
   catchAsync(priorityPlanController.getVendorPriorityPurchases.handler)
 );
 
+router.get(
+  '/purchases/getall',
+  auth(),
+  catchAsync(priorityPlanController.getAllPriorityPurchases.handler)
+);
+
 module.exports = router;

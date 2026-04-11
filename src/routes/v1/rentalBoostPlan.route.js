@@ -48,4 +48,10 @@ router.get(
   catchAsync(rentalBoostPlanController.getVendorRentalBoostPurchases.handler)
 );
 
+router.get(
+  '/purchases/getall',
+  auth(),
+  catchAsync(rentalBoostPlanController.getAllRentalBoostPurchases.handler)
+);
+
 module.exports = router;
