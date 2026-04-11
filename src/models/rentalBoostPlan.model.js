@@ -3,7 +3,7 @@ const { toJSON } = require('./plugins');
 
 const rentalBoostPlanSchema = new mongoose.Schema(
   {
-    name: { type: String, required: false, unique: true, index: true, trim: true },
+    name: { type: String, required: false, trim: true },
     days: { type: Number, required: true },
     price: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const RentalBoostPlan = require('../models/rentalBoostPlan.model');
 const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
 const { Product, Wallet } = require('../models');
+const VendorKyc = require('../models/vendor/vendorKyc.model');
 const walletService = require('../services/wallet.service');
 
 const createRentalBoostPlan = {
@@ -281,6 +282,39 @@ const getVendorRentalBoostPurchases = {
   },
 };
 
+const getAllRentalBoostPurchases = {
+  handler: async (req, res) => {
+    try {
+      const purchases = await RentalBoostPlanPurchase.find().sort({ createdAt: -1 });
+
+      const vendorIds = [...new Set(purchases.map((d) => d.vendor_id).filter(Boolean))];
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const kycs = await VendorKyc.find(
+          { 'ContactDetails.vendor_id': { $in: vendorIds } },
+          { 'ContactDetails.vendor_id': 1, 'ContactDetails.full_name': 1, 'Identity.business_name': 1 }
+        ).lean();
+        kycs.forEach((k) => {
+          const vid = (k?.ContactDetails?.vendor_id || '').toString();
+          const business = k?.Identity?.business_name || '';
+          const full = k?.ContactDetails?.full_name || '';
+          vendorMap[vid] = business || full || '';
+        });
+      }
+
+      const enriched = purchases.map((d) => {
+        const obj = d.toObject ? d.toObject() : d;
+        return { ...obj, vendor_name: vendorMap[String(d.vendor_id)] || 'Unknown Vendor' };
+      });
+
+      res.status(httpStatus.OK).send({ success: true, data: enriched });
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).send({ success: false, message: error.message });
+    }
+  },
+};
+
+
 module.exports = {
   createRentalBoostPlan,
   getAllRentalBoostPlans,
@@ -289,4 +323,5 @@ module.exports = {
   purchaseRentalBoostPlan,
   purchaseBulkRentalBoostPlan,
   getVendorRentalBoostPurchases,
+  getAllRentalBoostPurchases,
 };
