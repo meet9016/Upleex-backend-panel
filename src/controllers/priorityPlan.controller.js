@@ -223,7 +223,7 @@ const getVendorPriorityPurchases = {
 
 const getAllPriorityPurchases = {
   handler: async (req, res) => {
-    const purchases = await PriorityPlanPurchase.find().sort({ createdAt: -1 });
+    const purchases = await PriorityPlanPurchase.find().populate('product_ids', 'product_name category_name sub_category_name expires_at priority_expiry').sort({ createdAt: -1 });
 
     const vendorIds = [...new Set(purchases.map((d) => d.vendor_id).filter(Boolean))];
     let vendorMap = {};

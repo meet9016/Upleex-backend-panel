@@ -285,7 +285,10 @@ const getVendorRentalBoostPurchases = {
 const getAllRentalBoostPurchases = {
   handler: async (req, res) => {
     try {
-      const purchases = await RentalBoostPlanPurchase.find().sort({ createdAt: -1 });
+      const purchases = await RentalBoostPlanPurchase.find()
+        .populate('product_id', 'product_name category_name sub_category_name expires_at boost_expiry')
+        .populate('rental_boost_plan_id', 'name days price')
+        .sort({ createdAt: -1 });
 
       const vendorIds = [...new Set(purchases.map((d) => d.vendor_id).filter(Boolean))];
       let vendorMap = {};
@@ -304,7 +307,14 @@ const getAllRentalBoostPurchases = {
 
       const enriched = purchases.map((d) => {
         const obj = d.toObject ? d.toObject() : d;
-        return { ...obj, vendor_name: vendorMap[String(d.vendor_id)] || 'Unknown Vendor' };
+        const plan = obj.rental_boost_plan_id;
+        const resolvedPlanName = obj.plan_name || (plan?.name ? `${plan.name}` : '') || (obj.days ? `${obj.days}-Day Boost` : 'Rental Boost');
+        return {
+          ...obj,
+          vendor_name: vendorMap[String(d.vendor_id)] || 'Unknown Vendor',
+          plan_name: resolvedPlanName,
+          amount: obj.price, // booster uses 'price', map to 'amount' for frontend consistency
+        };
       });
 
       res.status(httpStatus.OK).send({ success: true, data: enriched });
