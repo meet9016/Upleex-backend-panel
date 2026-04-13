@@ -34,4 +34,11 @@ router.post(
   catchAsync(cartController.updateCartItem)
 );
 
+router.post(
+  '/web-clear-cart',
+  upload.none(),
+  auth(),
+  catchAsync(cartController.clearCart)
+);
+
 module.exports = router;

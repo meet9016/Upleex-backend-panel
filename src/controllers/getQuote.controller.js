@@ -669,8 +669,8 @@ const updateQuote = {
         if (product) {
           const qty = quote.qty || 1;
 
-          // If status becomes 'approval' (Approved), reduce stock
-          if (updateData.status === 'approval' && existingQuote.status === 'pending') {
+          // If status becomes 'delivery' (In Delivery), reduce stock
+          if (updateData.status === 'delivery') {
             if (product.available_quantity >= qty) {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: -qty }
@@ -678,10 +678,10 @@ const updateQuote = {
               console.log(`Reduced stock for product ${product._id} by ${qty}`);
             }
           }
-          // If status becomes 'successful' or 'complete', return stock
-          else if (['successful', 'complete'].includes(updateData.status)) {
-            // Only return if it was previously approved/active/delivery (when stock was actually reduced)
-            if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
+          // If status becomes 'complete', return stock
+          else if (updateData.status === 'complete') {
+            // Only return if it was previously in delivery (when stock was actually reduced)
+            if (existingQuote.status === 'delivery') {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
@@ -769,15 +769,8 @@ const changeStatus = {
         const qty = updated.qty || 1;
 
         if (product) {
-          // If status becomes 'approval' (Approved), reduce stock and generate payment link
+          // If status becomes 'approval' (Approved), generate payment link but don't reduce stock
           if (internal === 'approval' && existingQuote.status === 'pending') {
-            if (product.available_quantity >= qty) {
-              await Product.findByIdAndUpdate(product._id, {
-                $inc: { available_quantity: -qty }
-              });
-              console.log(`Reduced quantity for product ${product._id} by ${qty}`);
-            }
-
             // Generate Razorpay Payment Link
             if (razorpay && updated.calculated_price > 0) {
               try {
@@ -816,10 +809,19 @@ const changeStatus = {
               }
             }
           }
-          // If status becomes 'successful' or 'complete', return stock
-          else if (['successful', 'complete'].includes(internal)) {
-            // Only return if it was previously approved/active/delivery (when stock was actually reduced)
-            if (['approval', 'active', 'delivery'].includes(existingQuote.status)) {
+          // If status becomes 'delivery' (In Delivery), reduce stock
+          else if (internal === 'delivery') {
+            if (product.available_quantity >= qty) {
+              await Product.findByIdAndUpdate(product._id, {
+                $inc: { available_quantity: -qty }
+              });
+              console.log(`Reduced quantity for product ${product._id} by ${qty}`);
+            }
+          }
+          // If status becomes 'complete', return stock
+          else if (internal === 'complete') {
+            // Only return if it was previously in delivery (when stock was actually reduced)
+            if (existingQuote.status === 'delivery') {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
