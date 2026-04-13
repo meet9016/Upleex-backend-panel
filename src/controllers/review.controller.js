@@ -27,7 +27,10 @@ const addReview = catchAsync(async (req, res) => {
     ? await GetQuote.findOne({
         user_id: new mongoose.Types.ObjectId(userId),
         product_id: new mongoose.Types.ObjectId(product_id),
-        status: { $in: ['successful', 'complete', 'completed', 'delivered'] },
+        $or: [
+          { status: { $in: ['successful', 'complete', 'completed', 'delivered'] } },
+          { payment_status: 'paid' },
+        ],
       })
     : null;
 
@@ -222,7 +225,10 @@ const checkUserReview = catchAsync(async (req, res) => {
     ? await GetQuote.findOne({
         user_id: new mongoose.Types.ObjectId(userId),
         product_id: new mongoose.Types.ObjectId(product_id),
-        status: { $in: ['successful', 'complete', 'completed', 'delivered'] },
+        $or: [
+          { status: { $in: ['successful', 'complete', 'completed', 'delivered'] } },
+          { payment_status: 'paid' },
+        ],
       })
     : null;
 
