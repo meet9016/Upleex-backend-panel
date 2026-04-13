@@ -22,7 +22,7 @@ const rentalBoostPlanPurchaseSchema = new mongoose.Schema(
       ref: 'RentalBoostPlan',
       required: true,
     },
-    plan_name: { type: String, required: true },
+    plan_name: { type: String, required: false, default: '' },
     price: { type: Number, required: true },
     days: { type: Number, required: true },
     payment_status: {
