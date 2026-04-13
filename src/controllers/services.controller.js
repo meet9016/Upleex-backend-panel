@@ -98,10 +98,24 @@ const getAllServices = {
         const raw = String(city).trim();
         const parts = raw.split('-');
         const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
-        const cityNameRegex = new RegExp(`^${String(cityName).trim()}$`, 'i');
-        
-        // Filter strictly by service location
-        query.location = cityNameRegex;
+        const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+        const vendors = await VendorKyc.find(
+          {
+            $or: [
+              { 'ContactDetails.city_id': raw },
+              { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+              { 'ContactDetails.city_name': cityNameRegex },
+            ],
+          },
+          { 'ContactDetails.vendor_id': 1 }
+        );
+        const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        } else {
+          // If no vendors found in that city, force empty result
+          query._id = null;
+        }
       }
 
       if (search && search.trim() !== '') {
