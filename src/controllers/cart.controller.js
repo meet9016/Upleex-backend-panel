@@ -239,9 +239,28 @@ const removeFromCart = catchAsync(async (req, res) => {
   });
 });
 
+const clearCart = catchAsync(async (req, res) => {
+  if (!req.user) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to clear cart');
+  }
+
+  // Delete all active cart items for the user
+  await Cart.deleteMany({
+    user_id: req.user.id,
+    status: 'active',
+  });
+
+  res.status(httpStatus.OK).send({
+    status: 200,
+    message: 'Cart cleared successfully',
+    data: [],
+  });
+});
+
 module.exports = {
   addToCart,
   listCart,
   updateCartItem,
   removeFromCart,
+  clearCart,
 };

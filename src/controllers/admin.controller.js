@@ -128,7 +128,7 @@ const getAvailablePages = {
         { name: 'reports', displayName: 'Reports' },
         {name: 'dropdowns', displayName: 'Dropdowns' },
         {name: 'quotes', displayName: 'Quotes' },
-        {name: 'orders', displayName: 'Orders' },
+        {name: 'contact-us', displayName: 'Contact Us' },
         {name: 'vendor-wallets', displayName: 'Vendor Wallets' },
         {name: 'vendor-payments', displayName: 'Vendor Payments' },
       ];
