@@ -18,6 +18,7 @@ const addReview = catchAsync(async (req, res) => {
     $or: [
       { order_status: { $in: ['delivered', 'completed', 'successfully'] } },
       { vendor_status: { $in: ['delivered', 'completed', 'successfully'] } },
+      { payment_status: 'paid' },
     ],
   });
 
@@ -212,6 +213,7 @@ const checkUserReview = catchAsync(async (req, res) => {
     $or: [
       { order_status: { $in: ['delivered', 'complete', 'successful'] } },
       { vendor_status: { $in: ['delivered', 'complete', 'successful'] } },
+      { payment_status: 'paid' },
     ],
   });
 
