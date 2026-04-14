@@ -60,6 +60,8 @@ const createSubCategory = {
           categoryId: subCategory.categoryId,
           name: subCategory.name,
           image: subCategory.image,
+          created_at: subCategory.createdAt,
+          updated_at: subCategory.updatedAt,
         },
       });
     } catch (error) {
@@ -88,6 +90,8 @@ const getAllSubCategories = {
           categoryId: item.categoryId,
           name: item.name,
           image: item.image,
+          created_at: item.createdAt,
+          updated_at: item.updatedAt,
         }));
       }
       return originalJson(payload);
@@ -118,6 +122,8 @@ const getSubCategoryById = {
         categoryId: subCategory.categoryId,
         name: subCategory.name,
         image: subCategory.image,
+        created_at: subCategory.createdAt,
+        updated_at: subCategory.updatedAt,
       });
     } catch (error) {
       res
@@ -222,6 +228,8 @@ const updateSubCategory = {
           categoryId: subCategory.categoryId,
           name: subCategory.name,
           image: subCategory.image,
+          created_at: subCategory.createdAt,
+          updated_at: subCategory.updatedAt,
         },
       });
     } catch (error) {

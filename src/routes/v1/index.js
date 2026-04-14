@@ -19,6 +19,10 @@ const upload = require('../../middlewares/upload');
 const { productsController } = require('../../controllers');
 const listingPlanPurchaseRoute = require('./listingPlanPurchase.route');
 const listingPlanRoute = require('./listingPlan.route');
+const servicePlanRoute = require('./servicePlan.route');
+const serviceListingPlanPurchaseRoute = require('./serviceListingPlanPurchase.route');
+const servicePriorityPlanRoute = require('./servicePriorityPlan.route');
+const servicePriorityPlanPurchaseRoute = require('./servicePriorityPlanPurchase.route');
 const priorityPlanRoute = require('./priorityPlan.route');
 const exportRoute = require('./export.route');
 const paymentRoute = require('./payment.route');
@@ -116,6 +120,22 @@ const defaultRoutes = [
   {
     path: '/plans',
     route: listingPlanRoute,
+  },
+  {
+    path: '/service-plans',
+    route: servicePlanRoute,
+  },
+  {
+    path: '/service-listing-plans',
+    route: serviceListingPlanPurchaseRoute,
+  },
+  {
+    path: '/service-priority-plans',
+    route: servicePriorityPlanRoute,
+  },
+  {
+    path: '/service-priority-purchases',
+    route: servicePriorityPlanPurchaseRoute,
   },
   {
     path: '/priority-plans',

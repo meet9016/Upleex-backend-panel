@@ -892,9 +892,9 @@ const exportWalletTransactionsToExcel = {
 const exportWalletTransactionsToPDF = {
   handler: async (req, res) => {
     try {
-      const { type, status, search } = req.query;
+      const { type, status, search, vendor_id } = req.query;
       const user = req.user;
-      const vendorId = user.id || user._id;
+      const vendorId = vendor_id || user?.id || user?._id;
 
       const wallet = await Wallet.findOne({ vendor_id: vendorId });
       if (!wallet) {

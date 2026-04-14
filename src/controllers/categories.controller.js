@@ -142,6 +142,7 @@ const getAllCategories = {
                   subcategory_name: sub.name || sub.subcategory_name || '',
                   image: sub.image || '',
                   created_at: sub.createdAt,
+                  updated_at: sub.updatedAt,
                 })),
               };
             }
@@ -165,6 +166,7 @@ const getAllCategories = {
               subcategory_name: sub.name || sub.subcategory_name || '',
               image: sub.image || '',
               created_at: sub.createdAt,
+              updated_at: sub.updatedAt,
             })),
           };
         })
@@ -214,10 +216,14 @@ const getCategoryById = {
         categories_name: category.categories_name || category.name || '',
         image: category.image || '',
         product_count: String(productCount),
+        created_at: category.createdAt,
+        updated_at: category.updatedAt,
         subcategories: subcategories.map((sub) => ({
           subcategory_id: String(sub.id || sub._id),
           subcategory_name: sub.name || sub.subcategory_name || '',
           image: sub.image || '',
+          created_at: sub.createdAt,
+          updated_at: sub.updatedAt,
         })),
       });
     } catch (error) {

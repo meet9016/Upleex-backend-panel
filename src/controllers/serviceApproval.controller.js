@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const Joi = require('joi');
 const { Service } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const walletService = require('../services/wallet.service');
 
 // Get all vendors with pending service count
 const getAllVendors = {
@@ -72,27 +73,66 @@ const approveService = {
       const { serviceId } = req.params;
       const { approval_status } = req.body;
       
-      const service = await Service.findByIdAndUpdate(
-        serviceId,
-        { approval_status: approval_status || 'approved' },
-        { new: true }
-      );
-
+      const service = await Service.findById(serviceId);
       if (!service) {
         return res.status(404).json({ message: 'Service not found' });
       }
 
-      const vendorId = service.vendor_id;
+      const newStatus = approval_status || 'approved';
+
+      // If already approved, avoid double deduction
+      if (service.approval_status === 'approved' && newStatus === 'approved') {
+        return res.status(400).json({ message: 'Service is already approved' });
+      }
+
+      // Deduct ₹29 on approval
+      if (newStatus === 'approved') {
+        const hasBalance = await walletService.hasSufficientBalance(service.vendor_id, 29);
+        if (!hasBalance) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: 'Vendor has insufficient wallet balance for Service Listing Fee (₹29).'
+          });
+        }
+
+        try {
+          await walletService.deductMoneyFromWallet(
+            service.vendor_id,
+            29,
+            `Listing fee for approved service: ${service.service_name}`,
+            {
+              purpose: 'service_listing_fee',
+              service_name: service.service_name,
+              service_id: service._id,
+            }
+          );
+        } catch (walletError) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: 'Failed to process wallet payment for Service approval.'
+          });
+        }
+      }
+
+      const updatedService = await Service.findByIdAndUpdate(
+        serviceId,
+        { approval_status: newStatus },
+        { new: true }
+      );
+
+      const vendorId = updatedService.vendor_id;
       const pending = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'pending' });
       const approved = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
       const rejected = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
 
+      const message = newStatus === 'approved' 
+        ? 'Service approved successfully. ₹29 deducted from vendor wallet.'
+        : `Service ${newStatus} successfully`;
+
       res.status(200).json({
         status: 200,
-        message: 'Service status updated',
+        message: message,
         vendor_id: vendorId,
         counts: { pending, approved, rejected },
-        data: service
+        data: updatedService
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -110,6 +150,34 @@ const bulkApproveServices = {
   handler: async (req, res) => {
     try {
       const { service_ids } = req.body;
+
+      // Check balance for all to-be-approved services
+      const services = await Service.find({ _id: { $in: service_ids }, approval_status: { $ne: 'approved' } });
+      for (const service of services) {
+        const hasBalance = await walletService.hasSufficientBalance(service.vendor_id, 29);
+        if (!hasBalance) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: `Vendor for service "${service.service_name}" has insufficient wallet balance (₹29 required).`
+          });
+        }
+        
+        try {
+          await walletService.deductMoneyFromWallet(
+            service.vendor_id,
+            29,
+            `Listing fee for approved service: ${service.service_name}`,
+            {
+              purpose: 'service_listing_fee',
+              service_name: service.service_name,
+              service_id: service._id,
+            }
+          );
+        } catch (walletError) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: `Failed to process wallet payment for service "${service.service_name}".`
+          });
+        }
+      }
 
       await Service.updateMany(
         { _id: { $in: service_ids } },

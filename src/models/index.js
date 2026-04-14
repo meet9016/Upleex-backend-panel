@@ -25,4 +25,8 @@ module.exports.Otp = require('./otp.model');
 module.exports.PriorityPlan = require('./priorityPlan.model');
 module.exports.PriorityPlanPurchase = require('./priorityPlanPurchase.model');
 module.exports.Review = require('./review.model');
+module.exports.ServicePlan = require('./servicePlan.model');
+module.exports.ServiceListingPlanPurchase = require('./serviceListingPlanPurchase.model');
+module.exports.ServicePriorityPlan = require('./servicePriorityPlan.model');
+module.exports.ServicePriorityPlanPurchase = require('./servicePriorityPlanPurchase.model');
 

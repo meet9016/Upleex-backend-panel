@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Service = require('../models/service.model');
 const ServiceCategory = require('../models/serviceCategory.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
 
 const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExternalService } = require('../utils/fileUpload');
 const catchAsync = require('../utils/catchAsync');
@@ -67,8 +68,34 @@ const createService = {
 
       data.status = 'active';
       data.approval_status = 'pending';
+      
+      // Set initial listing expiry (1 month from creation for ₹29 listing fee)
+      const moment = require('moment');
+      data.listing_expires_at = moment().add(1, 'month').toDate();
+      data.listing_fee_paid = true;
 
       const service = await Service.create(data);
+
+      // Check if vendor has active priority plan and apply it to new service
+      const activePriorityPlan = await ServicePriorityPlanPurchase.findOne({
+        vendor_id: data.vendor_id,
+        expire_at: { $gt: new Date() }
+      }).sort({ createdAt: -1 });
+
+      if (activePriorityPlan) {
+        // Apply priority to the new service
+        await Service.findByIdAndUpdate(service._id, {
+          is_priority: true,
+          priority_expires_at: activePriorityPlan.expire_at
+        });
+
+        // Add service ID to the priority plan purchase record
+        await ServicePriorityPlanPurchase.findByIdAndUpdate(activePriorityPlan._id, {
+          $addToSet: { service_ids: service._id }
+        });
+
+        console.log(`Applied priority plan to new service: ${service.service_name}`);
+      }
 
       return res.status(200).json({
         status: 200,
@@ -88,10 +115,39 @@ const getAllServices = {
       const { search, category_id, status, sortBy, order, city } = req.query;
       const query = {};
 
+      // First, update expired priority plans
+      const now = new Date();
+      await Service.updateMany(
+        {
+          is_priority: true,
+          priority_expires_at: { $lt: now }
+        },
+        {
+          $set: { is_priority: false }
+        }
+      );
+
+      // Hide expired listing services (set status to inactive)
+      await Service.updateMany(
+        {
+          listing_expires_at: { $lt: now },
+          status: 'active'
+        },
+        {
+          $set: { status: 'inactive' }
+        }
+      );
+
       if (req.user && req.user.userType === 'vendor') {
         query.vendor_id = req.user.id || req.user._id;
+        // For vendors, show all their services regardless of listing expiry
       } else {
         query.approval_status = 'approved';
+        // For public, only show services with active listings
+        query.$or = [
+          { listing_expires_at: { $gt: now } },
+          { listing_expires_at: { $exists: false } } // For backward compatibility
+        ];
       }
 
       if (city) {
@@ -111,20 +167,32 @@ const getAllServices = {
         );
         const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
         if (vendorIds.length > 0) {
-          query.vendor_id = { $in: vendorIds };
+          if (query.vendor_id && query.vendor_id.$in) {
+            query.vendor_id = { $in: query.vendor_id.$in.filter(id => vendorIds.includes(id)) };
+          } else if (query.vendor_id) {
+            query.vendor_id = vendorIds.includes(query.vendor_id) ? query.vendor_id : null;
+          } else {
+            query.vendor_id = { $in: vendorIds };
+          }
         } else {
-          // If no vendors found in that city, force empty result
           query._id = null;
         }
       }
 
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
-        query.$or = [
+        const searchQuery = [
           { service_name: searchRegex },
           { description: searchRegex },
           { category_name: searchRegex },
         ];
+        
+        if (query.$or) {
+          query.$and = [{ $or: query.$or }, { $or: searchQuery }];
+          delete query.$or;
+        } else {
+          query.$or = searchQuery;
+        }
       }
 
       if (category_id) {
@@ -135,12 +203,20 @@ const getAllServices = {
         query.status = status;
       }
 
-      let sort = { createdAt: -1 };
+      // Ensure proper sorting - priority services first, then by creation date
+      let sort = { is_priority: -1, createdAt: -1 };
       if (sortBy) {
-        sort = { [sortBy]: order === 'desc' ? -1 : 1 };
+        // Always maintain priority sorting as primary, then apply custom sort
+        sort = { is_priority: -1, [sortBy]: order === 'desc' ? -1 : 1, createdAt: -1 };
       }
 
       const services = await Service.find(query).sort(sort);
+
+      // Debug log to verify priority sorting
+      console.log(`Found ${services.length} services. Priority services: ${services.filter(s => s.is_priority).length}`);
+      if (services.length > 0) {
+        console.log('First 3 services priority status:', services.slice(0, 3).map(s => ({ name: s.service_name, is_priority: s.is_priority })));
+      }
 
       // Enrich with vendor KYC details
       const vendorIds = [...new Set(services.map((s) => s.vendor_id).filter((id) => !!id))];

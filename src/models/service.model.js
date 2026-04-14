@@ -60,6 +60,23 @@ const serviceSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    is_priority: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    priority_expires_at: {
+      type: Date,
+      index: true,
+    },
+    listing_expires_at: {
+      type: Date,
+      index: true,
+    },
+    listing_fee_paid: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -67,6 +84,10 @@ const serviceSchema = new mongoose.Schema(
 );
 
 serviceSchema.plugin(toJSON);
+
+// Add compound index for optimal priority sorting
+serviceSchema.index({ is_priority: -1, createdAt: -1 });
+serviceSchema.index({ vendor_id: 1, is_priority: -1, createdAt: -1 });
 
 const Service = mongoose.model('Service', serviceSchema);
 
