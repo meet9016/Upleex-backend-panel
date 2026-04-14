@@ -268,10 +268,37 @@ const getServiceById = {
   handler: async (req, res) => {
     try {
       const { id } = req.params;
-      const service = await Service.findById(id);
+      let service = await Service.findById(id);
 
       if (!service) {
         return res.status(404).json({ message: 'Service not found' });
+      }
+
+      service = service.toObject();
+
+      if (service.vendor_id) {
+        const vendorKyc = await VendorKyc.findOne(
+          { 'ContactDetails.vendor_id': service.vendor_id },
+          {
+            'ContactDetails.city_id': 1,
+            'ContactDetails.city_name': 1,
+            'ContactDetails.full_name': 1,
+            'ContactDetails.address': 1,
+            'ContactDetails.mobile': 1,
+            'Identity.business_name': 1,
+          }
+        );
+
+        if (vendorKyc) {
+          const contact = vendorKyc.ContactDetails || {};
+          const identity = vendorKyc.Identity || {};
+
+          service.vendor_city_id = contact.city_id || '';
+          service.vendor_city_name = contact.city_name || '';
+          service.vendor_address = contact.address || '';
+          service.vendor_phone = contact.mobile || '';
+          service.vendor_name = identity.business_name || contact.full_name || service.vendor_name;
+        }
       }
 
       res.status(200).json({ status: 200, data: service });

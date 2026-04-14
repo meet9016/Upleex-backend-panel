@@ -560,7 +560,11 @@ const exportQuotesToPDF = {
 
     } catch (error) {
       console.error('Export quotes to PDF error:', error);
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
@@ -738,7 +742,7 @@ const exportOrdersToPDF = {
         xPos += columnWidths[0];
         doc.text(order.user_id?.name || 'N/A', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
         xPos += columnWidths[1];
-        doc.text(`₹${vendorTotal.toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
+        doc.text(`₹${Number(vendorTotal).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
         xPos += columnWidths[2];
         doc.text(order.vendor_status || 'pending', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
         xPos += columnWidths[3];
@@ -749,7 +753,11 @@ const exportOrdersToPDF = {
 
       doc.end();
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
@@ -807,7 +815,7 @@ const exportPaymentsToPDF = {
         let xPos = 50;
         doc.text(`#${payment.order_id?.order_id || 'N/A'}`, xPos + 5, yPosition + 9, { width: columnWidths[0] - 10 });
         xPos += columnWidths[0];
-        doc.text(`₹${payment.vendor_amount.toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'right' });
+        doc.text(`₹${Number(payment.vendor_amount).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'right' });
         xPos += columnWidths[1];
         doc.text(payment.payment_status, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'center' });
         xPos += columnWidths[2];
@@ -820,7 +828,11 @@ const exportPaymentsToPDF = {
 
       doc.end();
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
@@ -953,7 +965,7 @@ const exportWalletTransactionsToPDF = {
         xPos += columnWidths[0];
         doc.text(t.type?.toUpperCase() || '', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'center' });
         xPos += columnWidths[1];
-        doc.text(`₹${(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
+        doc.text(`₹${Number(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
         xPos += columnWidths[2];
         doc.text(t.status?.toUpperCase() || '', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
         xPos += columnWidths[3];
@@ -964,7 +976,11 @@ const exportWalletTransactionsToPDF = {
 
       doc.end();
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
@@ -1085,7 +1101,7 @@ const exportServicesToPDF = {
         xPos += columnWidths[0];
         doc.text(s.category_name || '', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
         xPos += columnWidths[1];
-        doc.text(`₹${(s.price || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
+        doc.text(`₹${Number(s.price || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
         xPos += columnWidths[2];
         doc.text(s.status || '', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
         xPos += columnWidths[3];
@@ -1096,7 +1112,11 @@ const exportServicesToPDF = {
 
       doc.end();
     } catch (error) {
-      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
