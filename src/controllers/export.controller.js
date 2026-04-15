@@ -1,6 +1,4 @@
 const httpStatus = require('http-status');
-const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
 const Product = require('../models/product.model');
 const GetQuote = require('../models/getQuote.model');
 const Category = require('../models/category.model');
@@ -10,6 +8,8 @@ const VendorPayment = require('../models/vendorPayment.model');
 const Wallet = require('../models/wallet.model');
 const Service = require('../models/service.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const Vendor = require('../models/user.model');
+const { exportToExcel, exportToPDF } = require('../utils/export.helper');
 
 // Export Products to Excel
 const exportProductsToExcel = {
@@ -47,16 +47,9 @@ const exportProductsToExcel = {
         ];
       }
 
-      console.log('Export Products Query:', query); // Debug log
       const products = await Product.find(query).sort({ createdAt: -1 });
-      console.log(`Found ${products.length} products for export`); // Debug log
 
-      // Create workbook
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Products');
-
-      // Define columns with colored headers
-      worksheet.columns = [
+      const columns = [
         { header: 'Product Name', key: 'product_name', width: 25 },
         { header: 'Category', key: 'category_name', width: 20 },
         { header: 'Sub Category', key: 'sub_category_name', width: 20 },
@@ -70,27 +63,7 @@ const exportProductsToExcel = {
         { header: 'Expires On', key: 'expires_at', width: 15 }
       ];
 
-      // Style header row with blue background
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF4A90E2' }
-        };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' }
-        };
-      });
-
-      // Add data rows
-      products.forEach((product, index) => {
-        const row = worksheet.addRow({
+      const data = products.map(product => ({
           product_name: product.product_name || '',
           category_name: product.category_name || '',
           sub_category_name: product.sub_category_name || '',
@@ -102,40 +75,12 @@ const exportProductsToExcel = {
           vendor_name: product.vendor_name || 'N/A',
           createdAt: product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '',
           expires_at: product.expires_at ? new Date(product.expires_at).toLocaleDateString() : ''
-        });
-
-        // Alternate row colors
-        if (index % 2 === 0) {
-          row.eachCell((cell) => {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF8F9FA' }
-            };
-          });
-        }
-
-        // Add borders to all cells
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-          };
-        });
-      });
-
-      // Set response headers
+        }));
       const filename = user && user.userType === 'vendor'
         ? `my_products_${new Date().toISOString().split('T')[0]}.xlsx`
         : `products_${new Date().toISOString().split('T')[0]}.xlsx`;
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
 
-      // Write to response
-      await workbook.xlsx.write(res);
-      res.end();
+      await exportToExcel(res, data, columns, filename, 'Products');
 
     } catch (error) {
       console.error('Export products to Excel error:', error);
@@ -181,126 +126,25 @@ const exportProductsToPDF = {
         ];
       }
 
-      console.log('Export Products PDF Query:', query); // Debug log
       const products = await Product.find(query).sort({ createdAt: -1 });
-      console.log(`Found ${products.length} products for PDF export`); // Debug log
 
-      // Create PDF
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
-
-      // Set response headers
+      const headers = ['Product Name', 'Category', 'Type', 'Price', 'Status', 'Vendor'];
+      const columnWidths = [150, 100, 60, 80, 60, 85];
+      const title = user && user.userType === 'vendor' ? 'My Products Report' : 'Products Report';
       const filename = user && user.userType === 'vendor'
         ? `my_products_${new Date().toISOString().split('T')[0]}.pdf`
         : `products_${new Date().toISOString().split('T')[0]}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
 
-      doc.pipe(res);
+      const rowMapper = (product) => [
+            product.product_name || '',
+            product.category_name || '',
+            product.product_type_name || '',
+            product.price ? `₹${Number(product.price).toFixed(2)}` : '₹0.00',
+            product.status || '',
+            product.vendor_name || 'N/A'
+          ];
 
-      // Add title with blue background
-      const title = user && user.userType === 'vendor' ? 'My Products Report' : 'Products Report';
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text(title, 50, 45);
-
-      // Add generation date
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
-
-      let yPosition = 120;
-
-      // Table headers with blue background
-      const headers = ['Product Name', 'Category', 'Type', 'Price', 'Status', 'Vendor'];
-      const columnWidths = [120, 80, 60, 60, 60, 80];
-      let xPosition = 50;
-      const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-
-      // Draw table border
-      doc.rect(50, yPosition, tableWidth, 30).stroke();
-
-      // Draw header background
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-
-      // Draw header text with borders
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((header, index) => {
-        // Draw vertical lines for columns
-        if (index > 0) {
-          doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 30).stroke();
-        }
-        doc.text(header, xPosition + 5, yPosition + 10, { width: columnWidths[index] - 10, align: 'center' });
-        xPosition += columnWidths[index];
-      });
-
-      yPosition += 30;
-
-      // Add data rows with proper table formatting
-      doc.fillColor('black').fontSize(9).font('Helvetica');
-      products.forEach((product, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          yPosition = 50;
-
-          // Redraw headers on new page
-          xPosition = 50;
-          doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-          doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-          headers.forEach((header, headerIndex) => {
-            if (headerIndex > 0) {
-              doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 30).stroke();
-            }
-            doc.text(header, xPosition + 5, yPosition + 10, { width: columnWidths[headerIndex] - 10, align: 'center' });
-            xPosition += columnWidths[headerIndex];
-          });
-          yPosition += 30;
-          doc.fillColor('black').fontSize(9).font('Helvetica');
-        }
-
-        xPosition = 50;
-
-        // Alternate row background
-        if (index % 2 === 0) {
-          doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        }
-
-        // Draw row border
-        doc.rect(50, yPosition, tableWidth, 28).stroke();
-
-        const rowData = [
-          product.product_name || '',
-          product.category_name || '',
-          product.product_type_name || '',
-          product.price ? `₹${Number(product.price).toFixed(2)}` : '₹0.00',
-          product.status || '',
-          product.vendor_name || 'N/A'
-        ];
-
-        doc.fillColor('black');
-        rowData.forEach((data, colIndex) => {
-          // Draw vertical lines for columns
-          if (colIndex > 0) {
-            doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 28).stroke();
-          }
-
-          // Add text with proper alignment
-          const textOptions = {
-            width: columnWidths[colIndex] - 10,
-            height: 20,
-            ellipsis: true,
-            align: colIndex === 3 ? 'right' : 'left' // Right align price column
-          };
-
-          doc.text(data, xPosition + 5, yPosition + 9, textOptions);
-          xPosition += columnWidths[colIndex];
-        });
-
-        yPosition += 28;
-      });
-
-      // Draw final bottom border
-      doc.moveTo(50, yPosition).lineTo(50 + tableWidth, yPosition).stroke();
-
-      doc.end();
+      await exportToPDF(res, products, headers, columnWidths, filename, title, rowMapper);
 
     } catch (error) {
       console.error('Export products to PDF error:', error);
@@ -309,6 +153,7 @@ const exportProductsToPDF = {
   }
 };
 
+
 // Export Quotes to Excel
 const exportQuotesToExcel = {
   handler: async (req, res) => {
@@ -316,7 +161,6 @@ const exportQuotesToExcel = {
       const { status, search, product_type, listing_type, month } = req.query;
       const user = req.user;
 
-      // Build query
       const query = {};
       if (user.userType === 'vendor') {
         const vendorProducts = await Product.find({ vendor_id: user._id }).select('_id');
@@ -335,12 +179,7 @@ const exportQuotesToExcel = {
 
       const quotes = await GetQuote.find(query).populate('product_id').sort({ createdAt: -1 });
 
-      // Create workbook
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Quotes');
-
-      // Define columns
-      worksheet.columns = [
+      const columns = [
         { header: 'Quote ID', key: 'quote_id', width: 15 },
         { header: 'Product Name', key: 'product_name', width: 25 },
         { header: 'Category', key: 'category', width: 20 },
@@ -353,27 +192,7 @@ const exportQuotesToExcel = {
         { header: 'Created Date', key: 'createdAt', width: 15 }
       ];
 
-      // Style header row
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF4A90E2' }
-        };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' }
-        };
-      });
-
-      // Add data rows
-      quotes.forEach((quote, index) => {
-        const row = worksheet.addRow({
+      const data = quotes.map(quote => ({
           quote_id: quote._id.toString().slice(-8),
           product_name: quote.product_id?.product_name || '',
           category: quote.product_id?.category_name || '',
@@ -384,36 +203,9 @@ const exportQuotesToExcel = {
           delivery_date: quote.delivery_date ? new Date(quote.delivery_date).toLocaleDateString() : '',
           note: quote.note || '',
           createdAt: quote.createdAt ? new Date(quote.createdAt).toLocaleDateString() : ''
-        });
+        }));
 
-        // Alternate row colors
-        if (index % 2 === 0) {
-          row.eachCell((cell) => {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF8F9FA' }
-            };
-          });
-        }
-
-        // Add borders
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
-          };
-        });
-      });
-
-      // Set response headers
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=quotes_${Date.now()}.xlsx`);
-
-      await workbook.xlsx.write(res);
-      res.end();
+      await exportToExcel(res, data, columns, `quotes_${Date.now()}.xlsx`, 'Quotes');
 
     } catch (error) {
       console.error('Export quotes to Excel error:', error);
@@ -429,7 +221,6 @@ const exportQuotesToPDF = {
       const { status, search, product_type, listing_type, month } = req.query;
       const user = req.user;
 
-      // Build query (same as Excel)
       const query = {};
       if (user.userType === 'vendor') {
         const vendorProducts = await Product.find({ vendor_id: user._id }).select('_id');
@@ -448,82 +239,12 @@ const exportQuotesToPDF = {
 
       const quotes = await GetQuote.find(query).populate('product_id').sort({ createdAt: -1 });
 
-      // Create PDF
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=quotes_${Date.now()}.pdf`);
-
-      doc.pipe(res);
-
-      // Add title with green background
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text('Quotes Report', 50, 45);
-
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
-
-      let yPosition = 120;
-
-      // Table headers
       const headers = ['Quote ID', 'Product', 'Qty', 'Price', 'Status'];
-      const columnWidths = [80, 180, 60, 80, 80];
-      let xPosition = 50;
-      const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+      const columnWidths = [100, 200, 60, 100, 100];
+      const filename = `quotes_${Date.now()}.pdf`;
+      const title = 'Quotes Report';
 
-      // Draw table border
-      doc.rect(50, yPosition, tableWidth, 30).stroke();
-
-      // Draw header background
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-
-      // Draw header text with borders
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((header, index) => {
-        // Draw vertical lines for columns
-        if (index > 0) {
-          doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 30).stroke();
-        }
-        doc.text(header, xPosition + 5, yPosition + 10, { width: columnWidths[index] - 10, align: 'center' });
-        xPosition += columnWidths[index];
-      });
-
-      yPosition += 30;
-
-      // Add data rows with proper table formatting
-      doc.fillColor('black').fontSize(9).font('Helvetica');
-      quotes.forEach((quote, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          yPosition = 50;
-
-          // Redraw headers on new page
-          xPosition = 50;
-          doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-          doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-          headers.forEach((header, headerIndex) => {
-            if (headerIndex > 0) {
-              doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 30).stroke();
-            }
-            doc.text(header, xPosition + 5, yPosition + 10, { width: columnWidths[headerIndex] - 10, align: 'center' });
-            xPosition += columnWidths[headerIndex];
-          });
-          yPosition += 30;
-          doc.fillColor('black').fontSize(9).font('Helvetica');
-        }
-
-        xPosition = 50;
-
-        // Alternate row background
-        if (index % 2 === 0) {
-          doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        }
-
-        // Draw row border
-        doc.rect(50, yPosition, tableWidth, 28).stroke();
-
-        const rowData = [
+      const rowMapper = (quote) => [
           quote._id.toString().slice(-8),
           quote.product_id?.product_name || '',
           quote.qty || '1',
@@ -531,32 +252,7 @@ const exportQuotesToPDF = {
           quote.status || ''
         ];
 
-        doc.fillColor('black');
-        rowData.forEach((data, colIndex) => {
-          // Draw vertical lines for columns
-          if (colIndex > 0) {
-            doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 28).stroke();
-          }
-
-          // Add text with proper alignment
-          const textOptions = {
-            width: columnWidths[colIndex] - 10,
-            height: 20,
-            ellipsis: true,
-            align: colIndex === 3 ? 'right' : 'left' // Right align price column
-          };
-
-          doc.text(data, xPosition + 5, yPosition + 9, textOptions);
-          xPosition += columnWidths[colIndex];
-        });
-
-        yPosition += 28;
-      });
-
-      // Draw final bottom border
-      doc.moveTo(50, yPosition).lineTo(50 + tableWidth, yPosition).stroke();
-
-      doc.end();
+      await exportToPDF(res, quotes, headers, columnWidths, filename, title, rowMapper);
 
     } catch (error) {
       console.error('Export quotes to PDF error:', error);
@@ -587,10 +283,7 @@ const exportOrdersToExcel = {
 
       const orders = await Order.find(query).populate('user_id', 'name email phone').sort({ createdAt: -1 });
 
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Orders');
-
-      worksheet.columns = [
+      const columns = [
         { header: 'Order ID', key: 'order_id', width: 15 },
         { header: 'Customer', key: 'customer', width: 25 },
         { header: 'Items', key: 'items_count', width: 10 },
@@ -600,15 +293,7 @@ const exportOrdersToExcel = {
         { header: 'Date', key: 'createdAt', width: 15 }
       ];
 
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A90E2' } };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
-
-      orders.forEach((order) => {
-        worksheet.addRow({
+      const data = orders.map(order => ({
           order_id: `#${order.order_id}`,
           customer: order.user_id?.name || 'N/A',
           items_count: order.items.filter(i => i.vendor_id === vendorId).length,
@@ -616,13 +301,10 @@ const exportOrdersToExcel = {
           vendor_status: order.vendor_status || 'pending',
           payment_status: order.payment_status || 'pending',
           createdAt: new Date(order.createdAt).toLocaleDateString()
-        });
-      });
+        }));
 
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=orders_${Date.now()}.xlsx`);
-      await workbook.xlsx.write(res);
-      res.end();
+      await exportToExcel(res, data, columns, `orders_${Date.now()}.xlsx`, 'Orders');
+
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
@@ -642,10 +324,7 @@ const exportPaymentsToExcel = {
 
       const payments = await VendorPayment.find(query).populate('order_id').sort({ createdAt: -1 });
 
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Payments');
-
-      worksheet.columns = [
+      const columns = [
         { header: 'Order ID', key: 'order_id', width: 15 },
         { header: 'Vendor Amount (₹)', key: 'vendor_amount', width: 15 },
         { header: 'Payment Status', key: 'payment_status', width: 15 },
@@ -654,27 +333,17 @@ const exportPaymentsToExcel = {
         { header: 'Notes', key: 'notes', width: 30 }
       ];
 
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A90E2' } };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-      });
-
-      payments.forEach((payment) => {
-        worksheet.addRow({
+      const data = payments.map(payment => ({
           order_id: `#${payment.order_id?.order_id || 'N/A'}`,
           vendor_amount: payment.vendor_amount,
           payment_status: payment.payment_status,
           delivered_at: new Date(payment.delivered_at).toLocaleDateString(),
           release_date: new Date(payment.release_date).toLocaleDateString(),
           notes: payment.notes || ''
-        });
-      });
+        }));
 
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=payments_${Date.now()}.xlsx`);
-      await workbook.xlsx.write(res);
-      res.end();
+      await exportToExcel(res, data, columns, `payments_${Date.now()}.xlsx`, 'Payments');
+
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
@@ -698,60 +367,24 @@ const exportOrdersToPDF = {
 
       const orders = await Order.find(query).populate('user_id', 'name email').sort({ createdAt: -1 });
 
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=orders_${Date.now()}.pdf`);
-      doc.pipe(res);
-
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text('Orders Report', 50, 45);
-
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
-
-      let yPosition = 120;
       const headers = ['Order ID', 'Customer', 'Amount', 'Status', 'Date'];
-      const columnWidths = [100, 150, 80, 100, 80];
-      let xPosition = 50;
-      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+      const columnWidths = [100, 150, 80, 100, 100];
+      const filename = `orders_${Date.now()}.pdf`;
+      const title = 'Orders Report';
 
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
-        xPosition += columnWidths[i];
-      });
-
-      yPosition += 30;
-      doc.fillColor('black').fontSize(9).font('Helvetica');
-
-      orders.forEach((order, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          yPosition = 50;
-        }
-
-        if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        doc.fillColor('black');
-
-        let xPos = 50;
+      const rowMapper = (order) => {
         const vendorTotal = order.items.filter(i => i.vendor_id === vendorId).reduce((sum, i) => sum + i.final_amount, 0);
+        return [
+          `#${order.order_id}`,
+          order.user_id?.name || 'N/A',
+          `₹${Number(vendorTotal).toFixed(2)}`,
+          order.vendor_status || 'pending',
+          new Date(order.createdAt).toLocaleDateString()
+        ];
+      };
 
-        doc.text(`#${order.order_id}`, xPos + 5, yPosition + 9, { width: columnWidths[0] - 10 });
-        xPos += columnWidths[0];
-        doc.text(order.user_id?.name || 'N/A', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
-        xPos += columnWidths[1];
-        doc.text(`₹${Number(vendorTotal).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
-        xPos += columnWidths[2];
-        doc.text(order.vendor_status || 'pending', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
-        xPos += columnWidths[3];
-        doc.text(new Date(order.createdAt).toLocaleDateString(), xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
+      await exportToPDF(res, orders, headers, columnWidths, filename, title, rowMapper);
 
-        yPosition += 28;
-      });
-
-      doc.end();
     } catch (error) {
       if (!res.headersSent) {
         res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -775,58 +408,21 @@ const exportPaymentsToPDF = {
 
       const payments = await VendorPayment.find(query).populate('order_id').sort({ createdAt: -1 });
 
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=payments_${Date.now()}.pdf`);
-      doc.pipe(res);
-
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text('Payments Report', 50, 45);
-
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
-
-      let yPosition = 120;
       const headers = ['Order ID', 'Amount', 'Status', 'Delivered', 'Release'];
-      const columnWidths = [100, 100, 100, 100, 100];
-      let xPosition = 50;
-      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+      const columnWidths = [100, 100, 100, 100, 130];
+      const filename = `payments_${Date.now()}.pdf`;
+      const title = 'Payments Report';
 
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
-        xPosition += columnWidths[i];
-      });
+      const rowMapper = (payment) => [
+        `#${payment.order_id?.order_id || 'N/A'}`,
+        `₹${Number(payment.vendor_amount).toFixed(2)}`,
+        payment.payment_status,
+        new Date(payment.delivered_at).toLocaleDateString(),
+        new Date(payment.release_date).toLocaleDateString()
+      ];
 
-      yPosition += 30;
-      doc.fillColor('black').fontSize(9).font('Helvetica');
+      await exportToPDF(res, payments, headers, columnWidths, filename, title, rowMapper);
 
-      payments.forEach((payment, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          yPosition = 50;
-        }
-
-        if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        doc.fillColor('black');
-
-        let xPos = 50;
-        doc.text(`#${payment.order_id?.order_id || 'N/A'}`, xPos + 5, yPosition + 9, { width: columnWidths[0] - 10 });
-        xPos += columnWidths[0];
-        doc.text(`₹${Number(payment.vendor_amount).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'right' });
-        xPos += columnWidths[1];
-        doc.text(payment.payment_status, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'center' });
-        xPos += columnWidths[2];
-        doc.text(new Date(payment.delivered_at).toLocaleDateString(), xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
-        xPos += columnWidths[3];
-        doc.text(new Date(payment.release_date).toLocaleDateString(), xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
-
-        yPosition += 28;
-      });
-
-      doc.end();
     } catch (error) {
       if (!res.headersSent) {
         res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -860,10 +456,7 @@ const exportWalletTransactionsToExcel = {
 
       transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Wallet Transactions');
-
-      worksheet.columns = [
+      const columns = [
         { header: 'Transaction ID', key: 'transaction_id', width: 20 },
         { header: 'Description', key: 'description', width: 35 },
         { header: 'Type', key: 'type', width: 12 },
@@ -872,28 +465,17 @@ const exportWalletTransactionsToExcel = {
         { header: 'Date', key: 'createdAt', width: 20 }
       ];
 
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A90E2' } };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
+      const data = transactions.map(t => ({
+        transaction_id: t.transaction_id || 'N/A',
+        description: t.description || '',
+        type: t.type?.toUpperCase() || '',
+        amount: t.amount || 0,
+        status: t.status?.toUpperCase() || '',
+        createdAt: new Date(t.createdAt).toLocaleString('en-IN')
+      }));
 
-      transactions.forEach((t) => {
-        worksheet.addRow({
-          transaction_id: t.transaction_id || 'N/A',
-          description: t.description || '',
-          type: t.type?.toUpperCase() || '',
-          amount: t.amount || 0,
-          status: t.status?.toUpperCase() || '',
-          createdAt: new Date(t.createdAt).toLocaleString('en-IN')
-        });
-      });
+      await exportToExcel(res, data, columns, `wallet_transactions_${Date.now()}.xlsx`, 'Wallet Transactions');
 
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=wallet_transactions_${Date.now()}.xlsx`);
-      await workbook.xlsx.write(res);
-      res.end();
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
@@ -923,114 +505,21 @@ const exportWalletTransactionsToPDF = {
 
       transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      const fs = require('fs');
-      const path = require('path');
-
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=wallet_transactions_${Date.now()}.pdf`);
-      doc.pipe(res);
-
-      const brandColor = '#4A90E2';
-      const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'upleex-logo-2.png');
-
-      // Top Accent Bar
-      doc.rect(0, 0, doc.page.width, 8).fill(brandColor);
-
-      // Header with Logo
-      if (fs.existsSync(logoPath)) {
-        // Adjust the width/height to fit your logo aspect ratio appropriately
-        doc.image(logoPath, 40, 30, { width: 120 });
-      } else {
-        doc.fillColor(brandColor).fontSize(26).font('Helvetica-Bold').text('UPLEEX', 40, 35);
-      }
-
-      // Header Text
-      doc.fillColor('#333333').fontSize(22).font('Helvetica-Bold');
-      doc.text('Wallet Transactions Report', 40, 35, { align: 'right' });
-
-      doc.fillColor('#666666').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 40, 65, { align: 'right' });
-
-      // Divider Line
-      doc.moveTo(40, 95).lineTo(doc.page.width - 40, 95).strokeColor('#E5E7EB').lineWidth(1).stroke();
-
-      let yPosition = 120;
       const headers = ['Description', 'Type', 'Amount', 'Status', 'Date'];
-      // Increase column widths slightly to fill page margins
       const columnWidths = [195, 60, 80, 80, 100];
-      let xPosition = 40; // match margin
-      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+      const filename = `wallet_transactions_${Date.now()}.pdf`;
+      const title = 'Wallet Transactions Report';
 
-      // Table Header Background
-      doc.rect(40, yPosition, tableWidth, 30).fill(brandColor);
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
-        xPosition += columnWidths[i];
-      });
+      const rowMapper = (t) => [
+        t.description || '',
+        t.type?.toUpperCase() || '',
+        `₹${Number(t.amount).toFixed(2)}`,
+        t.status?.toUpperCase() || '',
+        new Date(t.createdAt).toLocaleDateString('en-IN')
+      ];
 
-      yPosition += 30;
-      doc.fillColor('#333333').fontSize(9).font('Helvetica');
+      await exportToPDF(res, transactions, headers, columnWidths, filename, title, rowMapper);
 
-      transactions.forEach((t, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          doc.rect(0, 0, doc.page.width, 8).fill(brandColor); // Carry over the accent bar
-          yPosition = 40;
-
-          xPosition = 40;
-          doc.rect(xPosition, yPosition, tableWidth, 30).fill(brandColor);
-          doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-          headers.forEach((h, i) => {
-            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
-            xPosition += columnWidths[i];
-          });
-          yPosition += 30;
-          doc.fillColor('#333333').fontSize(9).font('Helvetica');
-        }
-
-        if (index % 2 === 0) doc.rect(40, yPosition, tableWidth, 28).fill('#F8F9FA');
-
-        let xPos = 40;
-
-        // Draw row bottom border for nice aesthetics
-        doc.moveTo(40, yPosition + 28).lineTo(40 + tableWidth, yPosition + 28).strokeColor('#EEEEEE').lineWidth(1).stroke();
-
-        doc.fillColor('#333333');
-        doc.text(t.description || '', xPos + 5, yPosition + 9, { width: columnWidths[0] - 10, ellipsis: true });
-        xPos += columnWidths[0];
-
-        // Type with colors
-        const typeStr = (t.type || '').toUpperCase();
-        if (typeStr === 'CREDIT') doc.fillColor('#10B981');
-        else if (typeStr === 'DEBIT') doc.fillColor('#EF4444');
-        else doc.fillColor('#333333');
-        doc.text(typeStr, xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'center' });
-        xPos += columnWidths[1];
-        doc.text(`₹${Number(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
-
-        // Amount
-        doc.fillColor('#333333');
-        doc.text(`₹${(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
-        xPos += columnWidths[2];
-
-        // Status with colors
-        const statusStr = (t.status || '').toUpperCase();
-        if (statusStr === 'COMPLETED' || statusStr === 'SUCCESS') doc.fillColor('#10B981');
-        else if (statusStr === 'PENDING') doc.fillColor('#F59E0B');
-        else if (statusStr === 'FAILED' || statusStr === 'CANCELLED') doc.fillColor('#EF4444');
-        else doc.fillColor('#333333');
-        doc.text(statusStr, xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
-        xPos += columnWidths[3];
-
-        doc.fillColor('#666666');
-        doc.text(new Date(t.createdAt).toLocaleDateString('en-IN'), xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
-
-        yPosition += 28;
-      });
-
-      doc.end();
     } catch (error) {
       if (!res.headersSent) {
         res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -1057,10 +546,7 @@ const exportServicesToExcel = {
 
       const services = await Service.find(query).sort({ createdAt: -1 });
 
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Services');
-
-      worksheet.columns = [
+      const columns = [
         { header: 'Service Name', key: 'service_name', width: 30 },
         { header: 'Category', key: 'category_name', width: 20 },
         { header: 'Price (₹)', key: 'price', width: 15 },
@@ -1070,29 +556,18 @@ const exportServicesToExcel = {
         { header: 'Created Date', key: 'createdAt', width: 20 }
       ];
 
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A90E2' } };
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
-
-      services.forEach((s) => {
-        worksheet.addRow({
+      const data = services.map(s => ({
           service_name: s.service_name || '',
           category_name: s.category_name || '',
-          price: s.price || 0,
+          price: s.price ? `₹${Number(s.price).toFixed(2)}` : '₹0.00',
           duration: s.duration || '',
           status: s.status || '',
           approval_status: s.approval_status || '',
           createdAt: new Date(s.createdAt).toLocaleDateString()
-        });
-      });
+        }));
 
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=services_${Date.now()}.xlsx`);
-      await workbook.xlsx.write(res);
-      res.end();
+      await exportToExcel(res, data, columns, `services_${Date.now()}.xlsx`, 'Services');
+
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
@@ -1115,58 +590,249 @@ const exportServicesToPDF = {
 
       const services = await Service.find(query).sort({ createdAt: -1 });
 
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=services_${Date.now()}.pdf`);
-      doc.pipe(res);
-
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text('Services Report', 50, 45);
-
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
-
-      let yPosition = 120;
       const headers = ['Service Name', 'Category', 'Price', 'Status', 'Duration'];
       const columnWidths = [150, 100, 80, 80, 90];
-      let xPosition = 50;
-      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+      const filename = `services_${Date.now()}.pdf`;
+      const title = 'Services Report';
 
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
-        xPosition += columnWidths[i];
-      });
+      const rowMapper = (s) => [
+        s.service_name || '',
+        s.category_name || '',
+        s.price ? `₹${Number(s.price).toFixed(2)}` : '₹0.00',
+        s.status || '',
+        s.duration || ''
+      ];
 
-      yPosition += 30;
-      doc.fillColor('black').fontSize(9).font('Helvetica');
+      await exportToPDF(res, services, headers, columnWidths, filename, title, rowMapper);
 
-      services.forEach((s, index) => {
-        if (yPosition > 750) {
-          doc.addPage();
-          yPosition = 50;
-        }
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
 
-        if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        doc.fillColor('black');
+// Export Vendors to Excel
+const exportVendorsToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { status, search, vendor_name, business_name, vendor_type } = req.query;
 
-        let xPos = 50;
-        doc.text(s.service_name || '', xPos + 5, yPosition + 9, { width: columnWidths[0] - 10, ellipsis: true });
-        xPos += columnWidths[0];
-        doc.text(s.category_name || '', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
-        xPos += columnWidths[1];
-        doc.text(`₹${Number(s.price || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
-        xPos += columnWidths[2];
-        doc.text(s.status || '', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
-        xPos += columnWidths[3];
-        doc.text(s.duration || '', xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
+      const query = {};
+      if (status && status !== 'all') query.status = status;
+      if (vendor_type && vendor_type !== 'all') query.vendor_type = vendor_type;
+      if (vendor_name) {
+        const searchRegex = new RegExp(vendor_name.trim(), 'i');
+        query['ContactDetails.full_name'] = searchRegex;
+      }
+      if (business_name) {
+        const searchRegex = new RegExp(business_name.trim(), 'i');
+        query['Identity.business_name'] = searchRegex;
+      }
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { 'ContactDetails.full_name': searchRegex },
+          { 'ContactDetails.email': searchRegex },
+          { 'Identity.business_name': searchRegex }
+        ];
+      }
 
-        yPosition += 28;
-      });
+      const vendors = await VendorKyc.find(query).sort({ createdAt: -1 });
 
-      doc.end();
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Email', key: 'email', width: 25 },
+        { header: 'Phone', key: 'phone', width: 10 },
+        { header: 'Business Name', key: 'business_name', width: 20 },
+        { header: 'Vendor Type', key: 'vendor_type', width: 15 },
+        // { header: 'Pan Card', key: 'pancard_number', width: 15 },
+        // { header: 'GST Number', key: 'gst_number', width: 15 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'KYC Progress', key: 'kyc_progress', width: 15 },
+        { header: 'Created Date', key: 'createdAt', width: 15 }
+      ];
+
+      const data = vendors.map(vendor => ({
+        vendor_name: vendor.ContactDetails?.full_name || '-',
+        email: vendor.ContactDetails?.email || '-',
+        phone: vendor.ContactDetails?.mobile || '-',
+        business_name: vendor.Identity?.business_name || '-',
+        vendor_type: vendor.vendor_type ? vendor.vendor_type.charAt(0).toUpperCase() + vendor.vendor_type.slice(1) : 'Both',
+        pancard_number: vendor.Identity?.pancard_number || '-',
+        gst_number: vendor.Identity?.gst_number || '-',
+        status: vendor.status ? vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1) : 'Pending',
+        kyc_progress: `${vendor.completed_pages?.length || 0} pages`,
+        createdAt: vendor.createdAt ? new Date(vendor.createdAt).toLocaleDateString() : ''
+      }));
+
+      await exportToExcel(res, data, columns, `vendors_${new Date().toISOString().split('T')[0]}.xlsx`, 'Vendors');
+
+    } catch (error) {
+      console.error('Export vendors to Excel error:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Vendors to PDF
+const exportVendorsToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { status, search, vendor_name, business_name, vendor_type } = req.query;
+
+      const query = {};
+      if (status && status !== 'all') query.status = status;
+      if (vendor_type && vendor_type !== 'all') query.vendor_type = vendor_type;
+      if (vendor_name) {
+        const searchRegex = new RegExp(vendor_name.trim(), 'i');
+        query['ContactDetails.full_name'] = searchRegex;
+      }
+      if (business_name) {
+        const searchRegex = new RegExp(business_name.trim(), 'i');
+        query['Identity.business_name'] = searchRegex;
+      }
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { 'ContactDetails.full_name': searchRegex },
+          { 'ContactDetails.email': searchRegex },
+          { 'Identity.business_name': searchRegex }
+        ];
+      }
+
+      const vendors = await VendorKyc.find(query).sort({ createdAt: -1 });
+
+      const headers = ['Vendor Name', 'Email', 'Phone', 'Business Name', 'Type', 'Status', 'Progress'];
+      const columnWidths = [120, 150, 110, 150, 90, 100, 100];
+      const filename = `vendors_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Vendors Report';
+
+      const rowMapper = (vendor) => [
+        vendor.ContactDetails?.full_name || '-',
+        vendor.ContactDetails?.email || '-',
+        vendor.ContactDetails?.mobile || '-',
+        vendor.Identity?.business_name || '-',
+        vendor.vendor_type ? vendor.vendor_type.charAt(0).toUpperCase() + vendor.vendor_type.slice(1) : 'Both',
+        vendor.status ? vendor.status.charAt(0).toUpperCase() + vendor.status.slice(1) : 'Pending',
+        `${vendor.completed_pages?.length || 0} pages`
+      ];
+
+      await exportToPDF(res, vendors, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
+// Export Vendor Wallets to Excel (All vendors wallet summary)
+const exportVendorWalletsToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+
+      let searchQuery = {};
+      if (search) {
+        // First find matching vendors
+        const matchingVendors = await Vendor.find({
+          $or: [
+            { full_name: { $regex: search, $options: 'i' } },
+            { business_name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+          ]
+        }).select('_id');
+
+        const vendorIds = matchingVendors.map(v => v._id);
+        searchQuery = { vendor_id: { $in: vendorIds } };
+      }
+
+      // Get all wallets with vendor info
+      const wallets = await Wallet.find(searchQuery)
+        .populate('vendor_id', 'full_name email business_name')
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 25 },
+        { header: 'Vendor Email', key: 'vendor_email', width: 30 },
+        { header: 'Current Balance (₹)', key: 'balance', width: 18 },
+        { header: 'Total Credited (₹)', key: 'total_credited', width: 18 },
+        { header: 'Total Debited (₹)', key: 'total_debited', width: 18 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Transaction Count', key: 'transaction_count', width: 16 },
+        { header: 'Currency', key: 'currency', width: 12 }
+      ];
+
+      const data = wallets.map(wallet => ({
+        vendor_name: wallet.vendor_id?.full_name || 'N/A',
+        vendor_email: wallet.vendor_id?.email || 'N/A',
+        balance: `₹${Number(wallet.balance || 0).toFixed(2)}`,
+        total_credited: `₹${Number(wallet.total_credited || 0).toFixed(2)}`,
+        total_debited: `₹${Number(wallet.total_debited || 0).toFixed(2)}`,
+        status: wallet.is_active ? 'Active' : 'Inactive',
+        transaction_count: wallet.transaction_count || 0,
+        currency: wallet.currency || 'INR'
+      }));
+
+      await exportToExcel(res, data, columns, `vendor_wallets_${new Date().toISOString().split('T')[0]}.xlsx`, 'Vendor Wallets');
+
+    } catch (error) {
+      console.error('Export vendor wallets to Excel error:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Vendor Wallets to PDF (All vendors wallet summary)
+const exportVendorWalletsToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+
+      let searchQuery = {};
+      if (search) {
+        // First find matching vendors
+        const matchingVendors = await Vendor.find({
+          $or: [
+            { full_name: { $regex: search, $options: 'i' } },
+            { business_name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+          ]
+        }).select('_id');
+
+        const vendorIds = matchingVendors.map(v => v._id);
+        searchQuery = { vendor_id: { $in: vendorIds } };
+      }
+
+      // Get all wallets with vendor info
+      const wallets = await Wallet.find(searchQuery)
+        .populate('vendor_id', 'full_name email business_name')
+        .sort({ createdAt: -1 });
+
+      const headers = ['Vendor Name', 'Email', 'Balance', 'Credited', 'Debited', 'Status', 'Count'];
+      const columnWidths = [140, 160, 100, 100, 100, 90, 80];
+      const filename = `vendor_wallets_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Vendor Wallets Report';
+
+      const rowMapper = (wallet) => [
+        wallet.vendor_id?.full_name || 'N/A',
+        wallet.vendor_id?.email || 'N/A',
+        `₹${Number(wallet.balance || 0).toFixed(2)}`,
+        `₹${Number(wallet.total_credited || 0).toFixed(2)}`,
+        `₹${Number(wallet.total_debited || 0).toFixed(2)}`,
+        wallet.is_active ? 'Active' : 'Inactive',
+        wallet.transaction_count || 0
+      ];
+
+      await exportToPDF(res, wallets, headers, columnWidths, filename, title, rowMapper);
+
     } catch (error) {
       if (!res.headersSent) {
         res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -1189,5 +855,9 @@ module.exports = {
   exportWalletTransactionsToExcel,
   exportWalletTransactionsToPDF,
   exportServicesToExcel,
-  exportServicesToPDF
+  exportServicesToPDF,
+  exportVendorsToExcel,
+  exportVendorsToPDF,
+  exportVendorWalletsToExcel,
+  exportVendorWalletsToPDF
 };

@@ -118,6 +118,7 @@ const createGetQuote = {
         status: data.status || 'pending',
         start_time: startTime,
         end_time: endTime,
+        isNew: true,
       });
 
       // Fetch the created quote with populated product details
@@ -1011,12 +1012,149 @@ const deleteQuote = {
   },
 };
 
+// Create Razorpay order for quote payment
+const createQuoteOrder = {
+  handler: async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(httpStatus.UNAUTHORIZED).json({
+          success: false,
+          message: 'Please authenticate to create order'
+        });
+      }
+
+      const { quote_id, amount } = req.body;
+
+      if (!quote_id || !amount) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          success: false,
+          message: 'Quote ID and amount are required'
+        });
+      }
+
+      // Get quote details
+      const quote = await GetQuote.findById(quote_id).populate('product_id');
+      if (!quote) {
+        return res.status(httpStatus.NOT_FOUND).json({
+          success: false,
+          message: 'Quote not found'
+        });
+      }
+
+      // Check Razorpay configuration
+      const razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
+      const razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
+
+      if (!razorpayKeyId || !razorpayKeySecret || razorpayKeyId.includes('your_key_id')) {
+        return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+          success: false,
+          message: 'Razorpay keys not configured properly'
+        });
+      }
+
+      try {
+        // Create Razorpay order
+        const razorpayOrder = await razorpay.orders.create({
+          amount: Math.round(amount * 100), // Amount in paise
+          currency: 'INR',
+          receipt: `QUOTE_${quote_id}`,
+          notes: {
+            quote_id: quote_id,
+            user_id: req.user.id,
+            user_email: req.user.email || '',
+          },
+        });
+
+        console.log('Quote order created successfully:', razorpayOrder.id);
+
+        res.status(httpStatus.OK).json({
+          status: 200,
+          success: true,
+          message: 'Quote order created successfully',
+          data: {
+            quote_id: quote_id,
+            razorpay_order_id: razorpayOrder.id,
+            amount: amount,
+            currency: 'INR',
+            key: razorpayKeyId,
+          },
+        });
+      } catch (razorpayError) {
+        console.error('Razorpay error:', razorpayError);
+        return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+          success: false,
+          message: `Razorpay error: ${razorpayError.message}`
+        });
+      }
+    } catch (error) {
+      console.error('Create quote order error:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: error.message || 'Failed to create quote order'
+      });
+    }
+  }
+};
+
+// Verify quote payment
 const verifyQuotePayment = {
   handler: async (req, res) => {
     try {
-      const { razorpay_payment_id, razorpay_payment_link_id, razorpay_payment_link_reference_id, razorpay_payment_link_status, razorpay_signature, quote_id } = req.body;
+      const crypto = require('crypto');
+      const { razorpay_payment_id, razorpay_order_id, razorpay_signature, razorpay_payment_link_id, razorpay_payment_link_reference_id, razorpay_payment_link_status, quote_id } = req.body;
 
-      // In real scenario we match signatures or use razorpay API to get payment details
+      console.log('Quote payment verification started for quote:', quote_id);
+
+      // If using order-based payment (new method)
+      if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
+        // Verify signature
+        const body = razorpay_order_id + '|' + razorpay_payment_id;
+        const expectedSignature = crypto
+          .createHmac('sha256', config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET)
+          .update(body.toString())
+          .digest('hex');
+
+        if (expectedSignature !== razorpay_signature) {
+          console.log('❌ Quote payment signature verification failed');
+          return res.status(httpStatus.BAD_REQUEST).json({
+            success: false,
+            message: 'Invalid payment signature'
+          });
+        }
+
+        console.log('✅ Quote payment signature verified successfully');
+
+        // Find and update quote
+        const existingQuote = await GetQuote.findById(quote_id);
+        if (!existingQuote) {
+          return res.status(httpStatus.NOT_FOUND).json({
+            success: false,
+            message: 'Quote not found'
+          });
+        }
+
+        // Update quote with payment details
+        existingQuote.payment_status = 'paid';
+        existingQuote.razorpay_payment_id = razorpay_payment_id;
+        existingQuote.razorpay_order_id = razorpay_order_id;
+        existingQuote.razorpay_signature = razorpay_signature;
+
+        await existingQuote.save();
+
+        console.log('💾 Quote payment updated successfully:', {
+          quote_id: existingQuote._id,
+          payment_status: existingQuote.payment_status,
+          razorpay_payment_id: razorpay_payment_id
+        });
+
+        return res.status(httpStatus.OK).json({
+          success: true,
+          message: 'Quote payment verified and status updated',
+          data: existingQuote
+        });
+      }
+
+      // If using payment links (old method)
       if (razorpay_payment_link_status === 'paid' || razorpay_payment_id) {
 
         let existingQuote;
@@ -1054,6 +1192,7 @@ const verifyQuotePayment = {
 
       res.status(httpStatus.BAD_REQUEST).json({ success: false, message: 'Payment failed or invalid status' });
     } catch (error) {
+      console.error('Quote payment verification error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
     }
   }
@@ -1165,7 +1304,13 @@ const getUserDashboardData = {
           currentRentals,
           pastRentals,
           purchases,
-          cancellations
+          cancellations,
+          counts: {
+            currentRentals: currentRentals.length,
+            pastRentals: pastRentals.length,
+            purchases: purchases.length,
+            cancellations: cancellations.length
+          }
         }
       });
     } catch (error) {
@@ -1188,6 +1333,7 @@ module.exports = {
   statusDropdown,
   changeStatus,
   getAllQuotesForAdmin,
+  createQuoteOrder,
   verifyQuotePayment,
   getUserDashboardData
 };
