@@ -123,8 +123,8 @@ const createGetQuote = {
 
       // Fetch the created quote with populated product details
       const populatedQuote = await GetQuote.findById(quote._id)
-        .populate('product_id') // This will populate all product fields
-        .lean(); // Convert to plain JavaScript object
+        .populate('product_id')
+        .lean();
 
       return res.status(httpStatus.CREATED).json({
         success: true,
@@ -151,6 +151,8 @@ const getAllQuotes = {
     try {
       const {
         status,
+        payment_status,
+        view_type,
         search,
         product_type,
         listing_type,
@@ -184,10 +186,43 @@ const getAllQuotes = {
         query.user_id = user._id;
       }
 
+      // view_type support for separating orders and quotes
+      // Handle special views for User Panel
+      if (view_type === 'order') {
+        // Only show finished ('complete') and 'paid' items in Orders tab
+        query.status = 'complete';
+        query.payment_status = 'paid';
+      } else if (view_type === 'quote') {
+        // For Quote tab, show everything that is NOT (Complete AND Paid)
+        query.$or = [
+          { status: { $ne: 'complete' } },
+          { payment_status: { $ne: 'paid' } }
+        ];
+      }
+
+      // Define fields to select for product population (compact for list views, full for others)
+      const productSelect = view_type ? 'product_name product_main_image vendor_name category_name price month_arr product_type_id product_type_name product_listing_type_id product_listing_type_name' : '';
+
+      // Fields to exclude from GetQuote root object in list views
+      const quoteExclude = view_type ? '-razorpay_payment_id -razorpay_order_id -razorpay_signature -razorpay_payment_link' : '';
+
       // Multiple status filter support
       if (status) {
         const statusValues = Array.isArray(status) ? status : status.split(',');
-        query.status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
+        const statusQuery = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
+
+        if (query.status) {
+          // If already set by view_type, we might want to intersect, but usually these are used instead
+          query.status = statusQuery;
+        } else {
+          query.status = statusQuery;
+        }
+      }
+
+      // Multiple payment_status filter support
+      if (payment_status) {
+        const paymentStatusValues = Array.isArray(payment_status) ? payment_status : payment_status.split(',');
+        query.payment_status = paymentStatusValues.length === 1 ? paymentStatusValues[0] : { $in: paymentStatusValues };
       }
 
       // Multiple month filter support
@@ -280,9 +315,8 @@ const getAllQuotes = {
 
         // Get all quotes matching basic criteria with populated product
         let quotesQuery = GetQuote.find(query)
-          .populate({
-            path: 'product_id',
-          })
+          .select(quoteExclude)
+          .populate('product_id', productSelect)
           .sort(sortOptions)
           .lean();
 
@@ -385,9 +419,10 @@ const getAllQuotes = {
             // Get quote IDs
             const quoteIds = payload.data.map(q => q._id);
 
-            // Fetch populated quotes
+            // Fetch populated quotes with selected fields
             const populatedQuotes = await GetQuote.find({ _id: { $in: quoteIds } })
-              .populate('product_id')
+              .select(quoteExclude)
+              .populate('product_id', productSelect)
               .lean();
 
             // Create a map for quick lookup
@@ -415,8 +450,8 @@ const getAllQuotes = {
           return originalJson(payload);
         };
 
-        // Use handlePagination
-        await handlePagination(GetQuote, req, res, query, sortOptions);
+        // Use handlePagination with dynamic selection and exclusion
+        await handlePagination(GetQuote, req, res, query, sortOptions, productSelect ? { path: 'product_id', select: productSelect } : 'product_id', quoteExclude);
       }
 
     } catch (error) {
@@ -582,8 +617,8 @@ const getQuoteById = {
 
       // Use populate to get all product details
       const quote = await GetQuote.findById(_id)
-        .populate('product_id') // This populates all product fields
-        .lean(); // Convert to plain JavaScript object
+        .populate('product_id')
+        .lean();
 
       if (!quote) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
@@ -655,9 +690,9 @@ const updateQuote = {
       const quote = await GetQuote.findByIdAndUpdate(
         _id,
         updateData,
-        { new: true } // Return the updated document
+        { new: true }
       )
-        .populate('product_id') // Populate product details
+        .populate('product_id')
         .lean();
 
       if (!quote) {
@@ -754,7 +789,6 @@ const changeStatus = {
         { status: internal },
         { new: true }
       )
-      
         .populate('user_id')
         .populate('product_id')
         .lean();
@@ -762,7 +796,7 @@ const changeStatus = {
       if (!updated) {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
       }
-      console.log("updated",updated);
+      console.log("updated", updated);
 
       // Stock Management + Payment Link Generation
       if (internal !== existingQuote.status) {
