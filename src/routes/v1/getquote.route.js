@@ -73,5 +73,12 @@ router.post(
   catchAsync(getQuoteController.verifyQuotePayment.handler)
 );
 
+router.post(
+  '/create-order',
+  auth(),
+  upload.none(),
+  catchAsync(getQuoteController.createQuoteOrder.handler)
+);
+
 module.exports = router;
 

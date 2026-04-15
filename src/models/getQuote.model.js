@@ -97,10 +97,21 @@ const getQuoteSchema = new mongoose.Schema(
     razorpay_payment_id: {
       type: String,
     },
+    razorpay_order_id: {
+      type: String,
+    },
+    razorpay_signature: {
+      type: String,
+    },
     payment_status: {
       type: String,
       enum: ['pending', 'paid', 'failed'],
       default: 'pending',
+    },
+    isNew: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
   },
   {
@@ -109,6 +120,37 @@ const getQuoteSchema = new mongoose.Schema(
 );
 
 getQuoteSchema.plugin(toJSON);
+
+// auto mark quote as old after 24 hours
+// getQuoteSchema.pre('findOne', function() {
+//   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+//   const now = new Date();
+  
+//   this.exec = async function() {
+//     const result = await this.model.collection.findOne(this.getFilter());
+//     if (result && result.createdAt) {
+//       const createdTime = new Date(result.createdAt).getTime();
+//       const timePassed = now.getTime() - createdTime;
+      
+//       if (timePassed > TWENTY_FOUR_HOURS && result.isNew === true) {
+//         await this.model.updateOne(
+//           { _id: result._id },
+//           { isNew: false }
+//         );
+//       }
+//     }
+//     return result;
+//   };
+// });
+
+// ORRRRR  -----> Add a virtual field or method to check if quote is new
+// getQuoteSchema.methods.canShowAsNew = function() {
+//   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+//   const createdTime = new Date(this.createdAt).getTime();
+//   const now = new Date().getTime();
+//   const timePassed = now - createdTime;
+//   return this.isNew === true && timePassed <= TWENTY_FOUR_HOURS;
+// };
 
 const GetQuote = mongoose.model('GetQuote', getQuoteSchema);
 

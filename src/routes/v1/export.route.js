@@ -12,7 +12,11 @@ const {
   exportWalletTransactionsToExcel,
   exportWalletTransactionsToPDF,
   exportServicesToExcel,
-  exportServicesToPDF
+  exportServicesToPDF,
+  exportVendorsToExcel,
+  exportVendorsToPDF,
+  exportVendorWalletsToExcel,
+  exportVendorWalletsToPDF
 } = require('../../controllers/export.controller');
 
 const router = express.Router();
@@ -35,8 +39,16 @@ router.get('/payments/pdf', auth(), exportPaymentsToPDF.handler);
 router.get('/wallet-transactions/excel', auth(), exportWalletTransactionsToExcel.handler);
 router.get('/wallet-transactions/pdf', auth(), exportWalletTransactionsToPDF.handler);
 
+// Vendor Wallets export routes (All wallets summary)
+router.get('/vendor-wallets/excel', auth(), exportVendorWalletsToExcel.handler);
+router.get('/vendor-wallets/pdf', auth(), exportVendorWalletsToPDF.handler);
+
 // Service export routes
 router.get('/services/excel', auth(), exportServicesToExcel.handler);
 router.get('/services/pdf', auth(), exportServicesToPDF.handler);
+
+// Vendor export routes
+router.get('/vendors/excel', auth(), exportVendorsToExcel.handler);
+router.get('/vendors/pdf', auth(), exportVendorsToPDF.handler);
 
 module.exports = router;
