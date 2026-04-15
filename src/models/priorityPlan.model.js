@@ -9,11 +9,10 @@ const priorityPlanSchema = new mongoose.Schema(
     product_slots: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     description: { type: String, default: '' },
-    // Exclusive annual benefit (duration add-on)
+    is_popular: { type: Boolean, default: false },
     addon_available_for_yearly: { type: Boolean, default: false },
     addon_price_per_year: { type: Number, default: 0 },
     addon_max_slots: { type: Number, default: 0 },
-    is_popular: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -38,7 +38,7 @@ const getWalletByVendorId = async (vendorId) => {
  * @returns {Promise<boolean>}
  */
 const hasSufficientBalance = async (vendorId, amount) => {
-  if (!vendorId || !amount) {
+  if (!vendorId || amount === null || amount === undefined) {
     return false;
   }
 
@@ -61,8 +61,16 @@ const hasSufficientBalance = async (vendorId, amount) => {
  * @returns {Promise<object>}
  */
 const deductMoneyFromWallet = async (vendorId, amount, description, metadata = {}) => {
-  if (!vendorId || !amount) {
+  if (!vendorId || amount === null || amount === undefined) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID and amount are required');
+  }
+
+  if (amount < 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Amount cannot be negative');
+  }
+
+  if (amount === 0) {
+    return { message: 'Zero amount deduction: no-op' };
   }
 
   const wallet = await getWalletByVendorId(vendorId);
@@ -104,8 +112,16 @@ const deductMoneyFromWallet = async (vendorId, amount, description, metadata = {
  * @returns {Promise<object>}
  */
 const addMoneyToWallet = async (vendorId, amount, description, paymentDetails = {}) => {
-  if (!vendorId || !amount) {
+  if (!vendorId || amount === null || amount === undefined) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID and amount are required');
+  }
+
+  if (amount < 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Amount cannot be negative');
+  }
+
+  if (amount === 0) {
+    return { message: 'Zero amount addition: no-op' };
   }
 
   let wallet = await getWalletByVendorId(vendorId);

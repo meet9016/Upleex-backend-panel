@@ -11,6 +11,10 @@ const priorityPlanPurchaseSchema = new mongoose.Schema(
     product_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Product', default: [] },
     start_at: { type: Date, default: () => new Date() },
     expire_at: { type: Date, required: true },
+    plan_duration: { type: String, enum: ['monthly', 'yearly'], default: 'monthly' },
+    is_addon_purchased: { type: Boolean, default: false },
+    addon_max_slots: { type: Number, default: 0 },
+    addon_product_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Product', default: [] },
     status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' },
   },
   { timestamps: true }

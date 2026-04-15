@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const PriorityPlan = require('../models/priorityPlan.model');
 
 const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
+const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const Product = require('../models/product.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const walletService = require('../services/wallet.service');
@@ -16,10 +17,10 @@ const createPriorityPlan = {
       product_slots: Joi.number().integer().min(1).required(),
       status: Joi.string().valid('active', 'inactive').default('active'),
       description: Joi.string().allow(''),
+      is_popular: Joi.boolean().default(false),
       addon_available_for_yearly: Joi.boolean().default(false),
       addon_price_per_year: Joi.number().min(0).default(0),
       addon_max_slots: Joi.number().integer().min(0).default(0),
-      is_popular: Joi.boolean().default(false),
     }),
   },
   handler: async (req, res) => {
@@ -61,10 +62,10 @@ const updatePriorityPlan = {
       product_slots: Joi.number().integer().min(1),
       status: Joi.string().valid('active', 'inactive'),
       description: Joi.string().allow(''),
+      is_popular: Joi.boolean(),
       addon_available_for_yearly: Joi.boolean(),
       addon_price_per_year: Joi.number().min(0),
       addon_max_slots: Joi.number().integer().min(0),
-      is_popular: Joi.boolean(),
     }),
   },
   handler: async (req, res) => {
@@ -104,12 +105,17 @@ const purchasePriorityPlan = {
   validation: {
     body: Joi.object().keys({
       plan_id: Joi.string().required(),
-      product_ids: Joi.array().items(Joi.string()).min(1).required(),
+      product_ids: Joi.array().items(Joi.string()).default([]),
       price: Joi.number().required(),
+      plan_duration: Joi.string().valid('monthly', 'yearly').default('monthly'),
+      is_addon_purchased: Joi.boolean().default(false),
+      addon_product_ids: Joi.array().items(Joi.string()).default([]),
+      is_refill: Joi.boolean().default(false),
+      purchase_id: Joi.string().allow(''),
     }),
   },
   handler: async (req, res) => {
-    const { plan_id, product_ids, price } = req.body;
+    const { plan_id, product_ids, price, plan_duration, is_addon_purchased, addon_product_ids, is_refill, purchase_id } = req.body;
     const vendor_id = req.user.id || req.user._id;
 
     try {
@@ -126,78 +132,181 @@ const purchasePriorityPlan = {
         expire_at: { $gt: new Date() }
       });
 
-      // Filter out products that are already assigned to ANY of these active plan instances
-      let newProductIds = [...product_ids];
-      const allAssignedIds = activePurchases.flatMap(p => p.product_ids.map(id => id.toString()));
-      newProductIds = product_ids.filter(pid => !allAssignedIds.includes(pid.toString()));
+      let finalExpiryDate = new Date();
+      if (plan_duration === 'yearly') {
+        finalExpiryDate.setFullYear(finalExpiryDate.getFullYear() + 1);
+      } else {
+        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + 1);
+      }
 
-      // If no new products are being added, just return success
-      if (newProductIds.length === 0 && activePurchases.length > 0) {
-        return res.status(200).json({
-          success: true,
-          message: 'All selected products are already part of your active priority plans',
-          expiry: activePurchases[0].expire_at // Return the first one as a reference
+      // Only update if it's an explicit refill OR if it's an upgrade (adding addon to a yearly plan that doesn't have it)
+      const existingYearlyWithoutAddon = activePurchases.find(p => p.plan_duration === 'yearly' && !p.is_addon_purchased);
+
+      if ((is_refill && purchase_id) || (is_addon_purchased && existingYearlyWithoutAddon)) {
+        const pId = purchase_id || existingYearlyWithoutAddon?._id;
+        const purchase = await PriorityPlanPurchase.findById(pId);
+        if (!purchase) return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Purchase record not found' });
+
+        // Update expiry to newest extension if it's a new yearly purchase being treated as upgrade
+        if (is_addon_purchased && !purchase.is_addon_purchased) {
+          purchase.is_addon_purchased = true;
+          purchase.addon_max_slots = plan.addon_max_slots;
+          purchase.expire_at = finalExpiryDate; // Upgrade to full year from now
+        }
+
+        // Handle Addon Refill
+        if (addon_product_ids && addon_product_ids.length > 0) {
+          const currentAddonIds = (purchase.addon_product_ids || []).map(id => id.toString());
+          const newAddonIds = addon_product_ids.filter(id => !currentAddonIds.includes(id.toString()));
+
+          if (newAddonIds.length > 0) {
+            const totalPlanned = currentAddonIds.length + newAddonIds.length;
+            if (totalPlanned > (purchase.addon_max_slots || 0)) {
+              return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: `Addon slots exceeded. Max: ${purchase.addon_max_slots}` });
+            }
+
+            purchase.addon_product_ids.push(...newAddonIds);
+            await purchase.save();
+
+            // Update Products
+            await Product.updateMany(
+              { _id: { $in: newAddonIds }, vendor_id },
+              { status: 'active', expires_at: purchase.expire_at }
+            );
+
+            // Sync with ListingPlanPurchase (Find existing addon record to avoid duplicates)
+            let listingPurchase = await ListingPlanPurchase.findOne({
+              vendor_id,
+              plan_type: 'Priority Addon',
+              priority_purchase_id: purchase._id
+            });
+
+            if (listingPurchase) {
+              // Update existing
+              await ListingPlanPurchase.updateOne(
+                { _id: listingPurchase._id },
+                {
+                  $addToSet: { product_ids: { $each: newAddonIds } },
+                  $set: {
+                    priority_purchase_id: purchase._id, // Ensure it's linked now
+                    expire_at: purchase.expire_at
+                  }
+                }
+              );
+            } else {
+              // Create new only if absolutely none found
+              await ListingPlanPurchase.create({
+                vendor_id,
+                plan_type: 'Priority Addon',
+                months: 12,
+                max_products: purchase.addon_max_slots,
+                amount: 0,
+                product_ids: newAddonIds,
+                start_at: new Date(),
+                expire_at: purchase.expire_at,
+                priority_purchase_id: purchase._id
+              });
+            }
+          }
+        }
+
+        // Handle Priority Refill
+        if (product_ids && product_ids.length > 0) {
+          const currentPriorityIds = (purchase.product_ids || []).map(id => id.toString());
+          const newPriorityIds = product_ids.filter(id => !currentPriorityIds.includes(id.toString()));
+
+          if (newPriorityIds.length > 0) {
+            const totalPlanned = currentPriorityIds.length + newPriorityIds.length;
+            if (totalPlanned > purchase.total_slots) {
+              return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: `Priority slots exceeded. Max: ${purchase.total_slots}` });
+            }
+
+            purchase.product_ids.push(...newPriorityIds);
+            await purchase.save();
+
+            await Product.updateMany(
+              { _id: { $in: newPriorityIds }, vendor_id },
+              { is_priority: true, priority_expiry: purchase.expire_at }
+            );
+          }
+        }
+
+        return res.status(200).json({ success: true, message: 'Priority Plan updated successfully', expiry: purchase.expire_at });
+      }
+
+      // If we got here, it's a NEW purchase (no existing compatible plan found or not a refill)
+      if (product_ids.length > plan.product_slots) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          success: false,
+          message: `Plan only allows up to ${plan.product_slots} products`
         });
       }
 
-      let expiryDate;
-      let isNewPurchase = true;
-
-      // Try to find ONE existing active purchase that has enough remaining slots
-      const purchaseWithSpace = activePurchases.find(p => (p.total_slots - p.product_ids.length) >= newProductIds.length);
-
-      if (purchaseWithSpace) {
-        isNewPurchase = false;
-        expiryDate = purchaseWithSpace.expire_at;
-
-        // Update active purchase
-        purchaseWithSpace.product_ids.push(...newProductIds);
-        await purchaseWithSpace.save();
-      } else {
-        // New purchase required (none of the existing instances have enough space)
-        // New purchase required
-        if (product_ids.length > plan.product_slots) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            success: false,
-            message: `Plan only allows up to ${plan.product_slots} products`
-          });
-        }
-
-        // Deduct money from wallet
-        const description = `Priority Plan Purchase: ${plan.name}`;
+      // Deduct money from wallet if price > 0
+      if (price > 0) {
+        const description = `Priority Plan Purchase: ${plan.name} (${plan_duration})`;
         await walletService.deductMoneyFromWallet(vendor_id, price, description, {
           plan_id,
           plan_name: plan.name,
           type: 'priority_plan_purchase'
         });
-
-        expiryDate = new Date();
-        expiryDate.setMonth(expiryDate.getMonth() + 1);
-
-        await PriorityPlanPurchase.create({
-          vendor_id,
-          plan_id,
-          plan_name: plan.name,
-          amount: price,
-          total_slots: plan.product_slots,
-          product_ids,
-          expire_at: expiryDate,
-        });
       }
 
-      // Update products to be priority (including existing ones to refresh expiry if it was a new purchase)
+      const purchaseData = {
+        vendor_id,
+        plan_id,
+        plan_name: plan.name,
+        amount: price,
+        total_slots: plan.product_slots,
+        product_ids,
+        expire_at: finalExpiryDate,
+        plan_duration: plan_duration || 'monthly',
+        is_addon_purchased: !!is_addon_purchased,
+        addon_max_slots: is_addon_purchased ? plan.addon_max_slots : 0,
+      };
+
+      if (is_addon_purchased && addon_product_ids && addon_product_ids.length) {
+        purchaseData.addon_product_ids = addon_product_ids;
+      }
+
+      const newPurchase = await PriorityPlanPurchase.create(purchaseData);
+
+      // Update products to be priority
       await Product.updateMany(
         { _id: { $in: product_ids }, vendor_id },
         {
           is_priority: true,
-          priority_expiry: expiryDate
+          priority_expiry: finalExpiryDate
         }
       );
 
+      // If addon was purchased, update listing expiry and create listing purchase record
+      if (is_addon_purchased && addon_product_ids && addon_product_ids.length) {
+        await Product.updateMany(
+          { _id: { $in: addon_product_ids }, vendor_id },
+          {
+            status: 'active',
+            expires_at: finalExpiryDate
+          }
+        );
+
+        await ListingPlanPurchase.create({
+          vendor_id,
+          plan_type: 'Priority Addon',
+          months: 12,
+          max_products: plan.addon_max_slots,
+          amount: 0,
+          product_ids: addon_product_ids,
+          start_at: new Date(),
+          expire_at: finalExpiryDate,
+          priority_purchase_id: newPurchase._id
+        });
+      }
+
       return res.status(200).json({
         success: true,
-        message: isNewPurchase ? 'Priority plan purchased and products updated' : 'Products added to your existing priority plan',
-        expiry: expiryDate
+        message: is_addon_purchased ? 'Priority Plan & Annual Benefit activated successfully!' : 'Priority plan purchased successfully',
+        expiry: finalExpiryDate
       });
     } catch (error) {
       console.error('Priority plan purchase error:', error);
