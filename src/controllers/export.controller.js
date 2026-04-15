@@ -17,14 +17,14 @@ const exportProductsToExcel = {
     try {
       const { vendor_id, category_id, sub_category_id, filter_rent_sell, filter_tenure, search, status } = req.query;
       const user = req.user;
-      
+
       // Build query - IMPORTANT: Filter by vendor
       const query = {};
-      
+
       // If vendor_id is provided in query, use it (for admin)
       if (vendor_id) {
         query.vendor_id = vendor_id;
-      } 
+      }
       // If user is logged in and is a vendor, only show their products
       else if (user && user.userType === 'vendor') {
         query.vendor_id = user.id || user._id;
@@ -127,7 +127,7 @@ const exportProductsToExcel = {
       });
 
       // Set response headers
-      const filename = user && user.userType === 'vendor' 
+      const filename = user && user.userType === 'vendor'
         ? `my_products_${new Date().toISOString().split('T')[0]}.xlsx`
         : `products_${new Date().toISOString().split('T')[0]}.xlsx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -150,14 +150,14 @@ const exportProductsToPDF = {
     try {
       const { vendor_id, category_id, sub_category_id, filter_rent_sell, filter_tenure, search, status } = req.query;
       const user = req.user;
-      
+
       // Build query - IMPORTANT: Filter by vendor (same as Excel)
       const query = {};
-      
+
       // If vendor_id is provided in query, use it (for admin)
       if (vendor_id) {
         query.vendor_id = vendor_id;
-      } 
+      }
       // If user is logged in and is a vendor, only show their products
       else if (user && user.userType === 'vendor') {
         query.vendor_id = user.id || user._id;
@@ -166,7 +166,7 @@ const exportProductsToPDF = {
       else {
         query.approval_status = 'approved';
       }
-      
+
       if (status) query.status = status;
       if (category_id) query.category_id = category_id;
       if (sub_category_id && sub_category_id !== 'all') query.sub_category_id = sub_category_id;
@@ -187,14 +187,14 @@ const exportProductsToPDF = {
 
       // Create PDF
       const doc = new PDFDocument({ margin: 30, size: 'A4' });
-      
+
       // Set response headers
-      const filename = user && user.userType === 'vendor' 
+      const filename = user && user.userType === 'vendor'
         ? `my_products_${new Date().toISOString().split('T')[0]}.pdf`
         : `products_${new Date().toISOString().split('T')[0]}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-      
+
       doc.pipe(res);
 
       // Add title with blue background
@@ -217,10 +217,10 @@ const exportProductsToPDF = {
 
       // Draw table border
       doc.rect(50, yPosition, tableWidth, 30).stroke();
-      
+
       // Draw header background
       doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-      
+
       // Draw header text with borders
       doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
       headers.forEach((header, index) => {
@@ -240,7 +240,7 @@ const exportProductsToPDF = {
         if (yPosition > 750) {
           doc.addPage();
           yPosition = 50;
-          
+
           // Redraw headers on new page
           xPosition = 50;
           doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
@@ -257,7 +257,7 @@ const exportProductsToPDF = {
         }
 
         xPosition = 50;
-        
+
         // Alternate row background
         if (index % 2 === 0) {
           doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
@@ -281,15 +281,15 @@ const exportProductsToPDF = {
           if (colIndex > 0) {
             doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 28).stroke();
           }
-          
+
           // Add text with proper alignment
-          const textOptions = { 
+          const textOptions = {
             width: columnWidths[colIndex] - 10,
             height: 20,
             ellipsis: true,
             align: colIndex === 3 ? 'right' : 'left' // Right align price column
           };
-          
+
           doc.text(data, xPosition + 5, yPosition + 9, textOptions);
           xPosition += columnWidths[colIndex];
         });
@@ -450,10 +450,10 @@ const exportQuotesToPDF = {
 
       // Create PDF
       const doc = new PDFDocument({ margin: 30, size: 'A4' });
-      
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=quotes_${Date.now()}.pdf`);
-      
+
       doc.pipe(res);
 
       // Add title with green background
@@ -474,10 +474,10 @@ const exportQuotesToPDF = {
 
       // Draw table border
       doc.rect(50, yPosition, tableWidth, 30).stroke();
-      
+
       // Draw header background
       doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
-      
+
       // Draw header text with borders
       doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
       headers.forEach((header, index) => {
@@ -497,7 +497,7 @@ const exportQuotesToPDF = {
         if (yPosition > 750) {
           doc.addPage();
           yPosition = 50;
-          
+
           // Redraw headers on new page
           xPosition = 50;
           doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
@@ -514,7 +514,7 @@ const exportQuotesToPDF = {
         }
 
         xPosition = 50;
-        
+
         // Alternate row background
         if (index % 2 === 0) {
           doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
@@ -537,15 +537,15 @@ const exportQuotesToPDF = {
           if (colIndex > 0) {
             doc.moveTo(xPosition, yPosition).lineTo(xPosition, yPosition + 28).stroke();
           }
-          
+
           // Add text with proper alignment
-          const textOptions = { 
+          const textOptions = {
             width: columnWidths[colIndex] - 10,
             height: 20,
             ellipsis: true,
             align: colIndex === 3 ? 'right' : 'left' // Right align price column
           };
-          
+
           doc.text(data, xPosition + 5, yPosition + 9, textOptions);
           xPosition += columnWidths[colIndex];
         });
@@ -734,10 +734,10 @@ const exportOrdersToPDF = {
 
         if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
         doc.fillColor('black');
-        
+
         let xPos = 50;
         const vendorTotal = order.items.filter(i => i.vendor_id === vendorId).reduce((sum, i) => sum + i.final_amount, 0);
-        
+
         doc.text(`#${order.order_id}`, xPos + 5, yPosition + 9, { width: columnWidths[0] - 10 });
         xPos += columnWidths[0];
         doc.text(order.user_id?.name || 'N/A', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10 });
@@ -811,7 +811,7 @@ const exportPaymentsToPDF = {
 
         if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
         doc.fillColor('black');
-        
+
         let xPos = 50;
         doc.text(`#${payment.order_id?.order_id || 'N/A'}`, xPos + 5, yPosition + 9, { width: columnWidths[0] - 10 });
         xPos += columnWidths[0];
@@ -923,25 +923,47 @@ const exportWalletTransactionsToPDF = {
 
       transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      const fs = require('fs');
+      const path = require('path');
+
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=wallet_transactions_${Date.now()}.pdf`);
       doc.pipe(res);
 
-      doc.rect(30, 30, doc.page.width - 60, 40).fill('#4A90E2');
-      doc.fillColor('white').fontSize(18).font('Helvetica-Bold');
-      doc.text('Wallet Transactions Report', 50, 45);
+      const brandColor = '#4A90E2';
+      const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'upleex-logo-2.png');
 
-      doc.fillColor('black').fontSize(10).font('Helvetica');
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 85);
+      // Top Accent Bar
+      doc.rect(0, 0, doc.page.width, 8).fill(brandColor);
+
+      // Header with Logo
+      if (fs.existsSync(logoPath)) {
+        // Adjust the width/height to fit your logo aspect ratio appropriately
+        doc.image(logoPath, 40, 30, { width: 120 });
+      } else {
+        doc.fillColor(brandColor).fontSize(26).font('Helvetica-Bold').text('UPLEEX', 40, 35);
+      }
+
+      // Header Text
+      doc.fillColor('#333333').fontSize(22).font('Helvetica-Bold');
+      doc.text('Wallet Transactions Report', 40, 35, { align: 'right' });
+
+      doc.fillColor('#666666').fontSize(10).font('Helvetica');
+      doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 40, 65, { align: 'right' });
+
+      // Divider Line
+      doc.moveTo(40, 95).lineTo(doc.page.width - 40, 95).strokeColor('#E5E7EB').lineWidth(1).stroke();
 
       let yPosition = 120;
       const headers = ['Description', 'Type', 'Amount', 'Status', 'Date'];
-      const columnWidths = [180, 60, 80, 80, 100];
-      let xPosition = 50;
+      // Increase column widths slightly to fill page margins
+      const columnWidths = [195, 60, 80, 80, 100];
+      let xPosition = 40; // match margin
       const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
 
-      doc.rect(50, yPosition, tableWidth, 30).fill('#4A90E2');
+      // Table Header Background
+      doc.rect(40, yPosition, tableWidth, 30).fill(brandColor);
       doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
       headers.forEach((h, i) => {
         doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
@@ -949,27 +971,61 @@ const exportWalletTransactionsToPDF = {
       });
 
       yPosition += 30;
-      doc.fillColor('black').fontSize(9).font('Helvetica');
+      doc.fillColor('#333333').fontSize(9).font('Helvetica');
 
       transactions.forEach((t, index) => {
         if (yPosition > 750) {
           doc.addPage();
-          yPosition = 50;
+          doc.rect(0, 0, doc.page.width, 8).fill(brandColor); // Carry over the accent bar
+          yPosition = 40;
+
+          xPosition = 40;
+          doc.rect(xPosition, yPosition, tableWidth, 30).fill(brandColor);
+          doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
+          headers.forEach((h, i) => {
+            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
+            xPosition += columnWidths[i];
+          });
+          yPosition += 30;
+          doc.fillColor('#333333').fontSize(9).font('Helvetica');
         }
 
-        if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
-        doc.fillColor('black');
-        
-        let xPos = 50;
+        if (index % 2 === 0) doc.rect(40, yPosition, tableWidth, 28).fill('#F8F9FA');
+
+        let xPos = 40;
+
+        // Draw row bottom border for nice aesthetics
+        doc.moveTo(40, yPosition + 28).lineTo(40 + tableWidth, yPosition + 28).strokeColor('#EEEEEE').lineWidth(1).stroke();
+
+        doc.fillColor('#333333');
         doc.text(t.description || '', xPos + 5, yPosition + 9, { width: columnWidths[0] - 10, ellipsis: true });
         xPos += columnWidths[0];
-        doc.text(t.type?.toUpperCase() || '', xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'center' });
+
+        // Type with colors
+        const typeStr = (t.type || '').toUpperCase();
+        if (typeStr === 'CREDIT') doc.fillColor('#10B981');
+        else if (typeStr === 'DEBIT') doc.fillColor('#EF4444');
+        else doc.fillColor('#333333');
+        doc.text(typeStr, xPos + 5, yPosition + 9, { width: columnWidths[1] - 10, align: 'center' });
         xPos += columnWidths[1];
         doc.text(`₹${Number(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
+
+        // Amount
+        doc.fillColor('#333333');
+        doc.text(`₹${(t.amount || 0).toFixed(2)}`, xPos + 5, yPosition + 9, { width: columnWidths[2] - 10, align: 'right' });
         xPos += columnWidths[2];
-        doc.text(t.status?.toUpperCase() || '', xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
+
+        // Status with colors
+        const statusStr = (t.status || '').toUpperCase();
+        if (statusStr === 'COMPLETED' || statusStr === 'SUCCESS') doc.fillColor('#10B981');
+        else if (statusStr === 'PENDING') doc.fillColor('#F59E0B');
+        else if (statusStr === 'FAILED' || statusStr === 'CANCELLED') doc.fillColor('#EF4444');
+        else doc.fillColor('#333333');
+        doc.text(statusStr, xPos + 5, yPosition + 9, { width: columnWidths[3] - 10, align: 'center' });
         xPos += columnWidths[3];
-        doc.text(new Date(t.createdAt).toLocaleDateString(), xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
+
+        doc.fillColor('#666666');
+        doc.text(new Date(t.createdAt).toLocaleDateString('en-IN'), xPos + 5, yPosition + 9, { width: columnWidths[4] - 10, align: 'center' });
 
         yPosition += 28;
       });
@@ -1095,7 +1151,7 @@ const exportServicesToPDF = {
 
         if (index % 2 === 0) doc.rect(50, yPosition, tableWidth, 28).fill('#F8F9FA');
         doc.fillColor('black');
-        
+
         let xPos = 50;
         doc.text(s.service_name || '', xPos + 5, yPosition + 9, { width: columnWidths[0] - 10, ellipsis: true });
         xPos += columnWidths[0];
