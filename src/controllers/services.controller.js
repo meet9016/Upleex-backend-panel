@@ -69,8 +69,12 @@ const createService = {
       data.status = 'active';
       data.approval_status = 'pending';
       
-      // Set initial listing expiry (1 month from creation for ₹29 listing fee)
+      // Set initial service expiry (1 month from creation for ₹29 service fee)
       const moment = require('moment');
+      data.expires_at = moment().add(1, 'month').toDate();
+      data.service_fee_paid = true;
+      
+      // Set initial listing expiry (1 month from creation for ₹29 listing fee)
       data.listing_expires_at = moment().add(1, 'month').toDate();
       data.listing_fee_paid = true;
 
@@ -124,6 +128,17 @@ const getAllServices = {
         },
         {
           $set: { is_priority: false }
+        }
+      );
+
+      // Move expired services to draft status
+      await Service.updateMany(
+        {
+          expires_at: { $lt: now },
+          status: { $in: ['active', 'inactive'] }
+        },
+        {
+          $set: { status: 'draft' }
         }
       );
 

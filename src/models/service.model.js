@@ -38,7 +38,7 @@ const serviceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive'],
+      enum: ['active', 'inactive', 'draft'],
       default: 'active',
       index: true,
     },
@@ -74,6 +74,14 @@ const serviceSchema = new mongoose.Schema(
       index: true,
     },
     listing_fee_paid: {
+      type: Boolean,
+      default: false,
+    },
+    expires_at: {
+      type: Date,
+      index: true,
+    },
+    service_fee_paid: {
       type: Boolean,
       default: false,
     },

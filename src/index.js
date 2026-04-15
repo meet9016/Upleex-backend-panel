@@ -4,6 +4,7 @@ const config = require('./config/config');
 const logger = require('./config/logger');
 const { initPaymentReleaseCron } = require('./utils/paymentCron');
 const { startKycReminderCron } = require('./services/cronJobs.service');
+// const { handleServiceExpiry } = require('./utils/serviceExpiryCron');
 
 require('node:dns').setServers(['1.1.1.1','8.8.8.8'])
 
@@ -14,6 +15,8 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   initPaymentReleaseCron();
   // Initialize KYC reminder cron job
   startKycReminderCron();
+  // // Initialize service expiry cron job
+  // handleServiceExpiry();
   server = app.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
   });

@@ -46,14 +46,18 @@ const createPurchase = {
           service_ids: updatedServiceIds,
         });
 
-        // Update services status and expiry - extend existing dates
+        // Update services status and expiry - plan starts after service expiry
         const servicesToUpdate = await Service.find({ _id: { $in: newServiceIds }, vendor_id });
         
         for (const service of servicesToUpdate) {
           let newExpiryDate;
           
-          if (service.listing_expires_at && service.listing_expires_at > new Date()) {
-            // Extend from current expiry date
+          // Check if service has expiry date and is still valid
+          if (service.expires_at && service.expires_at > new Date()) {
+            // Plan starts after service expiry
+            newExpiryDate = moment(service.expires_at).add(existingPurchase.months, 'months').toDate();
+          } else if (service.listing_expires_at && service.listing_expires_at > new Date()) {
+            // Extend from current listing expiry date
             newExpiryDate = moment(service.listing_expires_at).add(existingPurchase.months, 'months').toDate();
           } else {
             // If expired or no expiry, use existing purchase expiry
@@ -103,17 +107,21 @@ const createPurchase = {
     const start = new Date();
     const expire = moment(start).add(plan.months, 'months').toDate();
 
-    // Update services - extend existing expiry dates
+    // Update services - plan starts after service expiry date
     const servicesToUpdate = await Service.find({ _id: { $in: service_ids }, vendor_id });
     
     for (const service of servicesToUpdate) {
+      let planStartDate;
       let newExpiryDate;
       
-      if (service.listing_expires_at && service.listing_expires_at > new Date()) {
-        // Extend from current expiry date
-        newExpiryDate = moment(service.listing_expires_at).add(plan.months, 'months').toDate();
+      // Check if service has expiry date and is still valid
+      if (service.expires_at && service.expires_at > new Date()) {
+        // Plan starts after service expiry
+        planStartDate = moment(service.expires_at);
+        newExpiryDate = moment(service.expires_at).add(plan.months, 'months').toDate();
       } else {
-        // If expired or no expiry, start from now
+        // Service already expired or no expiry, start plan immediately
+        planStartDate = moment();
         newExpiryDate = moment().add(plan.months, 'months').toDate();
       }
       
