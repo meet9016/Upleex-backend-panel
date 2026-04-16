@@ -34,6 +34,10 @@ const vendorSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  city_id: {
+    type: String,
+    trim: true,
+  },
   otp: {
     type: String,
   },

@@ -1332,6 +1332,11 @@ const getUserDashboardData = {
         });
       });
 
+      const purchases_total_amount = purchases.reduce((sum, item) => {
+        const val = Number(item?.calculated_price);
+        return sum + (isNaN(val) ? 0 : val);
+      }, 0);
+
       res.status(httpStatus.OK).json({
         success: true,
         data: {
@@ -1339,6 +1344,7 @@ const getUserDashboardData = {
           pastRentals,
           purchases,
           cancellations,
+          purchases_total_amount,
           counts: {
             currentRentals: currentRentals.length,
             pastRentals: pastRentals.length,
