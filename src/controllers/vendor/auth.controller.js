@@ -5,7 +5,7 @@ const Vendor = require('../../models/vendor/vendor.model');
 const { generateAuthTokens } = require('../../services/tokenService');
 
 const businessRegister = catchAsync(async (req, res) => {
-  const { full_name, business_name, email, number, alternate_number, country, otp } = req.body;
+  const { full_name, business_name, email, number, alternate_number, country, city_id, otp } = req.body;
 
   const existingVendor = await Vendor.findOne({
     $or: [{ email }, { number }]
@@ -39,6 +39,7 @@ const businessRegister = catchAsync(async (req, res) => {
     number,
     alternate_number,
     country,
+    city_id,
     isVerified: true,
   });
   const token = await generateAuthTokens(vendor, 'vendor');

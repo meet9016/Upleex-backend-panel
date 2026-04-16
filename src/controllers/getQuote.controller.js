@@ -6,6 +6,7 @@ const {
   Product,
   GetQuoteStatus,
   Order,
+  Review,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const { uploadToExternalService } = require('../utils/fileUpload');
@@ -378,8 +379,8 @@ const getAllQuotes = {
         const total = filteredQuotes.length;
         const paginatedQuotes = filteredQuotes.slice(skip, skip + limitNum);
 
-        // Add month_name to each quote
-        const enrichedQuotes = paginatedQuotes.map(quote => {
+        // Add month_name and review status to each quote
+        const enrichedQuotes = await Promise.all(paginatedQuotes.map(async (quote) => {
           if (quote.months_id && quote.product_id?.month_arr) {
             const month = quote.product_id.month_arr.find(
               m => m.months_id === quote.months_id || m.product_months_id === quote.months_id
@@ -388,8 +389,18 @@ const getAllQuotes = {
               quote.month_name = month.month_name;
             }
           }
+
+          // Add review status
+          const review = await Review.findOne({
+            product_id: quote.product_id?._id || quote.product_id,
+            user_id: quote.user_id
+          }).populate('user_id', 'name email');
+
+          quote.has_reviewed = !!review;
+          quote.review_details = review || null;
+
           return quote;
-        });
+        }));
 
         console.log("🚀 ~ Sending response with:", {
           total,
@@ -431,8 +442,8 @@ const getAllQuotes = {
               quoteMap[quote._id.toString()] = quote;
             });
 
-            // Add month_name to each quote
-            payload.data = payload.data.map(quote => {
+            // Add month_name and review status to each quote
+            payload.data = await Promise.all(payload.data.map(async (quote) => {
               const populated = quoteMap[quote._id.toString()] || quote;
 
               if (populated.months_id && populated.product_id?.month_arr) {
@@ -444,8 +455,17 @@ const getAllQuotes = {
                 }
               }
 
+              // Add review status
+              const review = await Review.findOne({
+                product_id: populated.product_id?._id || populated.product_id,
+                user_id: populated.user_id
+              }).populate('user_id', 'name email');
+
+              populated.has_reviewed = !!review;
+              populated.review_details = review || null;
+
               return populated;
-            });
+            }));
           }
           return originalJson(payload);
         };
@@ -623,6 +643,15 @@ const getQuoteById = {
       if (!quote) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
       }
+
+      // Add review status
+      const review = await Review.findOne({
+        product_id: quote.product_id?._id || quote.product_id,
+        user_id: quote.user_id
+      }).populate('user_id', 'name email');
+
+      quote.has_reviewed = !!review;
+      quote.review_details = review || null;
 
       res.status(httpStatus.OK).json({
         success: true,
@@ -1332,6 +1361,11 @@ const getUserDashboardData = {
         });
       });
 
+      const purchases_total_amount = purchases.reduce((sum, item) => {
+        const val = Number(item?.calculated_price);
+        return sum + (isNaN(val) ? 0 : val);
+      }, 0);
+
       res.status(httpStatus.OK).json({
         success: true,
         data: {
@@ -1339,6 +1373,7 @@ const getUserDashboardData = {
           pastRentals,
           purchases,
           cancellations,
+          purchases_total_amount,
           counts: {
             currentRentals: currentRentals.length,
             pastRentals: pastRentals.length,

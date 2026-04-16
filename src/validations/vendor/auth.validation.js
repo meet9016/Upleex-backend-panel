@@ -8,6 +8,7 @@ const businessRegister = {
     number: Joi.string().pattern(/^[0-9]{10,15}$/).required(),
     alternate_number: Joi.string().pattern(/^[0-9]{10,15}$/).allow('', null).optional(),
     country: Joi.string().required(),
+    city_id: Joi.string().optional(),
     otp: Joi.string().optional(),
   }),
 };
