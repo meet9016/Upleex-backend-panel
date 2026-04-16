@@ -8,7 +8,6 @@ const listingPlanSchema = new mongoose.Schema(
     max_products: { type: Number, required: true },
     amount: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
-    description: { type: String, default: '' },
     popular: { type: Boolean, default: false },
   },
   { timestamps: true }
