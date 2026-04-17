@@ -10,15 +10,8 @@ const router = express.Router();
 // Validation schemas
 const createOrderValidation = {
   body: Joi.object().keys({
-    delivery_address: Joi.object().keys({
-      address_line_1: Joi.string().required(),
-      address_line_2: Joi.string().allow('').optional(),
-      city: Joi.string().required(),
-      state: Joi.string().required(),
-      pincode: Joi.string().required(),
-      country: Joi.string().default('India').optional(),
-    }).optional(),
     order_notes: Joi.string().allow('').optional(),
+    payment_type: Joi.string().valid('full', '30_percent').default('full').optional(),
   }).options({ allowUnknown: true }),
 };
 

@@ -851,18 +851,6 @@ const sendOrderConfirmationEmail = async (to, orderData) => {
             </table>
           </div>
         </div>
-
-        <!-- Delivery Address -->
-        <div style="margin:20px 0; padding:15px; background:#fef3c7; border-left:4px solid #f59e0b; border-radius:4px;">
-          <h4 style="margin:0 0 10px; color:#92400e;">📍 Delivery Address</h4>
-          <p style="margin:0; color:#92400e; font-size:14px;">
-            ${orderData.delivery_address.address_line_1}<br>
-            ${orderData.delivery_address.city}, ${orderData.delivery_address.state} - ${orderData.delivery_address.pincode}<br>
-            ${orderData.delivery_address.country}
-          </p>
-        </div>
-
-        <!-- Payment Info -->
         <div style="margin:20px 0; padding:15px; background:#dcfce7; border-left:4px solid #22c55e; border-radius:4px;">
           <h4 style="margin:0 0 10px; color:#166534;">💳 Payment Information</h4>
           <p style="margin:0; color:#166534; font-size:14px;">

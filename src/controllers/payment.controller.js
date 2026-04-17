@@ -33,7 +33,7 @@ const createOrder = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to create order');
   }
 
-  const { delivery_address, order_notes, payment_type } = req.body;
+  const { order_notes, payment_type } = req.body;
 
   // Get user email from database if not in request
   let userEmail = req.user.email;
@@ -167,13 +167,6 @@ const createOrder = catchAsync(async (req, res) => {
       total_amount: totalAmount,
       payment_type: payment_type || 'full',
       razorpay_order_id: razorpayOrder.id,
-      delivery_address: delivery_address || {
-        address_line_1: '123 Main Street',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400001',
-        country: 'India',
-      },
       order_notes: order_notes || '',
       vendor_payments: Object.values(vendorGroups),
     });
