@@ -45,7 +45,7 @@ router.get(
 );
 
 router.get(
-  '/approved-logos',
+  '/vendor-kyc/approved-logos',
   catchAsync(kycController.getApprovedLogos.handler)
 );
 
