@@ -204,8 +204,8 @@ const getAllQuotes = {
       // Define fields to select for product population (compact for list views, full for others)
       const productSelect = view_type ? 'product_name product_main_image vendor_name category_name price month_arr product_type_id product_type_name product_listing_type_id product_listing_type_name' : '';
 
-      // Fields to exclude from GetQuote root object in list views
-      const quoteExclude = view_type ? '-razorpay_payment_id -razorpay_order_id -razorpay_signature -razorpay_payment_link' : '';
+      // Fields to exclude from GetQuote root object in list views (removed razorpay fields from exclusion)
+      const quoteExclude = view_type ? '-razorpay_signature' : '';
 
       // Multiple status filter support
       if (status) {
