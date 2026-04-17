@@ -68,16 +68,56 @@ const getWishlist = async (req, res) => {
   const limit = parseInt(req.body.limit) || 100;
   const skip = (page - 1) * limit;
 
-  const wishlistItems = await Wishlist.find({ user_id })
-    .populate({
-      path: 'product_id',
-      select: 'product_name price cancel_price product_main_image category_name sub_category_name vendor_name status product_listing_type_name product_type_name month_arr'
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  // Use aggregation to filter out items where product's is_visible is false
+  const pipeline = [
+    { $match: { user_id: new mongoose.Types.ObjectId(user_id) } },
+    {
+      $lookup: {
+        from: 'products', // The collection name for Product model
+        localField: 'product_id',
+        foreignField: '_id',
+        as: 'product_info'
+      }
+    },
+    { $unwind: '$product_info' },
+    { $match: { 'product_info.is_visible': { $ne: false } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 1,
+              user_id: 1,
+              createdAt: 1,
+              product_id: {
+                product_name: '$product_info.product_name',
+                price: '$product_info.price',
+                cancel_price: '$product_info.cancel_price',
+                product_main_image: '$product_info.product_main_image',
+                category_name: '$product_info.category_name',
+                sub_category_name: '$product_info.sub_category_name',
+                vendor_name: '$product_info.vendor_name',
+                status: '$product_info.status',
+                product_listing_type_name: '$product_info.product_listing_type_name',
+                product_type_name: '$product_info.product_type_name',
+                month_arr: '$product_info.month_arr',
+                id: '$product_info._id'
+              },
+              id: '$_id'
+            }
+          }
+        ]
+      }
+    }
+  ];
 
-  const total = await Wishlist.countDocuments({ user_id });
+  const results = await Wishlist.aggregate(pipeline);
+  const total = results[0].metadata[0]?.total || 0;
+  const wishlistItems = results[0].data || [];
 
   res.status(httpStatus.OK).json({
     success: true,
