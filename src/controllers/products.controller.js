@@ -776,7 +776,7 @@ const getAllProducts = {
       // so the order rotates every minute while free products stay last.
       let normalized = normalizedRaw;
       if (rotation_seed !== undefined) {
-        const seed = parseInt(rotation_seed, 10) || Math.floor(Date.now() / (60 * 1000));
+        const seed = parseInt(rotation_seed, 10) || Math.floor(Date.now() / (2 * 60 * 1000));
 
         const seededShuffle = (arr, s) => {
           const a = [...arr];
