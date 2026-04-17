@@ -473,6 +473,7 @@ const getAllProducts = {
       sort_order,
       is_priority,
       is_boosted,
+      rotation_seed,
     } = req.query;
 
     const bodyVendorId = req.body.vendor_id;
@@ -644,23 +645,26 @@ const getAllProducts = {
       console.log("Product query:", JSON.stringify(query, null, 2));
 
       // Sorting
+      // Note: pricing_type: -1 (desc) puts "paid" before "free" alphabetically,
+      // ensuring free products always appear last within their tier.
       let sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 }; // default sort
       if (customSortOptions) {
-        sortOptions = { is_priority: -1, ...customSortOptions };
+        // Always include pricing_type tiebreaker so free products remain last
+        sortOptions = { is_priority: -1, ...customSortOptions, pricing_type: -1 };
       } else if (sort_by) {
         const sortOrder = sort_order === 'asc' ? 1 : -1;
         switch (sort_by) {
           case 'price':
-            sortOptions = { is_priority: -1, price: sortOrder };
+            sortOptions = { is_priority: -1, pricing_type: -1, price: sortOrder };
             break;
           case 'name':
-            sortOptions = { is_priority: -1, product_name: sortOrder };
+            sortOptions = { is_priority: -1, pricing_type: -1, product_name: sortOrder };
             break;
           case 'date':
-            sortOptions = { is_priority: -1, createdAt: sortOrder };
+            sortOptions = { is_priority: -1, pricing_type: -1, createdAt: sortOrder };
             break;
           case 'popularity':
-            sortOptions = { is_priority: -1, views: sortOrder };
+            sortOptions = { is_priority: -1, pricing_type: -1, views: sortOrder };
             break;
           default:
             sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 };
@@ -753,7 +757,7 @@ const getAllProducts = {
         wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
       }
 
-      const normalized = data.map((p) => {
+      const normalizedRaw = data.map((p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
         return {
           ...p.toObject(),
@@ -766,7 +770,37 @@ const getAllProducts = {
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
-      
+
+      // ── Time-based fair rotation ──────────────────────────────────────
+      // If rotation_seed is passed (from user panel), shuffle each tier
+      // so the order rotates every minute while free products stay last.
+      let normalized = normalizedRaw;
+      if (rotation_seed !== undefined) {
+        const seed = parseInt(rotation_seed, 10) || Math.floor(Date.now() / (60 * 1000));
+
+        const seededShuffle = (arr, s) => {
+          const a = [...arr];
+          const rand = (n) => { const x = Math.sin(n++) * 10000; return x - Math.floor(x); };
+          let m = a.length, t, idx;
+          let ns = s;
+          while (m) { idx = Math.floor(rand(ns++) * m--); t = a[m]; a[m] = a[idx]; a[idx] = t; }
+          return a;
+        };
+
+        const tierPriority = normalizedRaw.filter(p => p.is_priority);
+        const tierNonPriority = normalizedRaw.filter(p => !p.is_priority);
+        const tierPaidNormal  = tierNonPriority.filter(p => p.pricing_type !== 'free');
+        const tierFree        = tierNonPriority.filter(p => p.pricing_type === 'free');
+
+        // Order: priority (shuffled) → paid (shuffled) → free (shuffled, always last)
+        normalized = [
+          ...seededShuffle(tierPriority, seed),
+          ...seededShuffle(tierPaidNormal, seed),
+          ...seededShuffle(tierFree, seed),
+        ];
+      }
+      // ─────────────────────────────────────────────────────────────────
+
       res.status(200).json({
         success: true,
         total,
