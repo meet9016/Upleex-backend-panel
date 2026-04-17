@@ -900,12 +900,6 @@ const sendOrderConfirmationEmail = async (to, orderData) => {
 // Email when admin approves/rejects product
 const sendProductApprovalEmail = async (to, vendorName, productName, status, reason = '', productDetails = null) => {
   try {
-    console.log(`\n========== EMAIL SENDING START =========`);
-    console.log(`To Vendor Email: ${to}`);
-    console.log(`Vendor: ${vendorName}`);
-    console.log(`Product: ${productName}`);
-    console.log(`Status: ${status}`);
-    console.log(`Reason: ${reason}`);
 
     const isApproved = status.toLowerCase() === 'approved';
     const subject = isApproved
@@ -1043,11 +1037,7 @@ const sendProductApprovalEmail = async (to, vendorName, productName, status, rea
     `,
     };
 
-    console.log(`Sending email with subject: ${subject}`);
     const result = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent successfully to: ${to}`);
-    console.log(`Response: ${result.response}`);
-    console.log(`========== EMAIL SENDING END =========\n`);
     return result;
   } catch (error) {
     console.error(`\n❌ EMAIL SENDING FAILED TO: ${to}`);

@@ -5,7 +5,6 @@ const { processKycIncompleteNotifications } = require('../services/kycEmail.serv
 const startKycReminderCron = () => {
   // Run every hour at minute 0
   cron.schedule('0 * * * *', async () => {
-    console.log('Running KYC reminder check...');
     try {
       await processKycIncompleteNotifications();
       console.log('KYC reminder check completed');

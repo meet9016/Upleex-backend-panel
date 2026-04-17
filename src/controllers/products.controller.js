@@ -641,7 +641,6 @@ const getAllProducts = {
       const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 1000);
       const skip = (pageNum - 1) * limitNum;
 
-      console.log("Product query:", JSON.stringify(query, null, 2));
 
       // Sorting
       let sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 }; // default sort
@@ -1831,7 +1830,6 @@ const purchaseListingPlan = {
           max_products: max_products,
         }
       );
-      console.log(`💰 Deducted ₹${amount} from vendor ${vendor_id} wallet for ${plan_type} plan`);
     } catch (walletError) {
       console.error('Wallet deduction failed:', walletError);
       return res.status(httpStatus.BAD_REQUEST).json({

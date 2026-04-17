@@ -156,8 +156,6 @@ const getAllAdmins = {
       // Simple query without complex select
       const admins = await Admin.find({}, 'name email permissions');
       
-      console.log('Found admins:', admins.length);
-      
       // Format the response
       const formattedAdmins = admins.map(admin => ({
         name: admin.name,

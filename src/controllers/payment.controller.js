@@ -35,22 +35,13 @@ const createOrder = catchAsync(async (req, res) => {
 
   const { delivery_address, order_notes, payment_type } = req.body;
 
-  console.log('👤 User data during order creation:', {
-    user_id: req.user.id,
-    user_name: req.user.name,
-    user_email: req.user.email,
-    user_object: req.user
-  });
-
   // Get user email from database if not in request
   let userEmail = req.user.email;
   if (!userEmail || !userEmail.includes('@')) {
-    console.log('🔍 Fetching user email from database...');
     const User = require('../models/user.model');
     const userFromDB = await User.findById(req.user.id);
     if (userFromDB && userFromDB.email) {
       userEmail = userFromDB.email;
-      console.log('📧 Got email from database:', userEmail);
     }
   }
 
@@ -75,7 +66,6 @@ const createOrder = catchAsync(async (req, res) => {
   for (const cartItem of cartItems) {
     const product = cartItem.product_id;
     if (!product) {
-      console.log('Product not found for cart item:', cartItem._id);
       continue;
     }
 
@@ -133,8 +123,6 @@ const createOrder = catchAsync(async (req, res) => {
     amountToPay = totalAmount * 0.3;
   }
 
-  console.log('Order totals:', { subtotal, gstAmount, totalAmount, amountToPay });
-
   // Create order ID
   const orderId = generateOrderId();
 
@@ -190,13 +178,6 @@ const createOrder = catchAsync(async (req, res) => {
       vendor_payments: Object.values(vendorGroups),
     });
 
-    console.log('📧 Order created with user details:', {
-      user_id: req.user.id,
-      user_name: req.user.name,
-      user_email: userEmail,
-      order_user_email: order.user_email
-    });
-
     res.status(httpStatus.OK).send({
       status: 200,
       success: true,
@@ -220,9 +201,6 @@ const createOrder = catchAsync(async (req, res) => {
 const verifyPayment = catchAsync(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, order_id } = req.body;
 
-  console.log('🔍 Payment verification started for order:', order_id);
-  console.log('📋 Payment data:', { razorpay_order_id, razorpay_payment_id, order_id });
-
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !order_id) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payment verification data');
   }
@@ -235,25 +213,15 @@ const verifyPayment = catchAsync(async (req, res) => {
     .digest('hex');
 
   if (expectedSignature !== razorpay_signature) {
-    console.log('❌ Payment signature verification failed');
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payment signature');
   }
 
-  console.log('✅ Payment signature verified successfully');
 
   // Find and update order
   const order = await Order.findOne({ order_id: order_id });
   if (!order) {
-    console.log('❌ Order not found:', order_id);
     throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
   }
-
-  console.log('📦 Order found:', {
-    order_id: order.order_id,
-    user_name: order.user_name,
-    user_email: order.user_email,
-    current_status: order.payment_status
-  });
 
   // Update order with payment details
   order.payment_status = order.payment_type === '30_percent' ? 'hold' : 'paid';
@@ -268,14 +236,12 @@ const verifyPayment = catchAsync(async (req, res) => {
   });
 
   await order.save();
-  console.log('💾 Order updated successfully with payment details');
 
   // Update cart items to ordered status
   await Cart.updateMany(
     { user_id: order.user_id, status: 'active' },
     { status: 'ordered' }
   );
-  console.log('🛒 Cart items updated to ordered status');
 
   // Reduce available quantity for sell products
   for (const item of order.items) {
@@ -283,7 +249,6 @@ const verifyPayment = catchAsync(async (req, res) => {
       const product = await Product.findById(item.product_id);
       
       if (!product) {
-        console.log(`❌ Product not found: ${item.product_id}`);
         continue;
       }
             
@@ -296,19 +261,15 @@ const verifyPayment = catchAsync(async (req, res) => {
           is_out_of_stock: isOutOfStock
         }, { new: true });
         
-        console.log(`📦 Stock updated for product ${item.product_name}: ${product.available_quantity} -> ${newAvailableQuantity}`);
       } else {
-        console.log(`⏭️ Skipping stock update: type=${product.product_type_name}, available=${product.available_quantity}`);
       }
     } catch (stockError) {
       console.error(`❌ Failed to update stock for product ${item.product_id}:`, stockError);
       // Don't fail the payment if stock update fails
     }
   }
-  console.log('✅ Stock reduction completed');
 
   // Process vendor payments - Add money to vendor wallets
-  console.log('💰 Processing vendor payments...');
   // for (const vendorPayment of order.vendor_payments) {
   //   try {
   //     if (vendorPayment.payment_status === 'paid' && vendorPayment.vendor_amount > 0) {
@@ -329,26 +290,17 @@ const verifyPayment = catchAsync(async (req, res) => {
   //     // Don't fail the order if wallet payment fails
   //   }
   // }
-  console.log('✅ Vendor payments processing completed');
 
   // Send order confirmation email
-  console.log('📧 Starting email sending process...');
   try {
     const userEmail = order.user_email;
     
-    console.log('📬 Email details:', {
-      order_user_email: order.user_email,
-      user_id: order.user_id
-    });
-    
     if (userEmail && userEmail.includes('@')) {
-      console.log('📤 Sending order confirmation email to:', userEmail);
       await sendOrderConfirmationEmail(userEmail, order.toObject());
       console.log('✅ Order confirmation email sent successfully to:', userEmail);
     } else {
       console.log('❌ No valid email address found for order:', order.order_id, 'Email:', userEmail);
       // Try to get email from database as fallback
-      console.log('🔍 Trying fallback: fetching email from database...');
       const User = require('../models/user.model');
       const userFromDB = await User.findById(order.user_id);
       if (userFromDB && userFromDB.email) {
@@ -580,7 +532,6 @@ const cancelOrder = catchAsync(async (req, res) => {
   }
 
   // Restore stock for sell products
-  console.log('📦 Restoring stock for cancelled order...');
   for (const item of order.items) {
     try {
       const product = await Product.findById(item.product_id);
@@ -593,7 +544,6 @@ const cancelOrder = catchAsync(async (req, res) => {
           is_out_of_stock: isOutOfStock
         });
         
-        console.log(`📦 Stock restored for product ${item.product_name}: ${product.available_quantity} -> ${newAvailableQuantity}`);
       }
     } catch (stockError) {
       console.error(`❌ Failed to restore stock for product ${item.product_id}:`, stockError);

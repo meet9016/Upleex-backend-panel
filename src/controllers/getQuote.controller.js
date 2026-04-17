@@ -49,9 +49,6 @@ const createGetQuote = {
       const data = req.body;
       const user_id = req.user._id;
 
-      console.log('Create quote request data:', data);
-      console.log('User ID:', user_id);
-
       // Get product details to calculate price
       const product = await Product.findById(data.product_id);
       if (!product) {
@@ -174,7 +171,6 @@ const getAllQuotes = {
 
       // Build base query for GetQuote
       const query = {};
-      console.log("🚀 ~ query:", query)
 
       // Filter by user type
       if (user.userType === 'vendor') {
@@ -281,8 +277,6 @@ const getAllQuotes = {
         ];
       }
 
-      console.log("🚀 ~ Base query:", JSON.stringify(query));
-
       // Calculate pagination
       const pageNum = parseInt(page) || 1;
       const limitNum = parseInt(limit) || 10;
@@ -312,7 +306,6 @@ const getAllQuotes = {
 
       // If we have product-related filters, we need to handle differently
       if (product_type || listing_type) {
-        console.log('🔍 Product-based filtering:', { product_type, listing_type });
 
         // Get all quotes matching basic criteria with populated product
         let quotesQuery = GetQuote.find(query)
@@ -322,31 +315,23 @@ const getAllQuotes = {
           .lean();
 
         const allQuotes = await quotesQuery;
-        console.log('📊 All quotes before product filtering:', allQuotes.length);
 
         // Apply product-based filters
         const filteredQuotes = allQuotes.filter(quote => {
           const product = quote.product_id;
           if (!product) {
-            console.log('❌ Quote without product:', quote._id);
             return false;
           }
 
           // Multiple product type filter
           if (product_type) {
             const productTypes = Array.isArray(product_type) ? product_type : product_type.split(',');
-            console.log('🔍 Checking product type:', {
-              productTypes,
-              productTypeId: product.product_type_id,
-              productTypeName: product.product_type_name
-            });
 
             const matchesType = productTypes.includes(product.product_type_id) ||
               productTypes.includes(product.product_type_name) ||
               productTypes.includes(String(product.product_type_id));
 
             if (!matchesType) {
-              console.log('❌ Product type mismatch for quote:', quote._id);
               return false;
             }
           }
@@ -354,18 +339,12 @@ const getAllQuotes = {
           // Multiple listing type filter
           if (listing_type) {
             const listingTypes = Array.isArray(listing_type) ? listing_type : listing_type.split(',');
-            console.log('🔍 Checking listing type:', {
-              listingTypes,
-              productListingTypeId: product.product_listing_type_id,
-              productListingTypeName: product.product_listing_type_name
-            });
 
             const matchesListing = listingTypes.includes(product.product_listing_type_id) ||
               listingTypes.includes(product.product_listing_type_name) ||
               listingTypes.includes(String(product.product_listing_type_id));
 
             if (!matchesListing) {
-              console.log('❌ Listing type mismatch for quote:', quote._id);
               return false;
             }
           }
@@ -373,7 +352,6 @@ const getAllQuotes = {
           return true;
         });
 
-        console.log('✅ Filtered quotes count:', filteredQuotes.length);
 
         // Apply pagination manually
         const total = filteredQuotes.length;
@@ -401,13 +379,6 @@ const getAllQuotes = {
 
           return quote;
         }));
-
-        console.log("🚀 ~ Sending response with:", {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          dataCount: enrichedQuotes.length
-        });
 
         // Send response
         return res.status(httpStatus.OK).json({
@@ -502,7 +473,6 @@ const getAllQuotesForAdmin = {
 
       // Build base query for GetQuote (Exclude pending quotes by default for Admin)
       const query = { status: { $ne: 'pending' } };
-      console.log("🚀 ~ query:", query)
 
       // Filter by status
       if (status) {
@@ -539,8 +509,6 @@ const getAllQuotesForAdmin = {
           { product_id: { $in: productIds } }
         ];
       }
-
-      console.log("🚀 ~ Base query:", JSON.stringify(query));
 
       // Calculate pagination
       const pageNum = parseInt(page) || 1;
@@ -591,13 +559,6 @@ const getAllQuotesForAdmin = {
             }
           }
           return quote;
-        });
-
-        console.log("🚀 ~ Sending flat response with:", {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          dataCount: enrichedQuotes.length
         });
 
         // Send flat response
@@ -740,7 +701,6 @@ const updateQuote = {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: -qty }
               });
-              console.log(`Reduced stock for product ${product._id} by ${qty}`);
             }
           }
           // If status becomes 'complete', return stock
@@ -750,7 +710,7 @@ const updateQuote = {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
-              console.log(`Returned stock for product ${product._id} by ${qty}`);
+             console.log(`Returned stock for product ${product._id} by ${qty}`);
             }
           }
         }
@@ -825,7 +785,6 @@ const changeStatus = {
       if (!updated) {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
       }
-      console.log("updated", updated);
 
       // Stock Management + Payment Link Generation
       if (internal !== existingQuote.status) {
@@ -1039,7 +998,6 @@ const changeStatus = {
           }
         }
       } catch (emailError) {
-        console.log('Email sending error:', emailError);
         // Don't fail the request if email fails
       }
 
@@ -1128,7 +1086,6 @@ const createQuoteOrder = {
           },
         });
 
-        console.log('Quote order created successfully:', razorpayOrder.id);
 
         res.status(httpStatus.OK).json({
           status: 200,
@@ -1166,7 +1123,6 @@ const verifyQuotePayment = {
       const crypto = require('crypto');
       const { razorpay_payment_id, razorpay_order_id, razorpay_signature, razorpay_payment_link_id, razorpay_payment_link_reference_id, razorpay_payment_link_status, quote_id } = req.body;
 
-      console.log('Quote payment verification started for quote:', quote_id);
 
       // If using order-based payment (new method)
       if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
@@ -1178,14 +1134,12 @@ const verifyQuotePayment = {
           .digest('hex');
 
         if (expectedSignature !== razorpay_signature) {
-          console.log('❌ Quote payment signature verification failed');
           return res.status(httpStatus.BAD_REQUEST).json({
             success: false,
             message: 'Invalid payment signature'
           });
         }
 
-        console.log('✅ Quote payment signature verified successfully');
 
         // Find and update quote
         const existingQuote = await GetQuote.findById(quote_id);
@@ -1203,12 +1157,6 @@ const verifyQuotePayment = {
         existingQuote.razorpay_signature = razorpay_signature;
 
         await existingQuote.save();
-
-        console.log('💾 Quote payment updated successfully:', {
-          quote_id: existingQuote._id,
-          payment_status: existingQuote.payment_status,
-          razorpay_payment_id: razorpay_payment_id
-        });
 
         return res.status(httpStatus.OK).json({
           success: true,

@@ -15,7 +15,6 @@ const ensureWallet = async (req, res, next) => {
       // Create wallet if it doesn't exist
       if (!wallet) {
         wallet = await Wallet.createWalletForVendor(vendorId);
-        console.log(`✅ Wallet created for vendor: ${vendorId}`);
       }
     }
     

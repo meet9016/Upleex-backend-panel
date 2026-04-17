@@ -284,8 +284,6 @@ const releaseScheduledPayments = {
     
     await Promise.all(updatePromises);
     
-    console.log(`Released ${paymentsToRelease.length} payments manually by admin`);
-    
     res.status(httpStatus.OK).json({
       status: 200,
       success: true,

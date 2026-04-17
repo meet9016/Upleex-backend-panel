@@ -197,7 +197,6 @@ const updateOrderStatus = {
           notes: 'Payment record created on delivery. Awaiting admin verification of user payment.'
         });
         
-        console.log(`Created payment record for order ${order.order_id}, vendor ${vendorId}`);
       } else {
         console.log(`Payment record already exists for order ${order.order_id}, vendor ${vendorId}`);
       }
@@ -308,12 +307,12 @@ const getDeliveryStatusOptions = {
     const statusOptions = [
       { value: 'pending', label: 'Pending' },
       { value: 'accepted', label: 'Accepted' },
-      { value: 'preparing', label: 'Preparing' },
-      { value: 'ready_for_pickup', label: 'Ready for Pickup' },
-      { value: 'picked_up', label: 'Picked Up' },
-      { value: 'out_for_delivery', label: 'Out for Delivery' },
+      // { value: 'preparing', label: 'Preparing' },
+      // { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+      // { value: 'picked_up', label: 'Picked Up' },
+      // { value: 'out_for_delivery', label: 'Out for Delivery' },
       { value: 'delivered', label: 'Delivered' },
-      { value: 'cancelled', label: 'Cancelled' }
+      // { value: 'cancelled', label: 'Cancelled' }
     ];
     
     res.status(httpStatus.OK).json({

@@ -14,7 +14,6 @@ try {
     key_id: config.razorpay.keyId || process.env.RAZORPAY_KEY_ID,
     key_secret: config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET,
   });
-  console.log('Razorpay initialized for wallet with key:', config.razorpay.keyId || process.env.RAZORPAY_KEY_ID);
 } catch (error) {
   console.error('Failed to initialize Razorpay for wallet:', error);
 }
@@ -140,13 +139,6 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
     wallet.transactions.push(pendingTransaction);
     await wallet.save();
 
-    console.log('Wallet add money order created:', {
-      transaction_id: transactionId,
-      vendor_id: vendorId,
-      amount: amount,
-      razorpay_order_id: razorpayOrder.id
-    });
-
     res.status(httpStatus.OK).send({
       status: 200,
       success: true,
@@ -169,9 +161,6 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
 const verifyAddMoneyPayment = catchAsync(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, transaction_id } = req.body;
 
-  console.log('🔍 Wallet payment verification started for transaction:', transaction_id);
-  console.log('📋 Payment data:', { razorpay_order_id, razorpay_payment_id, transaction_id });
-
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !transaction_id) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payment verification data');
   }
@@ -190,11 +179,8 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
     .digest('hex');
 
   if (expectedSignature !== razorpay_signature) {
-    console.log('❌ Wallet payment signature verification failed');
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payment signature');
   }
-
-  console.log('✅ Wallet payment signature verified successfully');
 
   // Find wallet and transaction
   const wallet = await Wallet.findOne({ vendor_id: vendorId });
@@ -211,12 +197,6 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Transaction already completed');
   }
 
-  console.log('📦 Transaction found:', {
-    transaction_id: transaction.transaction_id,
-    amount: transaction.amount,
-    current_status: transaction.status
-  });
-
   // Update transaction with payment details
   transaction.status = 'completed';
   transaction.razorpay_payment_id = razorpay_payment_id;
@@ -228,14 +208,6 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
   wallet.total_credited += transaction.amount;
 
   await wallet.save();
-
-  console.log('💾 Wallet updated successfully:', {
-    vendor_id: vendorId,
-    new_balance: wallet.balance,
-    amount_added: transaction.amount
-  });
-
-  console.log('🎉 Wallet payment verification completed successfully');
 
   res.status(httpStatus.OK).send({
     status: 200,
@@ -361,13 +333,6 @@ const deductMoney = catchAsync(async (req, res) => {
     // Deduct money using wallet method
     const transaction = wallet.deductMoney(amount, transactionId, description, metadata);
     await wallet.save();
-
-    console.log('💰 Money deducted from wallet:', {
-      vendor_id: vendorId,
-      amount: amount,
-      new_balance: wallet.balance,
-      transaction_id: transactionId
-    });
 
     res.status(httpStatus.OK).send({
       status: 200,

@@ -110,7 +110,6 @@ const approveProduct = {
               sub_category_id: product.sub_category_id,
             }
           );
-          console.log(`💰 Deducted ₹10 from vendor ${product.vendor_id} wallet for approved paid listing`);
         } catch (walletError) {
           console.error('Wallet deduction failed during approval:', walletError);
           return res.status(httpStatus.BAD_REQUEST).json({
@@ -133,21 +132,15 @@ const approveProduct = {
       let vendorEmail = '';
       let vendorName = 'Vendor';
       try {
-        console.log(`\n--- DEBUG: EMAIL NOTIFICATION LOGIC START ---`);
-        console.log(`Product Name: ${updatedProduct.product_name}`);
-        console.log(`Product Vendor ID (from DB): "${updatedProduct.vendor_id}"`);
         
         // 1. Primary source: Vendor model
         let vendorDoc = await Vendor.findById(updatedProduct.vendor_id);
         if (vendorDoc) {
-          console.log(`✅ Found Vendor document: ${vendorDoc.email}`);
           vendorEmail = vendorDoc.email;
           vendorName = vendorDoc.full_name || 'Vendor';
         } else {
-          console.log(`❌ Vendor document not found by ID, searching by vendor_id field...`);
           vendorDoc = await Vendor.findOne({ vendor_id: updatedProduct.vendor_id });
           if (vendorDoc) {
-            console.log(`✅ Found Vendor document by field: ${vendorDoc.email}`);
             vendorEmail = vendorDoc.email;
             vendorName = vendorDoc.full_name || 'Vendor';
           }
@@ -155,14 +148,12 @@ const approveProduct = {
 
         // 2. Secondary source / Fallback: VendorKyc
         if (!vendorEmail) {
-          console.log(`Searching in VendorKyc as fallback...`);
           let kycDoc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': updatedProduct.vendor_id });
           if (!kycDoc) {
             kycDoc = await VendorKyc.findOne({ vendor_id: updatedProduct.vendor_id });
           }
 
           if (kycDoc && kycDoc.ContactDetails && kycDoc.ContactDetails.email) {
-            console.log(`✅ Found VendorKyc fallback email: ${kycDoc.ContactDetails.email}`);
             vendorEmail = kycDoc.ContactDetails.email;
             vendorName = vendorName === 'Vendor' ? (kycDoc.ContactDetails.full_name || 'Vendor') : vendorName;
           }
@@ -174,7 +165,6 @@ const approveProduct = {
             ? 'Product does not meet our quality standards or guidelines.'
             : rejection_reason;
 
-          console.log(`CRITICAL: Sending ${newStatus} email to: ${vendorEmail}`);
           await sendProductApprovalEmail(
             vendorEmail,
             vendorName,
@@ -191,7 +181,6 @@ const approveProduct = {
         } else {
           console.warn(`CRITICAL WARNING: No email found for vendor_id: "${updatedProduct.vendor_id}" in Vendor or VendorKyc!`);
         }
-        console.log(`--- DEBUG: EMAIL NOTIFICATION LOGIC END ---\n`);
       } catch (emailError) {
         console.error('ERROR in email notification logic:', emailError);
       }
@@ -257,7 +246,6 @@ const bulkApproveProducts = {
                 sub_category_id: product.sub_category_id,
               }
             );
-            console.log(`💰 Deducted ₹10 from vendor ${product.vendor_id} wallet for bulk approved paid listing`);
           } catch (walletError) {
             console.error('Wallet deduction failed during bulk approval:', walletError);
             return res.status(httpStatus.BAD_REQUEST).json({
@@ -314,7 +302,6 @@ const bulkApproveProducts = {
           for (const product of approvedProducts) {
             const vendorInfo = vendorMap[product.vendor_id];
             if (vendorInfo && vendorInfo.email) {
-              console.log(`Sending approval email to vendor: ${vendorInfo.email} for product: ${product.product_name}`);
               await sendProductApprovalEmail(
                 vendorInfo.email,
                 vendorInfo.name,

@@ -14,7 +14,6 @@ const releaseScheduledPayments = async () => {
     });
     
     if (paymentsToRelease.length === 0) {
-      console.log('No payments to release');
       return;
     }
     

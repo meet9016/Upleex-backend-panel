@@ -98,7 +98,6 @@ const createService = {
           $addToSet: { service_ids: service._id }
         });
 
-        console.log(`Applied priority plan to new service: ${service.service_name}`);
       }
 
       return res.status(200).json({
@@ -228,7 +227,6 @@ const getAllServices = {
       const services = await Service.find(query).sort(sort);
 
       // Debug log to verify priority sorting
-      console.log(`Found ${services.length} services. Priority services: ${services.filter(s => s.is_priority).length}`);
       if (services.length > 0) {
         console.log('First 3 services priority status:', services.slice(0, 3).map(s => ({ name: s.service_name, is_priority: s.is_priority })));
       }

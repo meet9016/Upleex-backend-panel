@@ -72,8 +72,6 @@ const createPurchase = {
         }
       );
 
-      console.log(`Priority plan activated for ${updateResult.modifiedCount} services`);
-
       // Create purchase record with service IDs
       const serviceIds = vendorServices.map(service => service._id);
       const purchase = await ServicePriorityPlanPurchase.create({
