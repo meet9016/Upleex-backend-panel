@@ -45,6 +45,11 @@ router.get(
 );
 
 router.get(
+  '/approved-logos',
+  catchAsync(kycController.getApprovedLogos.handler)
+);
+
+router.get(
   '/vendor-kyc/:_id',
   catchAsync(kycController.getKycById.handler)
 );

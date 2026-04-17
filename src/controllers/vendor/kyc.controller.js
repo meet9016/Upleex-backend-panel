@@ -174,7 +174,14 @@ const saveKyc = {
         // Deep merge for nested sections
         if (contact) {
           doc.ContactDetails = { ...doc.ContactDetails.toObject(), ...contact };
-          if (vendor_id) doc.ContactDetails.vendor_id = vendor_id;
+          if (vendor_id) {
+            doc.ContactDetails.vendor_id = vendor_id;
+            
+            // Sync city back to Vendor record if provided in contact details
+            if (contact.city_id) {
+              await Vendor.findByIdAndUpdate(vendor_id, { city_id: contact.city_id });
+            }
+          }
         }
         if (identity) doc.Identity = { ...doc.Identity.toObject(), ...identity };
         if (bank) doc.Bank = { ...doc.Bank.toObject(), ...bank };
@@ -232,7 +239,15 @@ const saveKyc = {
         let vendor_type = 'both';
         if (vendor_id) {
           const v = await Vendor.findById(vendor_id);
-          if (v && v.vendor_type) vendor_type = v.vendor_type;
+          if (v) {
+            if (v.vendor_type) vendor_type = v.vendor_type;
+            
+            // Sync city back to Vendor record if provided in contact details
+            if (initialContact.city_id) {
+              v.city_id = initialContact.city_id;
+              await v.save();
+            }
+          }
         }
 
         doc = await VendorKyc.create({
@@ -876,6 +891,37 @@ const updateVendorType = {
   },
 };
 
+const getApprovedLogos = {
+  handler: async (req, res) => {
+    try {
+      const approvedVendors = await VendorKyc.find(
+        { 
+          status: 'approved',
+          'Documents.business_logo_image': { $ne: '', $exists: true }
+        },
+        'Documents.business_logo_image Identity.business_name'
+      ).lean();
+
+      const logos = approvedVendors.map(v => ({
+        logo: v.Documents?.business_logo_image,
+        name: v.Identity?.business_name
+      }));
+
+      res.status(httpStatus.OK).json({
+        success: true,
+        data: logos
+      });
+    } catch (error) {
+      console.error('GetApprovedLogos Error:', error);
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'Failed to fetch vendor logos',
+        error: error.message
+      });
+    }
+  }
+};
+
 module.exports = {
   saveKyc,
   getSingleKyc,
@@ -886,4 +932,5 @@ module.exports = {
   changeStatus,
   downloadKycPDF,
   updateVendorType,
+  getApprovedLogos,
 };
