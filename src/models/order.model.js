@@ -128,7 +128,7 @@ const orderSchema = new mongoose.Schema(
     },
     vendor_status: {
       type: String,
-      enum: ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled'],
+      enum: ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled', 'completed'],
       default: 'pending',
     },
     delivery_tracking: {

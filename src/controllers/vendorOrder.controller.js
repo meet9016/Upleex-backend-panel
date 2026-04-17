@@ -161,16 +161,17 @@ const updateOrderStatus = {
       throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
     }
     
-    const validStatuses = ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled', 'completed'];
     
     if (!validStatuses.includes(status)) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
     }
     
+    const oldStatus = order.vendor_status;
     order.vendor_status = status;
     
-    // Create payment record when order is delivered (only if not already created)
-    if (status === 'delivered') {
+    // Create payment record when order is delivered or completed (only if not already created)
+    if (status === 'delivered' || status === 'completed') {
       // Check if payment record already exists for this order and vendor
       const existingPayment = await VendorPayment.findOne({
         order_id: order._id,
@@ -202,8 +203,8 @@ const updateOrderStatus = {
       }
     }
     
-    // If status is changed from delivered to something else, we might want to handle the payment record
-    if (order.vendor_status === 'delivered' && status !== 'delivered') {
+    // If status is changed from delivered/completed to something else, we might want to handle the payment record
+    if ((oldStatus === 'delivered' || oldStatus === 'completed') && (status !== 'delivered' && status !== 'completed')) {
       // Find and update payment record if it exists and is still pending
       const existingPayment = await VendorPayment.findOne({
         order_id: order._id,
@@ -311,7 +312,8 @@ const getDeliveryStatusOptions = {
       // { value: 'ready_for_pickup', label: 'Ready for Pickup' },
       // { value: 'picked_up', label: 'Picked Up' },
       // { value: 'out_for_delivery', label: 'Out for Delivery' },
-      { value: 'delivered', label: 'Delivered' },
+      // { value: 'delivered', label: 'Delivered' },
+      { value: 'completed', label: 'Completed' },
       // { value: 'cancelled', label: 'Cancelled' }
     ];
     
@@ -333,7 +335,7 @@ const bulkUpdateOrderStatus = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Order IDs are required');
     }
     
-    const validStatuses = ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled', 'completed'];
     
     if (!validStatuses.includes(status)) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
@@ -351,8 +353,8 @@ const bulkUpdateOrderStatus = {
     const updatePromises = orders.map(async (order) => {
       order.vendor_status = status;
       
-      // Create payment record when order is delivered (only if not already created)
-      if (status === 'delivered') {
+      // Create payment record when order is delivered or completed (only if not already created)
+      if (status === 'delivered' || status === 'completed') {
         // Check if payment record already exists for this order and vendor
         const existingPayment = await VendorPayment.findOne({
           order_id: order._id,
