@@ -3,9 +3,11 @@ const catchAsync = require('../../utils/catchAsync');
 const ApiError = require('../../utils/ApiError');
 const Vendor = require('../../models/vendor/vendor.model');
 const { generateAuthTokens } = require('../../services/tokenService');
+const { Otp } = require('../../models');
+const { smsService } = require('../../services');
 
 const businessRegister = catchAsync(async (req, res) => {
-  const { full_name, business_name, email, number, alternate_number, country, city_id, otp } = req.body;
+  const { full_name, business_name, email, number, alternate_number, country, city_id, otp, url } = req.body;
 
   const existingVendor = await Vendor.findOne({
     $or: [{ email }, { number }]
@@ -20,17 +22,57 @@ const businessRegister = catchAsync(async (req, res) => {
     }
   }
 
-  if (!otp) {
+  const isOtpProvided = otp && otp.trim() !== '';
+
+  if (!isOtpProvided) {
+    const origin = req.get('origin') || '';
+    const referer = req.get('referer') || '';
+
+    // Check if the domain is allowed
+    const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+    const isFromWebsite =
+      allowedDomains.some(domain =>
+        url === domain ||
+        origin.includes(domain) ||
+        referer.includes(domain)
+      );
+
+    const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
+
+    const generatedOtp = (isFromWebsite && !isFromMobileApp)
+      ? Math.floor(100000 + Math.random() * 900000).toString()
+      : '123456';
+
+    // Save/Update OTP in database
+    await Otp.findOneAndUpdate(
+      { phone: number },
+      { otp: generatedOtp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+      { upsert: true, new: true }
+    );
+
+    // Send real OTP via SMS ONLY for the website
+    const shouldSendSms = (isFromWebsite && !isFromMobileApp);
+    if (shouldSendSms) {
+      await smsService.sendOtp(number, generatedOtp);
+    }
+
     return res.status(httpStatus.OK).json({
       status: 200,
-      message: 'OTP sent successfully',
+      success: true,
+      message: shouldSendSms ? 'OTP sent successfully' : 'Static OTP generated (123456)',
       data: [],
     });
   }
 
-  if (otp !== '123456') {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP');
+  // Verify OTP
+  const otpRecord = await Otp.findOne({ phone: number, otp: otp });
+
+  if (!otpRecord) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or expired OTP');
   }
+
+  // OTP is valid, delete it so it can't be reused
+  await Otp.deleteOne({ _id: otpRecord._id });
 
   const vendor = await Vendor.create({
     full_name,
@@ -56,7 +98,7 @@ const businessRegister = catchAsync(async (req, res) => {
 });
 
 const vendorLogin = catchAsync(async (req, res) => {
-  const { number, otp } = req.body;
+  const { number, otp, url } = req.body;
 
   if (!number) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Mobile number is required');
@@ -67,19 +109,57 @@ const vendorLogin = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor not found');
   }
 
-  if (!otp) {
+  const isOtpProvided = otp && otp.trim() !== '';
+
+  if (!isOtpProvided) {
+    const origin = req.get('origin') || '';
+    const referer = req.get('referer') || '';
+
+    // Check if the domain is allowed
+    const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+    const isFromWebsite =
+      allowedDomains.some(domain =>
+        url === domain ||
+        origin.includes(domain) ||
+        referer.includes(domain)
+      );
+
+    const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
+
+    const generatedOtp = (isFromWebsite && !isFromMobileApp)
+      ? Math.floor(100000 + Math.random() * 900000).toString()
+      : '123456';
+
+    // Save/Update OTP in database
+    await Otp.findOneAndUpdate(
+      { phone: number },
+      { otp: generatedOtp, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+      { upsert: true, new: true }
+    );
+
+    // Send real OTP via SMS ONLY for the website
+    const shouldSendSms = (isFromWebsite && !isFromMobileApp);
+    if (shouldSendSms) {
+      await smsService.sendOtp(number, generatedOtp);
+    }
 
     return res.status(httpStatus.OK).json({
       status: 200,
       success: true,
-      message: 'OTP sent successfully',
+      message: shouldSendSms ? 'OTP sent successfully' : 'Static OTP generated (123456)',
       data: [],
     });
   }
 
-  if (otp !== '123456') {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP');
+  // Verify OTP
+  const otpRecord = await Otp.findOne({ phone: number, otp: otp });
+
+  if (!otpRecord) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or expired OTP');
   }
+
+  // OTP is valid, delete it so it can't be reused
+  await Otp.deleteOne({ _id: otpRecord._id });
 
   const token = await generateAuthTokens(vendor, 'vendor');
 

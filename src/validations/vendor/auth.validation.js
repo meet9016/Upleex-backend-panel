@@ -10,6 +10,7 @@ const businessRegister = {
     country: Joi.string().required(),
     city_id: Joi.string().optional(),
     otp: Joi.string().optional(),
+    url: Joi.string().optional(),
   }),
 };
 
@@ -17,6 +18,7 @@ const vendorLogin = {
   body: Joi.object().keys({
     number: Joi.string().pattern(/^[0-9]{10,15}$/).required(),
     otp: Joi.string().optional(),
+    url: Joi.string().optional(),
   }),
 };
 

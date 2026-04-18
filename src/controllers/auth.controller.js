@@ -347,14 +347,14 @@ const webLoginRegister = {
         const origin = req.get('origin') || '';
         const referer = req.get('referer') || '';
         // Case 1: Web Frontend (url matches 'upleex.com' or standard headers)
-const allowedDomains = ['upleex.com', 'vendor.upleex.com', 'localhost:3000'];
-const isFromWebsite =
-  allowedDomains.some(domain =>
-    url === domain ||
-    origin.includes(domain) ||
-    referer.includes(domain)
-  );
-       
+        const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+        const isFromWebsite =
+          allowedDomains.some(domain =>
+            url === domain ||
+            origin.includes(domain) ||
+            referer.includes(domain)
+          );
+
         // Case 2: Mobile App (url is the full API path, e.g. with 'api/api/v1')
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
 
