@@ -346,13 +346,18 @@ const webLoginRegister = {
         // Identify the source (Web vs Mobile) based on user's latest examples
         const origin = req.get('origin') || '';
         const referer = req.get('referer') || '';
-
         // Case 1: Web Frontend (url matches 'upleex.com' or standard headers)
-        const isFromWebsite = (url === '1upleex.com') || origin.includes('1upleex.com') || referer.includes('1upleex.com');
-  
+const allowedDomains = ['upleex.com', 'vendor.upleex.com', 'localhost:3000'];
+const isFromWebsite =
+  allowedDomains.some(domain =>
+    url === domain ||
+    origin.includes(domain) ||
+    referer.includes(domain)
+  );
+       
         // Case 2: Mobile App (url is the full API path, e.g. with 'api/api/v1')
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
-    
+
         // Real random OTP for the website, static 123456 for mobile app and others
         const generatedOtp = (isFromWebsite && !isFromMobileApp)
           ? Math.floor(100000 + Math.random() * 900000).toString()
