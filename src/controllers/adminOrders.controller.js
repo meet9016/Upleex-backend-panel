@@ -155,7 +155,6 @@ const getRentOrders = {
         totalPages: Math.ceil(total / limit),
       });
     } catch (error) {
-      console.error('Error in getRentOrders:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message,
@@ -239,7 +238,6 @@ const getSellOrders = {
             .lean();
           vendors.forEach((v) => { vendorMap[v._id.toString()] = v; });
         } catch (e) {
-          console.warn('Could not load vendor info:', e.message);
         }
       }
 
@@ -286,7 +284,6 @@ const getSellOrders = {
         totalPages: Math.ceil(total / limit),
       });
     } catch (error) {
-      console.error('Error in getSellOrders:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message,

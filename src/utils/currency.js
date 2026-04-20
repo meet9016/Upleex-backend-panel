@@ -1,26 +1,3 @@
-// const currencyRates = {
-//   INR_USD: 0.012,
-//   INR_AUD: 0.018,
-//   INR_EUR: 0.011,
-// };
-
-// const convertPrice = (inr, country) => {
-//   switch (country) {
-//     case "USA":
-//       return { price: (inr * currencyRates.INR_USD).toFixed(2), currency: "USD" };
-
-//     case "Australia":
-//       return { price: (inr * currencyRates.INR_AUD).toFixed(2), currency: "AUD" };
-
-//     case "Europe":
-//       return { price: (inr * currencyRates.INR_EUR).toFixed(2), currency: "EUR" };
-
-//     default:
-//       return { price: inr, currency: "INR" };   // India
-//   }
-// };
-
-// module.exports = { convertPrice };
 const axios = require("axios");
 
 async function getCurrencyFromCountry(countryName) {

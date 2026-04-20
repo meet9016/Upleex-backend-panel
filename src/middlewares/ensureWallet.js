@@ -20,7 +20,6 @@ const ensureWallet = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error('Error in ensureWallet middleware:', error);
     // Don't fail the request if wallet creation fails
     next();
   }

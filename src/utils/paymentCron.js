@@ -8,7 +8,6 @@ const { releaseScheduledPayments } = require('../services/vendorPayment.service'
 const initPaymentReleaseCron = () => {
   // Run every day at 9:00 AM
   cron.schedule('0 9 * * *', async () => {
-    console.log('Running scheduled payment release job...');
     
     try {
       const result = await releaseScheduledPayments();
@@ -23,7 +22,6 @@ const initPaymentReleaseCron = () => {
     }
   });
   
-  console.log('Payment release cron job initialized - runs daily at 9:00 AM');
 };
 
 module.exports = {

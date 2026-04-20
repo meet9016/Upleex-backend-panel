@@ -215,7 +215,6 @@ const updateOrderStatus = {
       if (existingPayment) {
         // You can choose to delete it or mark it as cancelled
         await VendorPayment.findByIdAndDelete(existingPayment._id);
-        console.log(`Removed payment record for order ${order.order_id} as status changed from delivered`);
       }
     }
     
@@ -308,13 +307,7 @@ const getDeliveryStatusOptions = {
     const statusOptions = [
       { value: 'pending', label: 'Pending' },
       { value: 'accepted', label: 'Accepted' },
-      // { value: 'preparing', label: 'Preparing' },
-      // { value: 'ready_for_pickup', label: 'Ready for Pickup' },
-      // { value: 'picked_up', label: 'Picked Up' },
-      // { value: 'out_for_delivery', label: 'Out for Delivery' },
-      // { value: 'delivered', label: 'Delivered' },
       { value: 'completed', label: 'Completed' },
-      // { value: 'cancelled', label: 'Cancelled' }
     ];
     
     res.status(httpStatus.OK).json({

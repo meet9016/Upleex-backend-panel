@@ -72,11 +72,6 @@ const getAllCategories = {
         };
       }
 
-      // Add status filter if needed
-      // if (req.query.status) {
-      //   query.status = req.query.status;
-      // }
-
       // Add date filters if needed
       if (req.query.date_from || req.query.date_to) {
         query.createdAt = {};

@@ -107,7 +107,6 @@ const getAllVendorPayments = {
             }
           };
         } catch (error) {
-          console.error(`Error fetching vendor info for ${payment.vendor_id}:`, error);
           return {
             ...payment.toObject(),
             vendor_info: {

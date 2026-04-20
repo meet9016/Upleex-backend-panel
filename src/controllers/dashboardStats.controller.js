@@ -8,7 +8,6 @@ const Contact = require('../models/contact.model');
 const Blogs = require('../models/blogs.model');
 const ListingPlan = require('../models/listingPlan.model');
 
-
 const getDashboardStats = async (req, res) => {
   try {
     // ─── Run all aggregations in parallel for performance ───────────
@@ -357,7 +356,6 @@ const getDashboardStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Dashboard stats error:', error);
     return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
       status: 500,
       success: false,

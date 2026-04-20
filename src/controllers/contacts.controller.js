@@ -63,7 +63,6 @@ const createContact = {
         },
       });
     } catch (error) {
-      console.error('Contact creation error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to send your message. Please try again later.'

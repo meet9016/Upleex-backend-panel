@@ -118,5 +118,4 @@ router.put(
   catchAsync(paymentController.cancelOrder)
 );
 
-
 module.exports = router;

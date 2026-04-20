@@ -130,7 +130,6 @@ const getBlogById = {
                 related_blogs: relatedBlogs,
             });
         } catch (error) {
-            console.error("Error fetching blog by ID/Slug:", error);
             res.status(500).json({ message: "Internal Server Error" });
         }
     }

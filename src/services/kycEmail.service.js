@@ -334,7 +334,6 @@ const createKycNotification = async (vendorId, email, kycId, notificationType, r
 
     return notification;
   } catch (error) {
-    console.error('Error creating KYC notification:', error);
     throw error;
   }
 };

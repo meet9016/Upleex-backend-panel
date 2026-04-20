@@ -101,10 +101,6 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
   const razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
   if (!razorpayKeyId || !razorpayKeySecret || razorpayKeyId === 'rzp_test_your_key_id_here' || razorpayKeyId.includes('your_key_id')) {
-    console.error('Razorpay keys validation failed for wallet:', {
-      keyId: razorpayKeyId,
-      keySecret: razorpayKeySecret ? 'Present' : 'Missing'
-    });
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Razorpay keys not configured properly');
   }
 
@@ -152,7 +148,6 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
       },
     });
   } catch (razorpayError) {
-    console.error('Razorpay error for wallet:', razorpayError);
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Razorpay error: ${razorpayError.message}`);
   }
 });
@@ -346,7 +341,6 @@ const deductMoney = catchAsync(async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error deducting money from wallet:', error);
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
   }
 });

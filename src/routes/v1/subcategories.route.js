@@ -41,6 +41,5 @@ router.delete(
   catchAsync(subCategoriesController.bulkDeleteSubCategories.handler)
 );
 
-
 module.exports = router;
 

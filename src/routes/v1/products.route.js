@@ -70,14 +70,6 @@ router.post(
   validate(productsController.bulkDeleteProducts.validation),
   catchAsync(productsController.bulkDeleteProducts.handler)
 );
-
-// router.post(
-//   '/purchase-plan',
-//   auth(),
-//   upload.none(),
-//   validate(productsController.purchaseListingPlan.validation),
-//   catchAsync(productsController.purchaseListingPlan.handler)
-// );
 router.post(
   '/web-vendor-product-list',
   auth(true),
@@ -137,20 +129,5 @@ router.post(
   catchAsync(productApprovalController.bulkRejectProducts.handler)
 );
 
-// router.post(
-//   '/update-stock',
-//   auth(),
-//   upload.none(),
-//   validate(productsController.updateProductStock.validation),
-//   catchAsync(productsController.updateProductStock.handler)
-// );
-
-// router.post(
-//   '/by-type',
-//   auth(true),
-//   upload.none(),
-//   validate(productsController.getProductsByType.validation),
-//   catchAsync(productsController.getProductsByType.handler)
-// );
 
 module.exports = router;

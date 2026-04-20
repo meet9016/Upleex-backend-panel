@@ -27,7 +27,6 @@ const releaseScheduledPayments = async () => {
     
     await Promise.all(updatePromises);
     
-    console.log(`Released ${paymentsToRelease.length} payments automatically`);
     
     return {
       success: true,
@@ -36,7 +35,6 @@ const releaseScheduledPayments = async () => {
     };
     
   } catch (error) {
-    console.error('Error releasing scheduled payments:', error);
     return {
       success: false,
       error: error.message
@@ -88,7 +86,6 @@ const getPaymentsSummary = async (vendorId = null) => {
     };
     
   } catch (error) {
-    console.error('Error getting payments summary:', error);
     throw error;
   }
 };

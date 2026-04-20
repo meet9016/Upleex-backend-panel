@@ -352,7 +352,6 @@ const getAllQuotes = {
           return true;
         });
 
-
         // Apply pagination manually
         const total = filteredQuotes.length;
         const paginatedQuotes = filteredQuotes.slice(skip, skip + limitNum);
@@ -446,7 +445,6 @@ const getAllQuotes = {
       }
 
     } catch (error) {
-      console.error('Error in getAllQuotes:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message
@@ -579,7 +577,6 @@ const getAllQuotesForAdmin = {
       }
 
     } catch (error) {
-      console.error('Error in getAllQuotes:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message
@@ -710,7 +707,6 @@ const updateQuote = {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
-             console.log(`Returned stock for product ${product._id} by ${qty}`);
             }
           }
         }
@@ -816,7 +812,7 @@ const changeStatus = {
                   notes: {
                     quote_id: updated._id.toString(),
                   },
-                  callback_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders`,
+                  callback_url: `${process.env.FRONTEND_URL || 'http://upleex.com'}/orders`,
                   callback_method: 'get',
                 });
 
@@ -825,7 +821,6 @@ const changeStatus = {
                     razorpay_payment_link: paymentLink.short_url
                   });
                   updated.razorpay_payment_link = paymentLink.short_url;
-                  console.log('Payment link generated:', paymentLink.short_url);
                 }
               } catch (rlError) {
                 console.error('Razorpay link generation error:', rlError);
@@ -838,7 +833,6 @@ const changeStatus = {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: -qty }
               });
-              console.log(`Reduced quantity for product ${product._id} by ${qty}`);
             }
           }
           // If status becomes 'complete', return stock
@@ -848,7 +842,6 @@ const changeStatus = {
               await Product.findByIdAndUpdate(product._id, {
                 $inc: { available_quantity: qty }
               });
-              console.log(`Returned stock for product ${product._id} by ${qty}`);
             }
           }
         }
@@ -1086,7 +1079,6 @@ const createQuoteOrder = {
           },
         });
 
-
         res.status(httpStatus.OK).json({
           status: 200,
           success: true,
@@ -1100,14 +1092,12 @@ const createQuoteOrder = {
           },
         });
       } catch (razorpayError) {
-        console.error('Razorpay error:', razorpayError);
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
           success: false,
           message: `Razorpay error: ${razorpayError.message}`
         });
       }
     } catch (error) {
-      console.error('Create quote order error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message || 'Failed to create quote order'
@@ -1122,7 +1112,6 @@ const verifyQuotePayment = {
     try {
       const crypto = require('crypto');
       const { razorpay_payment_id, razorpay_order_id, razorpay_signature, razorpay_payment_link_id, razorpay_payment_link_reference_id, razorpay_payment_link_status, quote_id } = req.body;
-
 
       // If using order-based payment (new method)
       if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
@@ -1139,7 +1128,6 @@ const verifyQuotePayment = {
             message: 'Invalid payment signature'
           });
         }
-
 
         // Find and update quote
         const existingQuote = await GetQuote.findById(quote_id);
@@ -1203,7 +1191,6 @@ const verifyQuotePayment = {
 
       res.status(httpStatus.BAD_REQUEST).json({ success: false, message: 'Payment failed or invalid status' });
     } catch (error) {
-      console.error('Quote payment verification error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
     }
   }
@@ -1331,7 +1318,6 @@ const getUserDashboardData = {
         }
       });
     } catch (error) {
-      console.error('User Dashboard Error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to fetch dashboard data',

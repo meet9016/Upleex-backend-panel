@@ -111,7 +111,4 @@ router.post(
   catchAsync(locationController.indiaCityList.handler)
 );
 
-
-
-
 module.exports = router;

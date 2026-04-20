@@ -7,13 +7,11 @@ const startKycReminderCron = () => {
   cron.schedule('0 * * * *', async () => {
     try {
       await processKycIncompleteNotifications();
-      console.log('KYC reminder check completed');
     } catch (error) {
       console.error('Error in KYC reminder cron job:', error);
     }
   });
 
-  console.log('KYC reminder cron job started - runs every hour');
 };
 
 module.exports = {

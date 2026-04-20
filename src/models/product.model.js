@@ -100,13 +100,10 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true
     },
-    // vendor_image: {
-    //   type: String,
-    // },
     pricing_type: {
       type: String,
       enum: ['free', 'paid'],
-      default: 'paid', // Default to free
+      default: 'paid',
       index: true,
     },
     month_arr: {

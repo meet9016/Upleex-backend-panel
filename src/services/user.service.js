@@ -14,7 +14,6 @@ const queryUsers = async (filter, options) => {
   return users;
 };
 
-
 const getUserById = async (id) => {
   return User.findById(id);
 };
@@ -35,7 +34,6 @@ const updateUserById = async (userId, updateBody) => {
   await user.save();
   return user;
 };
-
 
 const deleteUserById = async (userId) => {
   const user = await getUserById(userId);

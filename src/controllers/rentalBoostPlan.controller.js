@@ -322,7 +322,6 @@ const getAllRentalBoostPurchases = {
   },
 };
 
-
 module.exports = {
   createRentalBoostPlan,
   getAllRentalBoostPlans,

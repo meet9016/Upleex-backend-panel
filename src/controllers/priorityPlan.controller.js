@@ -98,7 +98,6 @@ const deletePriorityPlan = {
   },
 };
 
-
 const purchasePriorityPlan = {
   validation: {
     body: Joi.object().keys({
@@ -307,7 +306,6 @@ const purchasePriorityPlan = {
         expiry: finalExpiryDate
       });
     } catch (error) {
-      console.error('Priority plan purchase error:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message || 'Purchase failed'
@@ -355,7 +353,6 @@ const getAllPriorityPurchases = {
     return res.status(200).json({ success: true, data: enriched });
   },
 };
-
 
 module.exports = {
   createPriorityPlan,

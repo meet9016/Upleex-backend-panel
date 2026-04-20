@@ -83,7 +83,6 @@ const register = {
       const token = await tokenService.generateAuthTokens(newUser, 'user');
 
       // 4️⃣ Send welcome email
-      // await sendWelcomeEmail(newUser.email, newUser.first_name);
 
       // 5️⃣ Send success response
       return res.status(httpStatus.CREATED).send({
@@ -101,8 +100,6 @@ const register = {
       });
 
     } catch (error) {
-      console.error("Registration Error:", error.message, error.stack);
-
       return res
         .status(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR)
         .send({
@@ -163,10 +160,8 @@ const getUserProfile = {
         .populate("hyperspecialist_id")
         .populate("livecourse_id");
 
-      // bucket_type = true (Cart items)
       const addToCartItem = cartItems.filter(item => item.bucket_type === true);
 
-      // bucket_type = false (Purchased items) - Ensure unique items
       const payBill = [];
       const seenItems = new Set();
 
@@ -209,7 +204,6 @@ const getUserProfile = {
       });
 
     } catch (error) {
-      console.error("Profile fetch error:", error);
       res.status(500).json({
         success: false,
         message: "Server Error",
@@ -276,7 +270,6 @@ const updateUserProfile = {
       });
 
     } catch (error) {
-      console.error("Profile update error:", error);
       return res.status(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR).send({
         success: false,
         message: error.message || 'Failed to update profile'
@@ -477,7 +470,6 @@ const webLoginRegister = {
       });
 
     } catch (error) {
-      console.error("Web Login Register Error:", error);
       return res.status(500).send({
         status: 500,
         success: false,

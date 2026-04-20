@@ -87,12 +87,10 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
 
       // Error handling for the stream
       doc.on('error', (err) => {
-        console.error('PDF Generation Error:', err);
         reject(err);
       });
 
       res.on('error', (err) => {
-        console.error('Response Stream Error:', err);
         reject(err);
       });
 
@@ -112,7 +110,6 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
         try {
           doc.image(logoPath, 30, 20, { width: 100 });
         } catch (imgErr) {
-          console.error('Logo Image Load Error:', imgErr);
           doc.fillColor(brandColor).fontSize(24).font('Helvetica-Bold').text('UPLEEX', 30, 25);
         }
       } else {
@@ -183,12 +180,10 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
 
       doc.end();
     } catch (error) {
-      console.error('PDF Helper Error:', error);
       reject(error);
     }
   });
 };
-
 
 module.exports = {
   exportToExcel,
