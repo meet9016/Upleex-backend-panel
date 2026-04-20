@@ -640,8 +640,6 @@ const exportVendorsToExcel = {
         { header: 'Phone', key: 'phone', width: 10 },
         { header: 'Business Name', key: 'business_name', width: 20 },
         { header: 'Vendor Type', key: 'vendor_type', width: 15 },
-        // { header: 'Pan Card', key: 'pancard_number', width: 15 },
-        // { header: 'GST Number', key: 'gst_number', width: 15 },
         { header: 'Status', key: 'status', width: 12 },
         { header: 'KYC Progress', key: 'kyc_progress', width: 15 },
         { header: 'Created Date', key: 'createdAt', width: 15 }

@@ -72,8 +72,6 @@ const getAllCategories = {
         };
       }
 
-
-
       // Add date filters if needed
       if (req.query.date_from || req.query.date_to) {
         query.createdAt = {};

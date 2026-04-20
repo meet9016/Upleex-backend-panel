@@ -121,8 +121,6 @@ const getQuoteSchema = new mongoose.Schema(
 
 getQuoteSchema.plugin(toJSON);
 
-
-
 const GetQuote = mongoose.model('GetQuote', getQuoteSchema);
 
 module.exports = GetQuote;

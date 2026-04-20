@@ -98,7 +98,6 @@ const deletePriorityPlan = {
   },
 };
 
-
 const purchasePriorityPlan = {
   validation: {
     body: Joi.object().keys({
@@ -354,7 +353,6 @@ const getAllPriorityPurchases = {
     return res.status(200).json({ success: true, data: enriched });
   },
 };
-
 
 module.exports = {
   createPriorityPlan,
