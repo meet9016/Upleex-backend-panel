@@ -1,7 +1,6 @@
 const nodemailer = require("nodemailer");
 const config = require("../config/config");
 const logger = require("../config/logger");
-const moment = require("moment");
 const transporter = require("../config/email");
 const kycEmailService = require('./kycEmail.service');
 

@@ -1,6 +1,5 @@
 const express = require('express');
 const validate = require('../../middlewares/validate');
-const auth = require('../../middlewares/auth');
 const catchAsync = require('../../utils/catchAsync');
 const { subCategoriesController } = require('../../controllers');
 const upload = require('../../middlewares/upload');

@@ -26,7 +26,7 @@ const exportToExcel = async (res, data, columns, filename, sheetName = 'Sheet1')
       fgColor: { argb: 'FF4A90E2' }
     };
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: 'le' };
     cell.border = {
       top: { style: 'thin' },
       left: { style: 'thin' },
@@ -133,7 +133,7 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       doc.rect(30, yPosition, tableWidth, 30).fill(brandColor);
       doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
       headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
+        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'left' });
         xPosition += columnWidths[i];
       });
 
@@ -150,7 +150,7 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           doc.rect(xPosition, yPosition, tableWidth, 30).fill(brandColor);
           doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
           headers.forEach((h, i) => {
-            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'center' });
+            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'left' });
             xPosition += columnWidths[i];
           });
           yPosition += 30;
