@@ -106,7 +106,6 @@ const createService = {
         data: service,
       });
     } catch (error) {
-      console.error('Create service error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   },
@@ -226,11 +225,6 @@ const getAllServices = {
 
       const services = await Service.find(query).sort(sort);
 
-      // Debug log to verify priority sorting
-      if (services.length > 0) {
-        console.log('First 3 services priority status:', services.slice(0, 3).map(s => ({ name: s.service_name, is_priority: s.is_priority })));
-      }
-
       // Enrich with vendor KYC details
       const vendorIds = [...new Set(services.map((s) => s.vendor_id).filter((id) => !!id))];
       let vendorMap = {};
@@ -271,7 +265,6 @@ const getAllServices = {
         data: normalized,
       });
     } catch (error) {
-      console.error('Get all services error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   },
@@ -398,7 +391,6 @@ const updateService = {
         data: service,
       });
     } catch (error) {
-      console.error('Update service error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   },

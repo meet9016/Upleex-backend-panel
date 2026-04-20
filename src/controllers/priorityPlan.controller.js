@@ -307,7 +307,6 @@ const purchasePriorityPlan = {
         expiry: finalExpiryDate
       });
     } catch (error) {
-      console.error('Priority plan purchase error:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message || 'Purchase failed'

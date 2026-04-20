@@ -292,7 +292,6 @@ const saveKyc = {
         data: doc.toJSON(),
       });
     } catch (error) {
-      console.error("KYC Save Error:", error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   },
@@ -541,7 +540,6 @@ const changeStatus = {
 
       return res.status(200).json({ status: 200, message: 'Status updated', data: doc.toJSON() });
     } catch (error) {
-      console.error("Change Status Error:", error);
       res.status(500).json({ status: 500, message: error.message });
     }
   },
@@ -840,7 +838,6 @@ const downloadKycPDF = {
       pdfDoc.end();
 
     } catch (error) {
-      console.error("PDF error:", error);
       if (!res.headersSent) {
         res.status(500).json({
           status: 500,
@@ -885,7 +882,6 @@ const updateVendorType = {
         data: { vendor_type },
       });
     } catch (error) {
-      console.error('UpdateVendorType Error:', error);
       res.status(500).json({ status: 500, message: error.message });
     }
   },
@@ -912,7 +908,6 @@ const getApprovedLogos = {
         data: logos
       });
     } catch (error) {
-      console.error('GetApprovedLogos Error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to fetch vendor logos',

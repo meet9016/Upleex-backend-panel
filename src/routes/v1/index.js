@@ -38,7 +38,6 @@ const rentalBoostPlanRoute = require('./rentalBoostPlan.route');
 const adminOrdersRoute = require('./adminOrders.route');
 const auth = require('../../middlewares/auth');
 
-
 const router = express.Router();
 
 router.post(

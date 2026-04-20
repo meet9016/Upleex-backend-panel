@@ -9,7 +9,6 @@ const handleServiceExpiry = () => {
   // Run every hour
   cron.schedule('0 * * * *', async () => {
     try {
-      console.log('Running service expiry check...');
       const now = new Date();
 
       // Move expired services to draft status
@@ -54,7 +53,7 @@ const handleServiceExpiry = () => {
       );
 
       if (expiredListingResult.modifiedCount > 0) {
-        console.log(`Set ${expiredListingResult.modifiedCount} services to inactive due to expired listings`);
+        console.log(`Hidden ${expiredListingResult.modifiedCount} expired listing services`);
       }
 
     } catch (error) {
@@ -62,7 +61,6 @@ const handleServiceExpiry = () => {
     }
   });
 
-  console.log('Service expiry cron job scheduled');
 };
 
 module.exports = {

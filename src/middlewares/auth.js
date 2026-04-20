@@ -27,7 +27,6 @@ const auth = (isOptional = false) => async (req, res, next) => {
     next();
   } catch (error) {
     if (isOptional) return next();
-    console.error('Auth error:', error.message);
     return res.status(httpStatus.UNAUTHORIZED).json({ 
       message: 'Invalid or expired token' 
     });

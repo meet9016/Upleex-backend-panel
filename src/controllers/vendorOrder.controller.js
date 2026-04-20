@@ -215,7 +215,6 @@ const updateOrderStatus = {
       if (existingPayment) {
         // You can choose to delete it or mark it as cancelled
         await VendorPayment.findByIdAndDelete(existingPayment._id);
-        console.log(`Removed payment record for order ${order.order_id} as status changed from delivered`);
       }
     }
     

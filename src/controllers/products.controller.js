@@ -50,7 +50,6 @@ const getNextSKUCounter = async (vendorId) => {
     
     return maxCounter + 1;
   } catch (error) {
-    console.error('Error getting next SKU counter:', error);
     return 1;
   }
 };
@@ -81,7 +80,6 @@ const generateProductSKU = async (vendorId, categoryId) => {
     
     return sku;
   } catch (error) {
-    console.error('Error generating SKU:', error);
     // Fallback SKU
     const timestamp = Date.now().toString().slice(-6);
     return `GEN-VEN-${timestamp}`;
@@ -198,9 +196,6 @@ const createProduct = {
       if (req.user) {
         data.vendor_id = req.user.id || req.user._id || '';
         data.vendor_name = req.user.name || '';
-        // If you have a vendor model to fetch image, you could do it here, 
-        // but for now we'll just use what's in the token or leave it empty.
-        console.log('Vendor info attached to product:', { id: data.vendor_id, name: data.vendor_name });
       }
 
       if (!data.vendor_id) {
@@ -445,7 +440,6 @@ const createProduct = {
         data: product,
       });
     } catch (error) {
-      console.error('Create product error:', error);
       res
         .status(httpStatus.INTERNAL_SERVER_ERROR)
         .json({ message: error.message });
@@ -642,7 +636,6 @@ const getAllProducts = {
       const limitNum = Math.min(Math.max(parseInt(req.query.limit || req.body.limit) || 20, 1), 1000);
       const skip = (pageNum - 1) * limitNum;
 
-
       // Sorting
       // Note: pricing_type: -1 (desc) puts "paid" before "free" alphabetically,
       // ensuring free products always appear last within their tier.
@@ -809,7 +802,6 @@ const getAllProducts = {
         data: normalized,
       });
     } catch (error) {
-      console.error("Error in getAllProducts:", error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message
@@ -1611,7 +1603,6 @@ const deleteProductDropdowns = {
   },
 };
 
-
 const webProductSuggestionList = {
   validation: {
     body: Joi.object().keys({
@@ -1865,7 +1856,6 @@ const purchaseListingPlan = {
         }
       );
     } catch (walletError) {
-      console.error('Wallet deduction failed:', walletError);
       return res.status(httpStatus.BAD_REQUEST).json({
         message: 'Failed to process wallet payment. Please try again.'
       });
@@ -1896,7 +1886,6 @@ const purchaseListingPlan = {
     });
   },
 };
-
 
 const updateProductStock = {
   validation: {
@@ -2159,7 +2148,6 @@ const getRelatedProducts = {
         }))
       });
     } catch (error) {
-      console.error("Error in getRelatedProducts:", error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message

@@ -83,7 +83,6 @@ const exportProductsToExcel = {
       await exportToExcel(res, data, columns, filename, 'Products');
 
     } catch (error) {
-      console.error('Export products to Excel error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
@@ -147,12 +146,10 @@ const exportProductsToPDF = {
       await exportToPDF(res, products, headers, columnWidths, filename, title, rowMapper);
 
     } catch (error) {
-      console.error('Export products to PDF error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
 };
-
 
 // Export Quotes to Excel
 const exportQuotesToExcel = {
@@ -208,7 +205,6 @@ const exportQuotesToExcel = {
       await exportToExcel(res, data, columns, `quotes_${Date.now()}.xlsx`, 'Quotes');
 
     } catch (error) {
-      console.error('Export quotes to Excel error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
@@ -255,12 +251,7 @@ const exportQuotesToPDF = {
       await exportToPDF(res, quotes, headers, columnWidths, filename, title, rowMapper);
 
     } catch (error) {
-      console.error('Export quotes to PDF error:', error);
-      if (!res.headersSent) {
-        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
-      } else {
-        res.destroy();
-      }
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
 };
@@ -672,7 +663,6 @@ const exportVendorsToExcel = {
       await exportToExcel(res, data, columns, `vendors_${new Date().toISOString().split('T')[0]}.xlsx`, 'Vendors');
 
     } catch (error) {
-      console.error('Export vendors to Excel error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
@@ -784,7 +774,6 @@ const exportVendorWalletsToExcel = {
       await exportToExcel(res, data, columns, `vendor_wallets_${new Date().toISOString().split('T')[0]}.xlsx`, 'Vendor Wallets');
 
     } catch (error) {
-      console.error('Export vendor wallets to Excel error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }

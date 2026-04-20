@@ -6,7 +6,6 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/config');
 const { sendOrderConfirmationEmail } = require('../services/email.service');
-// const walletService = require('../services/wallet.service');
 
 // Initialize Razorpay
 let razorpay;
@@ -15,7 +14,6 @@ try {
     key_id: config.razorpay.keyId || process.env.RAZORPAY_KEY_ID,
     key_secret: config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET,
   });
-  console.log('Razorpay initialized with key:', config.razorpay.keyId || process.env.RAZORPAY_KEY_ID);
 } catch (error) {
   console.error('Failed to initialize Razorpay:', error);
 }
@@ -50,8 +48,6 @@ const createOrder = catchAsync(async (req, res) => {
     user_id: req.user.id,
     status: 'active',
   }).populate('product_id');
-
-  console.log('Cart items found:', cartItems.length);
 
   if (!cartItems.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cart is empty');
@@ -131,10 +127,6 @@ const createOrder = catchAsync(async (req, res) => {
   const razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
   if (!razorpayKeyId || !razorpayKeySecret || razorpayKeyId === 'rzp_test_your_key_id_here' || razorpayKeyId.includes('your_key_id')) {
-    console.error('Razorpay keys validation failed:', {
-      keyId: razorpayKeyId,
-      keySecret: razorpayKeySecret ? 'Present' : 'Missing'
-    });
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Razorpay keys not configured properly');
   }
 
@@ -185,7 +177,6 @@ const createOrder = catchAsync(async (req, res) => {
       },
     });
   } catch (razorpayError) {
-    console.error('Razorpay error:', razorpayError);
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Razorpay error: ${razorpayError.message}`);
   }
 });
@@ -208,7 +199,6 @@ const verifyPayment = catchAsync(async (req, res) => {
   if (expectedSignature !== razorpay_signature) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payment signature');
   }
-
 
   // Find and update order
   const order = await Order.findOne({ order_id: order_id });
@@ -249,12 +239,10 @@ const verifyPayment = catchAsync(async (req, res) => {
         const newAvailableQuantity = Math.max(0, product.available_quantity - item.quantity);
         const isOutOfStock = newAvailableQuantity === 0;
         
-        const updateResult = await Product.findByIdAndUpdate(item.product_id, {
+        await Product.findByIdAndUpdate(item.product_id, {
           available_quantity: newAvailableQuantity,
           is_out_of_stock: isOutOfStock
         }, { new: true });
-        
-      } else {
       }
     } catch (stockError) {
       console.error(`❌ Failed to update stock for product ${item.product_id}:`, stockError);
@@ -262,61 +250,27 @@ const verifyPayment = catchAsync(async (req, res) => {
     }
   }
 
-  // Process vendor payments - Add money to vendor wallets
-  // for (const vendorPayment of order.vendor_payments) {
-  //   try {
-  //     if (vendorPayment.payment_status === 'paid' && vendorPayment.vendor_amount > 0) {
-  //       await walletService.processVendorPayment(
-  //         vendorPayment.vendor_id,
-  //         vendorPayment.vendor_amount,
-  //         order.order_id,
-  //         {
-  //           customer_name: order.user_name,
-  //           customer_email: order.user_email,
-  //           razorpay_payment_id: razorpay_payment_id,
-  //         }
-  //       );
-  //       console.log(`💰 Payment processed for vendor ${vendorPayment.vendor_id}: ₹${vendorPayment.vendor_amount}`);
-  //     }
-  //   } catch (walletError) {
-  //     console.error(`❌ Failed to process payment for vendor ${vendorPayment.vendor_id}:`, walletError);
-  //     // Don't fail the order if wallet payment fails
-  //   }
-  // }
-
   // Send order confirmation email
   try {
     const userEmail = order.user_email;
     
     if (userEmail && userEmail.includes('@')) {
       await sendOrderConfirmationEmail(userEmail, order.toObject());
-      console.log('✅ Order confirmation email sent successfully to:', userEmail);
     } else {
-      console.log('❌ No valid email address found for order:', order.order_id, 'Email:', userEmail);
       // Try to get email from database as fallback
       const User = require('../models/user.model');
       const userFromDB = await User.findById(order.user_id);
       if (userFromDB && userFromDB.email) {
         const fallbackEmail = userFromDB.email;
-        console.log('📤 Sending email using fallback address:', fallbackEmail);
         await sendOrderConfirmationEmail(fallbackEmail, order.toObject());
-        console.log('✅ Order confirmation email sent successfully to:', fallbackEmail);
-        
         // Update order with email for future reference
         order.user_email = fallbackEmail;
         await order.save();
-        console.log('💾 Updated order with email from database');
-      } else {
-        console.log('❌ No email found in database either for user:', order.user_id);
       }
     }
   } catch (emailError) {
-    console.error('❌ Failed to send order confirmation email:', emailError.message);
-    console.error('📧 Email error details:', emailError);
     // Don't fail the payment verification if email fails
   }
-
-  console.log('🎉 Payment verification completed successfully');
 
   res.status(httpStatus.OK).send({
     status: 200,
@@ -503,8 +457,6 @@ const getVendorPaymentHistory = catchAsync(async (req, res) => {
     },
   });
 });
-
-
 
 // Cancel order and restore stock
 const cancelOrder = catchAsync(async (req, res) => {

@@ -97,7 +97,6 @@ const createPurchase = {
         }
       });
     } catch (error) {
-      console.error('Priority plan purchase error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
         message: error.message || 'Failed to purchase priority plan' 
       });
@@ -131,7 +130,6 @@ const getAllPurchases = {
 
       res.status(200).json({ success: true, data: enhancedPurchases });
     } catch (error) {
-      console.error('Get purchases error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
         message: error.message || 'Failed to fetch purchase history' 
       });
@@ -178,7 +176,6 @@ const fixExistingPurchases = {
         fixed_purchases: fixedCount
       });
     } catch (error) {
-      console.error('Fix purchases error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
         message: error.message || 'Failed to fix purchase records' 
       });

@@ -135,7 +135,6 @@ const createPurchase = {
         }
       );
     } catch (walletError) {
-      console.error('Wallet deduction failed:', walletError);
       return res.status(httpStatus.BAD_REQUEST).json({
         message: 'Failed to process wallet payment. Please try again.'
       });

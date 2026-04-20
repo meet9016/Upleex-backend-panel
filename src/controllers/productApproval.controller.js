@@ -111,7 +111,6 @@ const approveProduct = {
             }
           );
         } catch (walletError) {
-          console.error('Wallet deduction failed during approval:', walletError);
           return res.status(httpStatus.BAD_REQUEST).json({
             message: 'Failed to process wallet payment during approval. Please try again.'
           });
@@ -247,7 +246,6 @@ const bulkApproveProducts = {
               }
             );
           } catch (walletError) {
-            console.error('Wallet deduction failed during bulk approval:', walletError);
             return res.status(httpStatus.BAD_REQUEST).json({
               message: `Failed to process wallet payment for product: ${product.product_name}. Please try again.`
             });
@@ -351,8 +349,6 @@ const bulkApproveProducts = {
   }
 };
 
-
-
 // Bulk reject products
 const bulkRejectProducts = {
   validation: {
@@ -418,8 +414,7 @@ const bulkRejectProducts = {
                 ? 'Product does not meet our quality standards or guidelines.'
                 : rejection_reason;
 
-              console.log(`Sending rejection email to vendor: ${vendorEmail} for product: ${product.product_name}`);
-              await sendProductApprovalEmail(
+            await sendProductApprovalEmail(
                 vendorEmail,
                 vendorInfo.name,
                 product.product_name,

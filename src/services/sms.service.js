@@ -40,11 +40,9 @@ const sendOtp = async (phone, otp) => {
     const response = await axios.get(url, { params });
 
     if (response.data.ErrorCode !== '000') {
-      console.warn('SMS Gateway Hub Warning:', response.data);
     }
     return response.data;
   } catch (error) {
-    console.error('SMS Send Error Details:', error.response ? error.response.data : error.message);
     throw new Error('Failed to send SMS');
   }
 };

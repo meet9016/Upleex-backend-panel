@@ -38,8 +38,6 @@ const register = {
   },
 };
 
-
-
 const login = {
   validation: {
     body: Joi.object().keys({
@@ -101,7 +99,6 @@ const assignPermissions = {
         },
       });
     } catch (error) {
-      console.error('Error assigning permissions:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         status: 500,
         success: false,
@@ -138,7 +135,6 @@ const getAvailablePages = {
         data: pages,
       });
     } catch (error) {
-      console.error('Error getting available pages:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         status: 500,
         success: false,
@@ -150,9 +146,7 @@ const getAvailablePages = {
 
 const getAllAdmins = {
   handler: async (req, res) => {
-    try {
-      console.log('Getting all admins...');
-      
+    try {      
       // Simple query without complex select
       const admins = await Admin.find({}, 'name email permissions');
       
@@ -169,8 +163,6 @@ const getAllAdmins = {
         data: formattedAdmins,
       });
     } catch (error) {
-      console.error('Error getting all admins:', error);
-      console.error('Error stack:', error.stack);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         status: 500,
         success: false,
@@ -207,7 +199,6 @@ const getMyPermissions = {
         data: { permissions: admin.permissions || [] },
       });
     } catch (error) {
-      console.error('Error getting my permissions:', error);
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         status: 500,
         success: false,
@@ -216,7 +207,6 @@ const getMyPermissions = {
     }
   },
 };
-
 
 module.exports = {
   register,

@@ -32,7 +32,6 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
     }
     throw new Error(response.data.message || 'Upload failed');
   } catch (error) {
-    console.error('External Upload Error:', error.response?.data || error.message);
     throw new Error('Failed to upload file to external service');
   }
 };
@@ -64,7 +63,6 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
     }
     throw new Error(response.data.message || 'Update failed');
   } catch (error) {
-    console.error('External Update Error:', error.response?.data || error.message);
     throw new Error('Failed to update file on external service');
   }
 };
@@ -87,10 +85,8 @@ const deleteFileFromExternalService = async (fileUrl) => {
     });
 
     if (response.data && response.data.status !== 'success') {
-      console.warn('External Delete Warning:', response.data.message);
     }
   } catch (error) {
-    console.error('External Delete Error:', error.response?.data || error.message);
     // We don't necessarily want to throw here to avoid breaking the main flow if delete fails
   }
 };

@@ -610,7 +610,6 @@ const sendPurchaseConfirmationEmail = async (
   await transporter.sendMail(mailOptions);
 };
 
-
 const sendEnrollmentConfirmationEmailForPreRecord = async (
   to,
   name,
@@ -1028,9 +1027,6 @@ const sendProductApprovalEmail = async (to, vendorName, productName, status, rea
     const result = await transporter.sendMail(mailOptions);
     return result;
   } catch (error) {
-    console.error(`\n❌ EMAIL SENDING FAILED TO: ${to}`);
-    console.error(`Error: ${error.message}`);
-    console.error(`========== EMAIL SENDING END =========\n`);
     throw error;
   }
 };

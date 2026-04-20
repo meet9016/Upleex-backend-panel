@@ -2,8 +2,6 @@ const config = require("../config/config");
 const moment = require('moment');
 const fs = require('fs');
 
-
-
 const saveFile = (files) => {
     let fileUploadPath = config.fileUploadPath + '/images/';
     const fileName = moment().unix() + Math.floor(1000 + Math.random() * 9000) + '.' + files.name.split('.').pop();;
@@ -21,7 +19,6 @@ const saveFile = (files) => {
         });
     })
 }
-
 
 const removeFile = (file_name) => {
     let fileUploadPath = config.fileUploadPath;
@@ -70,7 +67,6 @@ const handlePagination = async (Model, req, res, query = {}, sort = { createdAt:
             data,
         });
     } catch (error) {
-        console.error("Pagination error:", error);
         res.status(500).json({ success: false, message: "Server Error" });
     }
 };
