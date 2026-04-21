@@ -6,7 +6,12 @@ const vendorPaymentSchema = new mongoose.Schema(
     order_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',
-      required: true,
+      required: false,
+    },
+    quote_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'GetQuote',
+      required: false,
     },
     vendor_id: {
       type: String,
@@ -52,6 +57,7 @@ vendorPaymentSchema.plugin(toJSON);
 vendorPaymentSchema.index({ vendor_id: 1, createdAt: -1 });
 vendorPaymentSchema.index({ payment_status: 1, release_date: 1 });
 vendorPaymentSchema.index({ order_id: 1 });
+vendorPaymentSchema.index({ quote_id: 1 });
 
 const VendorPayment = mongoose.model('VendorPayment', vendorPaymentSchema);
 

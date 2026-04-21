@@ -7,6 +7,7 @@ const {
   GetQuoteStatus,
   Order,
   Review,
+  VendorPayment,
 } = require('../models');
 const { handlePagination } = require('../utils/helper');
 const { uploadToExternalService } = require('../utils/fileUpload');
@@ -23,6 +24,43 @@ try {
 } catch (error) {
   console.error('Failed to initialize Razorpay in getquote controller:', error);
 }
+
+/**
+ * Creates a vendor payment record for a completed and paid quote
+ * @param {Object} quote - The quote object
+ */
+const createVendorQuotePayment = async (quote) => {
+  try {
+    if (quote.status === 'complete' && quote.payment_status === 'paid') {
+      // Check if payment already exists
+      const existingPayment = await VendorPayment.findOne({ 
+        quote_id: quote._id,
+        vendor_id: quote.product_id.vendor_id 
+      });
+
+      if (!existingPayment) {
+        const deliveredAt = new Date();
+        const releaseDate = new Date(deliveredAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days later
+        
+        // 10% admin commission
+        const vendorAmount = (quote.calculated_price || 0) * 0.9;
+
+        await VendorPayment.create({
+          quote_id: quote._id,
+          vendor_id: quote.product_id.vendor_id,
+          vendor_amount: vendorAmount,
+          delivered_at: deliveredAt,
+          release_date: releaseDate,
+          payment_status: 'pending',
+          notes: 'Payment record created for completed rent quote. Awaiting admin verification.'
+        });
+        console.log(`Vendor payment record created for quote ${quote._id}`);
+      }
+    }
+  } catch (error) {
+    console.error(`Error creating vendor payment for quote ${quote._id}:`, error);
+  }
+};
 
 const createGetQuote = {
   validation: {
@@ -376,6 +414,17 @@ const getAllQuotes = {
           quote.has_reviewed = !!review;
           quote.review_details = review || null;
 
+          // Add payment status indicator
+          const vendorPayment = await VendorPayment.findOne({
+            quote_id: quote._id,
+            vendor_id: quote.product_id?.vendor_id || quote.product_id?.vendor
+          });
+
+          quote.payment_status_info = {
+            has_payment_record: !!vendorPayment,
+            payment_status: vendorPayment ? vendorPayment.payment_status : 'no_payment',
+          };
+
           return quote;
         }));
 
@@ -412,9 +461,20 @@ const getAllQuotes = {
               quoteMap[quote._id.toString()] = quote;
             });
 
-            // Add month_name and review status to each quote
+            // Add month_name, review status, and payment info to each quote
             payload.data = await Promise.all(payload.data.map(async (quote) => {
               const populated = quoteMap[quote._id.toString()] || quote;
+
+              // Add payment status indicator
+              const vendorPayment = await VendorPayment.findOne({
+                quote_id: populated._id,
+                vendor_id: populated.product_id?.vendor_id || populated.product_id?.vendor
+              });
+
+              populated.payment_status_info = {
+                has_payment_record: !!vendorPayment,
+                payment_status: vendorPayment ? vendorPayment.payment_status : 'no_payment',
+              };
 
               if (populated.months_id && populated.product_id?.month_arr) {
                 const month = populated.product_id.month_arr.find(
@@ -712,6 +772,11 @@ const updateQuote = {
         }
       }
 
+      // Create vendor payment if quote is complete and paid
+      if (quote) {
+        await createVendorQuotePayment(quote);
+      }
+
       res.status(httpStatus.OK).json({
         success: true,
         message: 'Quote updated successfully',
@@ -845,6 +910,11 @@ const changeStatus = {
             }
           }
         }
+      }
+
+      // Create vendor payment if quote is complete and paid
+      if (updated) {
+        await createVendorQuotePayment(updated);
       }
 
       // Send email to user based on status

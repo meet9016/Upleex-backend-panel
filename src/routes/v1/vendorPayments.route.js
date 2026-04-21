@@ -7,6 +7,7 @@ const {
   getPaymentStats,
   releaseScheduledPayments,
   cancelPayment,
+  releaseBulkPayments,
 } = require('../../controllers/vendorPayment.controller');
 const auth = require('../../middlewares/auth');
 
@@ -22,6 +23,7 @@ router.get('/admin/stats', auth('admin'), getPaymentStats.handler);
 router.put('/admin/:paymentId/release', auth('admin'), releasePayment.handler);
 router.put('/admin/:paymentId/cancel', auth('admin'), cancelPayment.handler);
 router.put('/admin/order/:orderId/vendor/:vendorId/release', auth('admin'), releaseOrderPayment.handler);
+router.post('/admin/release-bulk', auth('admin'), releaseBulkPayments.handler);
 router.post('/admin/release-scheduled', auth('admin'), releaseScheduledPayments.handler);
 
 module.exports = router;

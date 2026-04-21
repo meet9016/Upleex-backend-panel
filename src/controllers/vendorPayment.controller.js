@@ -9,18 +9,29 @@ const Vendor = require('../models/vendor/vendor.model');
 const getVendorPayments = {
   handler: catchAsync(async (req, res) => {
     const vendorId = req.user.id;
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, type } = req.query;
     
     const filter = { vendor_id: vendorId };
     
     if (status) {
       filter.payment_status = status;
     }
+
+    if (type === 'sell') {
+      filter.order_id = { $exists: true, $ne: null };
+    } else if (type === 'rent') {
+      filter.quote_id = { $exists: true, $ne: null };
+    }
     
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
       .populate('order_id', 'order_id total_amount user_name vendor_status')
+      .populate({
+        path: 'quote_id',
+        select: 'calculated_price user_id status',
+        populate: { path: 'user_id', select: 'name email first_name' }
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -61,7 +72,7 @@ const getVendorPayments = {
 // Get all vendor payments (for admin panel)
 const getAllVendorPayments = {
   handler: catchAsync(async (req, res) => {
-    const { page = 1, limit = 10, status, vendor_id } = req.query;
+    const { page = 1, limit = 10, status, vendor_id, type } = req.query;
     
     const filter = {};
     
@@ -72,11 +83,22 @@ const getAllVendorPayments = {
     if (vendor_id) {
       filter.vendor_id = vendor_id;
     }
+
+    if (type === 'sell') {
+      filter.order_id = { $exists: true, $ne: null };
+    } else if (type === 'rent') {
+      filter.quote_id = { $exists: true, $ne: null };
+    }
     
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
       .populate('order_id', 'order_id total_amount user_name vendor_status')
+      .populate({
+        path: 'quote_id',
+        select: 'calculated_price user_id status',
+        populate: { path: 'user_id', select: 'name email first_name' }
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -181,8 +203,14 @@ const releasePayment = {
 // Get payment statistics
 const getPaymentStats = {
   handler: catchAsync(async (req, res) => {
-    const { vendor_id } = req.query;
+    const { vendor_id, type } = req.query;
     const filter = vendor_id ? { vendor_id } : {};
+
+    if (type === 'sell') {
+      filter.order_id = { $exists: true, $ne: null };
+    } else if (type === 'rent') {
+      filter.quote_id = { $exists: true, $ne: null };
+    }
     
     const stats = await VendorPayment.aggregate([
       { $match: filter },
@@ -330,6 +358,42 @@ const cancelPayment = {
   })
 };
 
+// Release multiple payments (admin only)
+const releaseBulkPayments = {
+  handler: catchAsync(async (req, res) => {
+    const { paymentIds, notes } = req.body;
+    
+    if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'No payment IDs provided');
+    }
+    
+    const currentDate = new Date();
+    
+    // Update multiple payments
+    const result = await VendorPayment.updateMany(
+      { 
+        _id: { $in: paymentIds },
+        payment_status: 'pending' 
+      },
+      {
+        $set: {
+          payment_status: 'released',
+          released_at: currentDate,
+          released_by: 'admin',
+          notes: notes || 'Bulk released by admin'
+        }
+      }
+    );
+    
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      message: `Successfully released ${result.modifiedCount} payments`,
+      data: { releasedCount: result.modifiedCount }
+    });
+  })
+};
+
 module.exports = {
   getVendorPayments,
   getAllVendorPayments,
@@ -337,5 +401,6 @@ module.exports = {
   releaseOrderPayment,
   getPaymentStats,
   releaseScheduledPayments,
-  cancelPayment
+  cancelPayment,
+  releaseBulkPayments
 };
