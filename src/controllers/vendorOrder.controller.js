@@ -184,7 +184,7 @@ const updateOrderStatus = {
         
         // Calculate vendor amount based on vendor's items only
         const vendorItems = order.items.filter(item => item.vendor_id === vendorId);
-        const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0) * 0.9; // 10% admin commission
+        const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0); // No admin commission cut
         
         // Create payment record regardless of user payment status
         // Admin will handle payment release based on user payment verification
@@ -360,7 +360,7 @@ const bulkUpdateOrderStatus = {
           
           // Calculate vendor amount based on vendor's items only
           const vendorItems = order.items.filter(item => item.vendor_id === vendorId);
-          const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0) * 0.9; // 10% admin commission
+          const vendorAmount = vendorItems.reduce((sum, item) => sum + item.final_amount, 0); // No admin commission cut
           
           // Create payment record regardless of user payment status
           await VendorPayment.create({

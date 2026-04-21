@@ -42,8 +42,8 @@ const createVendorQuotePayment = async (quote) => {
         const deliveredAt = new Date();
         const releaseDate = new Date(deliveredAt.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days later
         
-        // 10% admin commission
-        const vendorAmount = (quote.calculated_price || 0) * 0.9;
+        // No admin commission cut
+        const vendorAmount = (quote.calculated_price || 0);
 
         await VendorPayment.create({
           quote_id: quote._id,
