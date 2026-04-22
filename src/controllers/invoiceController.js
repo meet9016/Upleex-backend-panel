@@ -177,14 +177,19 @@ const generateInvoicePDF = async (req, res) => {
     ];
     
     if (!req.body.isCustomerView && !isQuote) {
-      let adminPaymentStatus = data.paymentStatusInfo?.paymentStatus || data.vendorPaymentInfo?.paymentStatus || 'Pending';
-      if (adminPaymentStatus === 'noPayment' || adminPaymentStatus === 'Unprocessed' || !adminPaymentStatus) {
+      // Robust extraction of admin payout status
+      let adminPaymentStatus = data.paymentStatusInfo?.paymentStatus || 
+                              data.vendorPaymentInfo?.paymentStatus || 
+                              data.adminPaymentStatus || 
+                              'Pending';
+                              
+      if (adminPaymentStatus === 'noPayment' || adminPaymentStatus === 'Unprocessed' || adminPaymentStatus === 'no_payment' || !adminPaymentStatus) {
         adminPaymentStatus = 'Pending';
       }
       // Capitalize first letter
       adminPaymentStatus = adminPaymentStatus.charAt(0).toUpperCase() + adminPaymentStatus.slice(1);
       
-      bars.push({ label: 'Admin Payout', value: adminPaymentStatus });
+      bars.push({ label: 'Admin Payment', value: adminPaymentStatus });
     }
 
     bars.forEach((bar, index) => {
