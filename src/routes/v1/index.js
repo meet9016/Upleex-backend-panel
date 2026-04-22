@@ -36,6 +36,7 @@ const contactsRoute = require('./contacts.route');
 const vendorDashboardRoute = require('./vendorDashboard.route');
 const rentalBoostPlanRoute = require('./rentalBoostPlan.route');
 const adminOrdersRoute = require('./adminOrders.route');
+const invoiceRoute = require('./invoice.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -187,6 +188,10 @@ const defaultRoutes = [
   {
     path: '/admin/orders',
     route: adminOrdersRoute,
+  },
+  {
+    path: '/invoice',
+    route: invoiceRoute,
   },
 ];
 

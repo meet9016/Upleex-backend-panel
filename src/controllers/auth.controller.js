@@ -115,14 +115,21 @@ const login = {
     body: Joi.object().keys({
       email: Joi.string().required().email(),
       password: Joi.string().required(),
+      platform: Joi.string().valid('web', 'ios', 'android').optional(),
     }),
   },
   handler: async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, platform } = req.body;
 
     const user = await User.findOne({ email });
     if (!user || !(await user.isPasswordMatch(password))) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
+    }
+
+    // Update platform if provided
+    if (platform) {
+      user.platform = platform;
+      await user.save();
     }
 
     const token = await tokenService.generateAuthTokens(user, 'user');
@@ -135,6 +142,7 @@ const login = {
         email: user.email,
         phone: user.phone,
         profile_photo: user.profile_photo,
+        platform: user.platform
       }
     });
   }
@@ -319,11 +327,12 @@ const webLoginRegister = {
       name: Joi.string().optional(),
       email: Joi.string().optional(),
       url: Joi.string().optional(),
+      platform: Joi.string().valid('web', 'ios', 'android').optional(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { number, country_id, otp, name, email, url } = req.body;
+      const { number, country_id, otp, name, email, url, platform: manualPlatform } = req.body;
 
       const user = await User.findOne({ phone: number });
 
@@ -379,6 +388,29 @@ const webLoginRegister = {
         });
       }
 
+      // Detect platform if not provided
+      let detectedPlatform = manualPlatform;
+      if (!detectedPlatform) {
+        const origin = req.get('origin') || '';
+        const referer = req.get('referer') || '';
+        const isFromWebsite = ['upleex.com', 'vendor.upleex.com'].some(domain =>
+          url === domain || origin.includes(domain) || referer.includes(domain)
+        );
+        const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
+
+        if (isFromWebsite && !isFromMobileApp) {
+          detectedPlatform = 'web';
+        } else {
+          // If heuristics suggest mobile, but we don't know which one, default to 'web' unless proven otherwise?
+          // Or we can try checking User-Agent headers if available.
+          const userAgent = req.get('User-Agent') || '';
+          if (/iPhone|iPad|iPod/i.test(userAgent)) detectedPlatform = 'ios';
+          else if (/Android/i.test(userAgent)) detectedPlatform = 'android';
+          else if (isFromMobileApp) detectedPlatform = 'android'; // Default mobile to android for now
+          else detectedPlatform = 'web';
+        }
+      }
+
       // ===============================
       // STEP 2 → VERIFY OTP
       // ===============================
@@ -426,9 +458,9 @@ const webLoginRegister = {
         const newUser = await User.create({
           phone: number,
           name: name,
-          // last_name: lastName,
           email,
-          password: 'otp_user_no_password'
+          password: 'otp_user_no_password',
+          platform: detectedPlatform || 'web'
         });
 
         const token = await tokenService.generateAuthTokens(newUser, 'user');
@@ -443,7 +475,8 @@ const webLoginRegister = {
               _id: newUser._id,
               name: newUser.name,
               email: newUser.email,
-              phone: newUser.phone
+              phone: newUser.phone,
+              platform: newUser.platform
             }
           }
         });
@@ -452,6 +485,11 @@ const webLoginRegister = {
       // ===============================
       // EXISTING USER LOGIN
       // ===============================
+      if (detectedPlatform) {
+        user.platform = detectedPlatform;
+        await user.save();
+      }
+
       const token = await tokenService.generateAuthTokens(user, 'user');
 
       return res.status(200).send({
@@ -464,7 +502,8 @@ const webLoginRegister = {
             _id: user._id,
             name: user.name,
             email: user.email,
-            phone: user.phone
+            phone: user.phone,
+            platform: user.platform
           }
         }
       });

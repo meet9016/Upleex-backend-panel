@@ -295,18 +295,59 @@ const getUserOrders = catchAsync(async (req, res) => {
   const skip = (page - 1) * limit;
 
   const orders = await Order.find({ user_id: req.user.id })
+    .populate('user_id', 'name email phone mobile')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
   const total = await Order.countDocuments({ user_id: req.user.id });
 
+  // Enrich orders with vendor details for invoices
+  const enrichedOrders = await Promise.all(orders.map(async (order) => {
+    const orderObj = order.toObject();
+    
+    // Get vendor info from the first item (standardizing on the primary seller for the order)
+    const firstVendorId = order.items && order.items.length > 0 ? order.items[0].vendor_id : null;
+    
+    if (firstVendorId) {
+      try {
+        const mongoose = require('mongoose');
+        const Vendor = mongoose.model('Vendor');
+        const VendorKyc = mongoose.model('VendorKyc');
+        
+        const vendor = await Vendor.findById(firstVendorId).lean();
+        if (vendor) {
+          const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+          const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
+          const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+          const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
+          
+          orderObj.vendor_details = [{
+            business_name: identity.business_name || vendor.business_name || vendor.businessName || '',
+            gst_number: identity.gst_number || vendor.gst_number || '',
+            business_logo_image: docs.business_logo_image || vendor.business_logo_image || '',
+            address: contact.address || vendor.address || '',
+            city: contact.city_name || vendor.city_name || vendor.city || '',
+            state: contact.state_name || vendor.state_name || vendor.state || '',
+            pincode: contact.pincode || vendor.pincode || '',
+            mobile: contact.mobile || vendor.mobile || vendor.number || vendor.phone || '',
+            email: contact.email || vendor.email || ''
+          }];
+        }
+      } catch (e) {
+        console.error('Error fetching vendor details for order enrichment:', e);
+      }
+    }
+    
+    return orderObj;
+  }));
+
   res.status(httpStatus.OK).send({
     status: 200,
     success: true,
     message: 'Orders fetched successfully',
     data: {
-      orders,
+      orders: enrichedOrders,
       pagination: {
         page,
         limit,

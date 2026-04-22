@@ -41,6 +41,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    platform: {
+        type: String,
+        enum: ['web', 'ios', 'android'],
+        default: 'web',
+    },
 }, {
     timestamps: true, // This automatically adds createdAt and updatedAt
 });

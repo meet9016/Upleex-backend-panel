@@ -349,6 +349,7 @@ const getAllQuotes = {
         let quotesQuery = GetQuote.find(query)
           .select(quoteExclude)
           .populate('product_id', productSelect)
+          .populate('user_id', 'name email phone mobile')
           .sort(sortOptions)
           .lean();
 
@@ -425,6 +426,38 @@ const getAllQuotes = {
             payment_status: vendorPayment ? vendorPayment.payment_status : 'no_payment',
           };
 
+          // Add vendor details for invoices
+          if (quote.product_id && (quote.product_id.vendor_id || quote.product_id.vendor)) {
+            try {
+              const mongoose = require('mongoose');
+              const Vendor = mongoose.model('Vendor');
+              const VendorKyc = mongoose.model('VendorKyc');
+              const vendorId = quote.product_id.vendor_id || quote.product_id.vendor;
+              
+              const vendor = await Vendor.findById(vendorId).lean();
+              if (vendor) {
+                const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+                const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
+                const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+                const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
+                
+                quote.vendor_details = [{
+                  business_name: identity.business_name || vendor.business_name || vendor.businessName || '',
+                  gst_number: identity.gst_number || vendor.gst_number || '',
+                  business_logo_image: docs.business_logo_image || vendor.business_logo_image || '',
+                  address: contact.address || vendor.address || '',
+                  city: contact.city_name || vendor.city_name || vendor.city || '',
+                  state: contact.state_name || vendor.state_name || vendor.state || '',
+                  pincode: contact.pincode || vendor.pincode || '',
+                  mobile: contact.mobile || vendor.mobile || vendor.number || vendor.phone || '',
+                  email: contact.email || vendor.email || ''
+                }];
+              }
+            } catch (e) {
+              console.error('Error fetching vendor details for quote list:', e);
+            }
+          }
+
           return quote;
         }));
 
@@ -453,6 +486,7 @@ const getAllQuotes = {
             const populatedQuotes = await GetQuote.find({ _id: { $in: quoteIds } })
               .select(quoteExclude)
               .populate('product_id', productSelect)
+              .populate('user_id', 'name email phone mobile')
               .lean();
 
             // Create a map for quick lookup
@@ -475,6 +509,38 @@ const getAllQuotes = {
                 has_payment_record: !!vendorPayment,
                 payment_status: vendorPayment ? vendorPayment.payment_status : 'no_payment',
               };
+
+              // Add vendor details for invoices
+              if (populated.product_id && (populated.product_id.vendor_id || populated.product_id.vendor)) {
+                try {
+                  const mongoose = require('mongoose');
+                  const Vendor = mongoose.model('Vendor');
+                  const VendorKyc = mongoose.model('VendorKyc');
+                  const vendorId = populated.product_id.vendor_id || populated.product_id.vendor;
+                  
+                  const vendor = await Vendor.findById(vendorId).lean();
+                  if (vendor) {
+                    const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+                    const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
+                    const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+                    const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
+                    
+                    populated.vendor_details = [{
+                      business_name: identity.business_name || vendor.business_name || vendor.businessName || '',
+                      gst_number: identity.gst_number || vendor.gst_number || '',
+                      business_logo_image: docs.business_logo_image || vendor.business_logo_image || '',
+                      address: contact.address || vendor.address || '',
+                      city: contact.city_name || vendor.city_name || vendor.city || '',
+                      state: contact.state_name || vendor.state_name || vendor.state || '',
+                      pincode: contact.pincode || vendor.pincode || '',
+                      mobile: contact.mobile || vendor.mobile || vendor.number || vendor.phone || '',
+                      email: contact.email || vendor.email || ''
+                    }];
+                  }
+                } catch (e) {
+                  console.error('Error fetching vendor details for quote list (paged):', e);
+                }
+              }
 
               if (populated.months_id && populated.product_id?.month_arr) {
                 const month = populated.product_id.month_arr.find(
@@ -653,13 +719,49 @@ const getQuoteById = {
         return res.status(httpStatus.BAD_REQUEST).json({ message: 'Invalid quote id' });
       }
 
-      // Use populate to get all product details
+      // Use populate to get all product details and user details
       const quote = await GetQuote.findById(_id)
         .populate('product_id')
+        .populate('user_id', 'name email phone avatar')
         .lean();
 
       if (!quote) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
+      }
+
+      // Add vendor details
+      if (quote.product_id && quote.product_id.vendor_id) {
+         try {
+           const Vendor = mongoose.model('Vendor');
+           const VendorKyc = mongoose.model('VendorKyc');
+           
+           const vendor = await Vendor.findById(quote.product_id.vendor_id).lean();
+           if (vendor) {
+             const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+             const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
+             const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+             const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
+             
+             quote.vendor_details = [{
+               business_name: identity.business_name || vendor.business_name || vendor.businessName || '',
+               gst_number: identity.gst_number || vendor.gst_number || '',
+               business_logo_image: docs.business_logo_image || vendor.business_logo_image || '',
+               address: contact.address || vendor.address || '',
+               city: contact.city_name || vendor.city_name || vendor.city || '',
+               state: contact.state_name || vendor.state_name || vendor.state || '',
+               pincode: contact.pincode || vendor.pincode || '',
+               mobile: contact.mobile || vendor.mobile || vendor.phone || '',
+               email: contact.email || vendor.email || ''
+             }];
+           } else {
+             quote.vendor_details = [];
+           }
+         } catch (e) {
+             console.error('Error fetching vendor details:', e);
+             quote.vendor_details = [];
+         }
+      } else {
+         quote.vendor_details = [];
       }
 
       // Add review status
