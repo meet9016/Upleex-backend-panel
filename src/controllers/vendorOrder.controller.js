@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const Order = require('../models/order.model');
 const VendorPayment = require('../models/vendorPayment.model');
+const notificationService = require('../services/notification.service');
 
 const getVendorOrders = {
   handler: catchAsync(async (req, res) => {
@@ -228,6 +229,24 @@ const updateOrderStatus = {
     }
     
     await order.save();
+    
+    // SEND NOTIFICATION TO USER
+    const statusMessages = {
+      accepted: 'Your order has been accepted and is being prepared.',
+      cancelled: 'Your order has been cancelled.',
+      delivery: 'Your order is out for delivery!',
+      delivered: 'Your order has been delivered successfully.',
+      completed: 'Your order is marked as completed.',
+    };
+
+    if (statusMessages[status]) {
+      await notificationService.sendNotificationToUser(
+        order.user_id,
+        `Order Update: ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        statusMessages[status] || `Your order status is now ${status}`,
+        { orderId: order._id.toString(), status: status }
+      );
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,

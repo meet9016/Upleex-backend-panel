@@ -518,6 +518,31 @@ const webLoginRegister = {
   }
 };
 
+const registerFcmToken = catchAsync(async (req, res) => {
+  const { token } = req.body;
+  const userId = req.user.id;
+
+  if (!token) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Token is required');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // Add token if not exists
+  if (!user.fcmTokens.includes(token)) {
+    user.fcmTokens.push(token);
+    await user.save();
+  }
+
+  res.status(httpStatus.OK).send({
+    success: true,
+    message: 'FCM token registered successfully',
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -530,5 +555,6 @@ module.exports = {
   getUserProfile,
   updateUserProfile,
   webLoginRegister,
+  registerFcmToken,
   uploadNone
 };

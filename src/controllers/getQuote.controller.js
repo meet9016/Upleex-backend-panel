@@ -879,6 +879,43 @@ const updateQuote = {
         await createVendorQuotePayment(quote);
       }
 
+      // Send notification on status change
+      if (updateData.status && updateData.status !== existingQuote.status) {
+        try {
+          const { sendNotificationToUser } = require('../services/notification.service');
+          const quoteNotifications = {
+            approval: {
+              title: 'Quote Approved! 🎉',
+              body: `Your quote for ${quote.product_id?.product_name || 'your product'} has been approved.`,
+            },
+            reject: {
+              title: 'Quote Rejected',
+              body: `Your quote for ${quote.product_id?.product_name || 'your product'} has been rejected.`,
+            },
+            delivery: {
+              title: 'Product Out for Delivery 🚚',
+              body: `Your rented product ${quote.product_id?.product_name || ''} is on its way!`,
+            },
+            complete: {
+              title: 'Rental Completed ✅',
+              body: `Your rental for ${quote.product_id?.product_name || 'your product'} has been completed.`,
+            },
+          };
+          const notifData = quoteNotifications[updateData.status];
+          const targetUserId = existingQuote.user_id;
+          if (notifData && targetUserId) {
+            await sendNotificationToUser(
+              targetUserId,
+              notifData.title,
+              notifData.body,
+              { quoteId: quote._id.toString(), status: updateData.status, type: 'order_update' }
+            );
+          }
+        } catch (notifError) {
+          console.error('Notification error in updateQuote:', notifError);
+        }
+      }
+
       res.status(httpStatus.OK).json({
         success: true,
         message: 'Quote updated successfully',
@@ -1017,6 +1054,44 @@ const changeStatus = {
       // Create vendor payment if quote is complete and paid
       if (updated) {
         await createVendorQuotePayment(updated);
+      }
+
+      // Send notification to user based on quote status
+      try {
+        const { sendNotificationToUser } = require('../services/notification.service');
+        const quoteNotifications = {
+          approval: {
+            title: 'Quote Approved! 🎉',
+            body: `Your quote for ${updated.product_id?.product_name || 'your product'} has been approved. Complete payment to confirm.`,
+          },
+          reject: {
+            title: 'Quote Rejected',
+            body: `Your quote for ${updated.product_id?.product_name || 'your product'} has been rejected by the vendor.`,
+          },
+          delivery: {
+            title: 'Product Out for Delivery 🚚',
+            body: `Your rented product ${updated.product_id?.product_name || ''} is on its way!`,
+          },
+          complete: {
+            title: 'Rental Completed ✅',
+            body: `Your rental for ${updated.product_id?.product_name || 'your product'} has been completed.`,
+          },
+        };
+
+        const notifData = quoteNotifications[internal];
+        // user_id can be populated object or plain ObjectId
+        const targetUserId = updated.user_id?._id || updated.user_id || existingQuote.user_id;
+
+        if (notifData && targetUserId) {
+          await sendNotificationToUser(
+            targetUserId,
+            notifData.title,
+            notifData.body,
+            { quoteId: updated._id.toString(), status: internal, type: 'order_update' }
+          );
+        }
+      } catch (notifError) {
+        console.error('Notification error:', notifError);
       }
 
       // Send email to user based on status

@@ -15,6 +15,7 @@ router.post('/web-login-register', authController.uploadNone, validate(authContr
 // Profile Management
 router.get('/profile/:id', catchAsync(authController.getUserProfile.handler));
 router.put('/update-profile', auth('user'), validate(authController.updateUserProfile.validation), catchAsync(authController.updateUserProfile.handler));
+router.post('/register-fcm', auth('user'), authController.registerFcmToken);
 
 // Email Verification
 router.post('/send-verification-email', authController.sendVerificationEmail);
