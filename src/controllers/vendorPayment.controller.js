@@ -190,6 +190,23 @@ const releasePayment = {
     if (notes) payment.notes = notes;
     
     await payment.save();
+
+    // Notify vendor about payment release with dates
+    try {
+      const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+      const deliveredAt = payment.delivered_at ? new Date(payment.delivered_at) : new Date();
+      const releaseDate = payment.release_date ? new Date(payment.release_date) : new Date();
+      const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      await sendNotificationToVendor(
+        payment.vendor_id,
+        'Payment Released! 💰',
+        `Your payment of ₹${payment.vendor_amount} has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
+        'order_request',
+        { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+      );
+    } catch (notifErr) {
+      console.error('Payment release notification error:', notifErr);
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,
@@ -271,6 +288,23 @@ const releaseOrderPayment = {
     if (notes) payment.notes = notes;
     
     await payment.save();
+
+    // Notify vendor about order payment release
+    try {
+      const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+      const deliveredAt = payment.delivered_at ? new Date(payment.delivered_at) : new Date();
+      const releaseDate = payment.release_date ? new Date(payment.release_date) : new Date();
+      const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      await sendNotificationToVendor(
+        payment.vendor_id,
+        'Payment Released! 💰',
+        `Your payment of ₹${payment.vendor_amount} has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
+        'order_request',
+        { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+      );
+    } catch (notifErr) {
+      console.error('Order payment release notification error:', notifErr);
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,

@@ -80,7 +80,16 @@ const createService = {
 
       const service = await Service.create(data);
 
-      // Check if vendor has active priority plan and apply it to new service
+      // Notify admin about new service request
+      try {
+        const { sendAdminNotification } = require('../services/adminNotification.service');
+        await sendAdminNotification(
+          'New Service Request 🛠️',
+          `Vendor has submitted a new service "${service.service_name}" for approval.`,
+          'service_request',
+          { serviceId: String(service._id), serviceName: service.service_name, vendorId: service.vendor_id }
+        );
+      } catch (e) { console.error('Admin notification error:', e); }
       const activePriorityPlan = await ServicePriorityPlanPurchase.findOne({
         vendor_id: data.vendor_id,
         expire_at: { $gt: new Date() }

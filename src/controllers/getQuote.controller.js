@@ -54,6 +54,19 @@ const createVendorQuotePayment = async (quote) => {
           payment_status: 'pending',
           notes: 'Payment record created for completed rent quote. Awaiting admin verification.'
         });
+
+        // Notify admin about new quote payment entry
+        try {
+          const adminNotif = require('../services/adminNotification.service');
+          const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+          await adminNotif.sendAdminNotification(
+            'New Payment Entry 💰',
+            `Quote payment of ₹${vendorAmount} pending release. Delivery: ${fmt(deliveredAt)}, Release due: ${fmt(releaseDate)}.`,
+            'payment',
+            { quoteId: String(quote._id), vendorId: String(quote.product_id.vendor_id), amount: vendorAmount }
+          );
+        } catch (e) { console.error('Admin quote payment notification error:', e); }
+
         console.log(`Vendor payment record created for quote ${quote._id}`);
       }
     }
@@ -161,6 +174,23 @@ const createGetQuote = {
       const populatedQuote = await GetQuote.findById(quote._id)
         .populate('product_id')
         .lean();
+
+      // Notify vendor about new quote request
+      try {
+        const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+        const product = populatedQuote.product_id;
+        if (product && product.vendor_id) {
+          await sendNotificationToVendor(
+            product.vendor_id,
+            'New Quote Request 📝',
+            `You have a new quote request for "${product.product_name}".`,
+            'quote_request',
+            { quoteId: String(quote._id), productId: String(product._id) }
+          );
+        }
+      } catch (notifErr) {
+        console.error('Vendor quote notification error:', notifErr);
+      }
 
       return res.status(httpStatus.CREATED).json({
         success: true,
@@ -908,7 +938,7 @@ const updateQuote = {
               targetUserId,
               notifData.title,
               notifData.body,
-              { quoteId: quote._id.toString(), status: updateData.status, type: 'order_update' }
+              { quoteId: quote._id.toString(), status: updateData.status, type: updateData.status === 'complete' ? 'order_update' : 'quote_update' }
             );
           }
         } catch (notifError) {
@@ -1063,18 +1093,22 @@ const changeStatus = {
           approval: {
             title: 'Quote Approved! 🎉',
             body: `Your quote for ${updated.product_id?.product_name || 'your product'} has been approved. Complete payment to confirm.`,
+            type: 'quote_update',
           },
           reject: {
             title: 'Quote Rejected',
             body: `Your quote for ${updated.product_id?.product_name || 'your product'} has been rejected by the vendor.`,
+            type: 'quote_update',
           },
           delivery: {
             title: 'Product Out for Delivery 🚚',
             body: `Your rented product ${updated.product_id?.product_name || ''} is on its way!`,
+            type: 'quote_update',
           },
           complete: {
             title: 'Rental Completed ✅',
             body: `Your rental for ${updated.product_id?.product_name || 'your product'} has been completed.`,
+            type: 'order_update',
           },
         };
 
@@ -1083,12 +1117,37 @@ const changeStatus = {
         const targetUserId = updated.user_id?._id || updated.user_id || existingQuote.user_id;
 
         if (notifData && targetUserId) {
-          await sendNotificationToUser(
-            targetUserId,
-            notifData.title,
-            notifData.body,
-            { quoteId: updated._id.toString(), status: internal, type: 'order_update' }
-          );
+          // Create notification with proper type
+          const Notification = require('../models/notification.model');
+          await Notification.create({
+            user_id: targetUserId,
+            title: notifData.title,
+            body: notifData.body,
+            type: notifData.type,
+            data: { quoteId: updated._id.toString(), status: internal, type: internal === 'complete' ? 'order_update' : 'quote_update' },
+          });
+
+          // Send FCM push
+          const User = require('../models/user.model');
+          const user = await User.findById(targetUserId);
+          if (user && user.fcmTokens && user.fcmTokens.length > 0) {
+            const stringData = { quoteId: String(updated._id), status: internal, type: notifData.type };
+            const message = {
+              notification: { title: notifData.title, body: notifData.body },
+              data: stringData,
+              tokens: user.fcmTokens,
+              webpush: {
+                notification: { title: notifData.title, body: notifData.body, icon: '/favicon.png' },
+                fcm_options: { link: '/' },
+              },
+            };
+            const admin = require('../config/firebase.config');
+            const response = await admin.messaging().sendEachForMulticast(message);
+            if (response.failureCount > 0) {
+              const failedTokens = response.responses.map((r, i) => (!r.success ? user.fcmTokens[i] : null)).filter(Boolean);
+              if (failedTokens.length > 0) await User.findByIdAndUpdate(targetUserId, { $pull: { fcmTokens: { $in: failedTokens } } });
+            }
+          }
         }
       } catch (notifError) {
         console.error('Notification error:', notifError);
@@ -1392,6 +1451,17 @@ const verifyQuotePayment = {
         existingQuote.razorpay_signature = razorpay_signature;
 
         await existingQuote.save();
+
+        // Notify admin about quote payment
+        try {
+          const { sendAdminNotification } = require('../services/adminNotification.service');
+          await sendAdminNotification(
+            'Quote Payment Received! 💰',
+            `Payment of ₹${existingQuote.calculated_price} received for quote #${existingQuote._id}.`,
+            'payment',
+            { quoteId: String(existingQuote._id), amount: existingQuote.calculated_price }
+          );
+        } catch (e) {}
 
         return res.status(httpStatus.OK).json({
           success: true,

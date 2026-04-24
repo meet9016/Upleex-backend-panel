@@ -434,6 +434,18 @@ const createProduct = {
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
         : 'Product created successfully and submitted for admin approval';
+
+      // Notify admin about new product request
+      try {
+        const { sendAdminNotification } = require('../services/adminNotification.service');
+        await sendAdminNotification(
+          'New Product Request 📦',
+          `Vendor has submitted a new product "${product.product_name}" for approval.`,
+          'product_request',
+          { productId: String(product._id), productName: product.product_name, vendorId: product.vendor_id }
+        );
+      } catch (e) { console.error('Admin notification error:', e); }
+
       return res.status(200).json({
         status: 200,
         message: msg,

@@ -2,57 +2,42 @@ const admin = require('../config/firebase.config');
 const Notification = require('../models/notification.model');
 const User = require('../models/user.model');
 
-/**
- * Send notification to a specific user
- * @param {string} userId
- * @param {string} title
- * @param {string} body
- * @param {Object} data
- */
 const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
-    // 1. Save to DB
-    await Notification.create({
-      user_id: userId,
-      title,
-      body,
-      data,
-    });
+    // Determine type from data
+    const type = data.type || 'other';
 
-    // 2. Get User's FCM tokens
+    // Save to DB with correct type
+    await Notification.create({ user_id: userId, title, body, type, data });
+
+    // Get User's FCM tokens
     const user = await User.findById(userId);
-    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
-      return;
-    }
+    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
 
-    // 3. Send via Firebase Admin
+    // All data values must be strings
+    const stringData = Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, String(v ?? '')])
+    );
+
     const message = {
-      notification: {
-        title,
-        body,
-      },
-      data: {
-        ...data,
-        click_action: 'FLUTTER_NOTIFICATION_CLICK', // For Android/Mobile if needed
-      },
+      notification: { title, body },
+      data: stringData,
       tokens: user.fcmTokens,
+      webpush: {
+        notification: { title, body, icon: '/favicon.png' },
+        fcm_options: { link: '/' },
+      },
     };
 
-    const response = await admin.messaging().sendMulticast(message);
-    console.log(`${response.successCount} messages were sent successfully`);
-    
-    // Optional: Cleanup invalid tokens
+    const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`FCM: ${response.successCount}/${user.fcmTokens.length} sent for user ${userId}`);
+
     if (response.failureCount > 0) {
-      const failedTokens = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(user.fcmTokens[idx]);
-        }
-      });
+      const failedTokens = response.responses
+        .map((r, i) => (!r.success ? user.fcmTokens[i] : null))
+        .filter(Boolean);
       if (failedTokens.length > 0) {
-        await User.findByIdAndUpdate(userId, {
-          $pull: { fcmTokens: { $in: failedTokens } },
-        });
+        await User.findByIdAndUpdate(userId, { $pull: { fcmTokens: { $in: failedTokens } } });
       }
     }
   } catch (error) {
@@ -60,18 +45,8 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
   }
 };
 
-/**
- * Send notification to multiple users
- * @param {Array} userIds
- * @param {string} title
- * @param {string} body
- */
 const sendNotificationToMultipleUsers = async (userIds, title, body, data = {}) => {
-  const promises = userIds.map((id) => sendNotificationToUser(id, title, body, data));
-  await Promise.all(promises);
+  await Promise.all(userIds.map((id) => sendNotificationToUser(id, title, body, data)));
 };
 
-module.exports = {
-  sendNotificationToUser,
-  sendNotificationToMultipleUsers,
-};
+module.exports = { sendNotificationToUser, sendNotificationToMultipleUsers };

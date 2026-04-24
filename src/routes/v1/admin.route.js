@@ -72,5 +72,24 @@ router.get(
   catchAsync(dashboardStatsController.getDashboardStats)
 );
 
+// Admin Notifications
+router.get('/notifications', auth(), catchAsync(async (req, res) => {
+  const AdminNotification = require('../../models/adminNotification.model');
+  const notifications = await AdminNotification.find().sort({ createdAt: -1 }).limit(50);
+  res.status(200).json({ success: true, data: notifications });
+}));
+
+router.put('/notifications/read-all', auth(), catchAsync(async (req, res) => {
+  const AdminNotification = require('../../models/adminNotification.model');
+  await AdminNotification.updateMany({ is_read: false }, { is_read: true });
+  res.status(200).json({ success: true });
+}));
+
+router.put('/notifications/:id/read', auth(), catchAsync(async (req, res) => {
+  const AdminNotification = require('../../models/adminNotification.model');
+  await AdminNotification.findByIdAndUpdate(req.params.id, { is_read: true });
+  res.status(200).json({ success: true });
+}));
+
 module.exports = router;
 
