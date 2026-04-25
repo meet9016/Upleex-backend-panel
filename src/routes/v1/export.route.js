@@ -18,6 +18,10 @@ const {
   exportVendorWalletsToExcel,
   exportVendorWalletsToPDF
 } = require('../../controllers/export.controller');
+const {
+  exportVendorReportExcel,
+  exportVendorReportPDF
+} = require('../../controllers/exportVendorReport.controller');
 
 const router = express.Router();
 
@@ -50,5 +54,9 @@ router.get('/services/pdf', auth(), exportServicesToPDF.handler);
 // Vendor export routes
 router.get('/vendors/excel', auth(), exportVendorsToExcel.handler);
 router.get('/vendors/pdf', auth(), exportVendorsToPDF.handler);
+
+// Vendor Report export routes
+router.get('/vendor-report/excel', auth('admin'), exportVendorReportExcel);
+router.get('/vendor-report/pdf', auth('admin'), exportVendorReportPDF);
 
 module.exports = router;

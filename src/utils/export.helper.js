@@ -12,6 +12,13 @@ const path = require('path');
  * @param {String} sheetName - Worksheet name
  */
 const exportToExcel = async (res, data, columns, filename, sheetName = 'Sheet1') => {
+  console.log('exportToExcel called with data length:', data.length);
+  
+  if (!data || data.length === 0) {
+    console.log('No data to export');
+    return res.status(404).json({ success: false, message: 'No data found to export' });
+  }
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
 
@@ -81,6 +88,14 @@ const exportToExcel = async (res, data, columns, filename, sheetName = 'Sheet1')
 const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMapper) => {
   return new Promise((resolve, reject) => {
     try {
+      console.log('exportToPDF called with data length:', data.length);
+      
+      if (!data || data.length === 0) {
+        console.log('No data to export');
+        res.status(404).json({ success: false, message: 'No data found to export' });
+        return resolve();
+      }
+
       const doc = new PDFDocument({ margin: 30, size: 'A4' });
       const brandColor = '#4A90E2';
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
