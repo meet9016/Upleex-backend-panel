@@ -81,6 +81,7 @@
     "pdfkit": "^0.17.2",
     "pm2": "^6.0.13",
     "razorpay": "^2.9.6",
+    "socket.io": "^4.8.3",
     "stripe": "^19.3.0",
     "swagger-jsdoc": "^6.0.8",
     "swagger-ui-express": "^4.1.6",

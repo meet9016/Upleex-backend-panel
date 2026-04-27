@@ -1,11 +1,22 @@
 const admin = require('../config/firebase.config');
 const Vendor = require('../models/vendor/vendor.model');
 const VendorNotification = require('../models/vendorNotification.model');
+const { emitToVendor } = require('./socket.service');
 
 const sendNotificationToVendor = async (vendorId, title, body, type = 'other', data = {}) => {
   try {
     // Save to DB
-    await VendorNotification.create({ vendor_id: vendorId, title, body, type, data });
+    const notification = await VendorNotification.create({ vendor_id: vendorId, title, body, type, data });
+
+    // Emit via Socket.io
+    emitToVendor(vendorId, 'new_notification', {
+      id: notification._id,
+      title,
+      body,
+      type,
+      data,
+      createdAt: notification.createdAt,
+    });
 
     // Get vendor FCM tokens
     const vendor = await Vendor.findById(vendorId);

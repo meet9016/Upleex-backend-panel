@@ -85,7 +85,7 @@ const createService = {
         const { sendAdminNotification } = require('../services/adminNotification.service');
         await sendAdminNotification(
           'New Service Request 🛠️',
-          `Vendor has submitted a new service "${service.service_name}" for approval.`,
+          `Vendor has submitted a new service " <b>${service.service_name}</b>" for approval.`,
           'service_request',
           { serviceId: String(service._id), serviceName: service.service_name, vendorId: service.vendor_id }
         );
