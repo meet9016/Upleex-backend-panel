@@ -1,5 +1,7 @@
+const http = require('http');
 const mongoose = require('mongoose');
 const app = require('./app');
+const socketService = require('./services/socket.service');
 const config = require('./config/config');
 const logger = require('./config/logger');
 const { initPaymentReleaseCron } = require('./utils/paymentCron');
@@ -17,7 +19,11 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   startKycReminderCron();
   // // Initialize service expiry cron job
   // handleServiceExpiry();
-  server = app.listen(config.port, () => {
+  
+  const serverInstance = http.createServer(app);
+  socketService.init(serverInstance);
+
+  server = serverInstance.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
   });
 });

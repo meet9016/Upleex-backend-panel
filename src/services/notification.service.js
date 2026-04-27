@@ -1,6 +1,7 @@
 const admin = require('../config/firebase.config');
 const Notification = require('../models/notification.model');
 const User = require('../models/user.model');
+const { emitToUser } = require('./socket.service');
 
 const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
@@ -8,7 +9,24 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
     const type = data.type || 'other';
 
     // Save to DB with correct type
-    await Notification.create({ user_id: userId, title, body, type, data });
+    const notification = await Notification.create({ user_id: userId, title, body, type, data });
+
+    console.log(`[Notification] Saved to DB for user ${userId}, type: ${type}, id: ${notification._id}`);
+
+    // Emit via Socket.io for instant UI update
+    emitToUser(userId, 'new_notification', {
+      _id: notification._id,
+      id: notification._id,
+      title,
+      body,
+      type,
+      data,
+      is_read: false,
+      createdAt: notification.createdAt,
+    });
+
+    console.log(`[Notification] Socket emitted to user ${userId}`);
+
 
     // Get User's FCM tokens
     const user = await User.findById(userId);
@@ -30,7 +48,7 @@ const sendNotificationToUser = async (userId, title, body, data = {}) => {
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
-    console.log(`FCM: ${response.successCount}/${user.fcmTokens.length} sent for user ${userId}`);
+    console.log(`[Notification] FCM: ${response.successCount}/${user.fcmTokens.length} sent for user ${userId}`);
 
     if (response.failureCount > 0) {
       const failedTokens = response.responses

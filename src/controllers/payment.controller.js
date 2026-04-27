@@ -346,7 +346,7 @@ const getUserOrders = catchAsync(async (req, res) => {
         
         const vendor = await Vendor.findById(firstVendorId).lean();
         if (vendor) {
-          const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+          const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
           const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
           const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
           const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});

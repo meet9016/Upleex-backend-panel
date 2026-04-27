@@ -58,11 +58,14 @@ const createVendorQuotePayment = async (quote) => {
         // Notify admin about new quote payment entry
         try {
           const adminNotif = require('../services/adminNotification.service');
+          const mongoose = require('mongoose');
+          const User = mongoose.model('User');
+          const user = await User.findById(quote.user_id).lean();
+          const userName = user?.name || user?.full_name || 'User';
           const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
           await adminNotif.sendAdminNotification(
             'New Payment Entry 💰',
-            `Quote payment of ₹${vendorAmount} pending release. Delivery: ${fmt(deliveredAt)}, Release due: ${fmt(releaseDate)}.`,
-            'payment',
+           `Quote payment of ₹${vendorAmount} from <b>${userName}</b> pending release. Delivery: ${fmt(deliveredAt)}, Release due: ${fmt(releaseDate)}.`,            'payment',
             { quoteId: String(quote._id), vendorId: String(quote.product_id.vendor_id), amount: vendorAmount }
           );
         } catch (e) { console.error('Admin quote payment notification error:', e); }
@@ -466,7 +469,7 @@ const getAllQuotes = {
               
               const vendor = await Vendor.findById(vendorId).lean();
               if (vendor) {
-                const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+                const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
                 const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
                 const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
                 const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
@@ -550,7 +553,7 @@ const getAllQuotes = {
                   
                   const vendor = await Vendor.findById(vendorId).lean();
                   if (vendor) {
-                    const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+                    const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
                     const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
                     const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
                     const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
@@ -767,7 +770,7 @@ const getQuoteById = {
            
            const vendor = await Vendor.findById(quote.product_id.vendor_id).lean();
            if (vendor) {
-             const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+             const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
              const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
              const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
              const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});
@@ -1117,40 +1120,16 @@ const changeStatus = {
         const targetUserId = updated.user_id?._id || updated.user_id || existingQuote.user_id;
 
         if (notifData && targetUserId) {
-          // Create notification with proper type
-          const Notification = require('../models/notification.model');
-          await Notification.create({
-            user_id: targetUserId,
-            title: notifData.title,
-            body: notifData.body,
-            type: notifData.type,
-            data: { quoteId: updated._id.toString(), status: internal, type: internal === 'complete' ? 'order_update' : 'quote_update' },
-          });
-
-          // Send FCM push
-          const User = require('../models/user.model');
-          const user = await User.findById(targetUserId);
-          if (user && user.fcmTokens && user.fcmTokens.length > 0) {
-            const stringData = { quoteId: String(updated._id), status: internal, type: notifData.type };
-            const message = {
-              notification: { title: notifData.title, body: notifData.body },
-              data: stringData,
-              tokens: user.fcmTokens,
-              webpush: {
-                notification: { title: notifData.title, body: notifData.body, icon: '/favicon.png' },
-                fcm_options: { link: '/' },
-              },
-            };
-            const admin = require('../config/firebase.config');
-            const response = await admin.messaging().sendEachForMulticast(message);
-            if (response.failureCount > 0) {
-              const failedTokens = response.responses.map((r, i) => (!r.success ? user.fcmTokens[i] : null)).filter(Boolean);
-              if (failedTokens.length > 0) await User.findByIdAndUpdate(targetUserId, { $pull: { fcmTokens: { $in: failedTokens } } });
-            }
-          }
+          console.log(`[changeStatus] Sending notification to user ${targetUserId}, status: ${internal}`);
+          await sendNotificationToUser(
+            targetUserId,
+            notifData.title,
+            notifData.body,
+            { quoteId: updated._id.toString(), status: internal, type: notifData.type }
+          );
         }
       } catch (notifError) {
-        console.error('Notification error:', notifError);
+        console.error('[changeStatus] Notification error:', notifError);
       }
 
       // Send email to user based on status
@@ -1455,9 +1434,13 @@ const verifyQuotePayment = {
         // Notify admin about quote payment
         try {
           const { sendAdminNotification } = require('../services/adminNotification.service');
+          const mongoose = require('mongoose');
+          const User = mongoose.model('User');
+          const user = await User.findById(existingQuote.user_id).lean();
+          const userName = user?.name || user?.full_name || 'User';
           await sendAdminNotification(
             'Quote Payment Received! 💰',
-            `Payment of ₹${existingQuote.calculated_price} received for quote #${existingQuote._id}.`,
+            `Payment of ₹${existingQuote.calculated_price} received for quote  from <b>${userName}</b>.`,
             'payment',
             { quoteId: String(existingQuote._id), amount: existingQuote.calculated_price }
           );
