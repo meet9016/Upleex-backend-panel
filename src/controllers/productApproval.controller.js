@@ -209,6 +209,18 @@ const approveProduct = {
       const approved = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
       const rejected = await Product.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
 
+      // Send FCM notification to vendor
+      try {
+        const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+        if (newStatus === 'approved') {
+          await sendNotificationToVendor(vendorId, 'Product Approved! ✅', `Your product "${updatedProduct.product_name}" has been approved.`, 'product_update', { productId: String(updatedProduct._id), status: 'approved' });
+        } else if (newStatus === 'rejected') {
+          await sendNotificationToVendor(vendorId, 'Product Rejected', `Your product "${updatedProduct.product_name}" has been rejected.`, 'product_update', { productId: String(updatedProduct._id), status: 'rejected' });
+        }
+      } catch (notifErr) {
+        console.error('Vendor notification error:', notifErr);
+      }
+
       const message = newStatus === 'approved' && product.pricing_type === 'paid'
         ? 'Product approved successfully. ₹10 deducted from vendor wallet.'
         : `Product ${newStatus} successfully`;
@@ -343,6 +355,17 @@ const bulkApproveProducts = {
       };
       sendEmails(); // Run in background
 
+      // Send FCM notifications to vendors (background)
+      const sendBulkApproveNotifications = async () => {
+        try {
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+          for (const p of products) {
+            await sendNotificationToVendor(p.vendor_id, 'Product Approved! ✅', `Your product "${p.product_name}" has been approved.`, 'product_update', { productId: String(p._id), status: 'approved' });
+          }
+        } catch (e) { console.error('Bulk approve notification error:', e); }
+      };
+      sendBulkApproveNotifications();
+
       const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
       const countsByVendor = {};
@@ -456,6 +479,18 @@ const bulkRejectProducts = {
         }
       };
       sendEmails(); // Run in background
+
+      // Send FCM notifications to vendors (background)
+      const sendBulkRejectNotifications = async () => {
+        try {
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+          const rejectedProducts = await Product.find({ _id: { $in: product_ids } }, 'vendor_id product_name').lean();
+          for (const p of rejectedProducts) {
+            await sendNotificationToVendor(p.vendor_id, 'Product Rejected', `Your product "${p.product_name}" has been rejected.`, 'product_update', { productId: String(p._id), status: 'rejected' });
+          }
+        } catch (e) { console.error('Bulk reject notification error:', e); }
+      };
+      sendBulkRejectNotifications();
 
       const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);

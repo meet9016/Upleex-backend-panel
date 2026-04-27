@@ -198,6 +198,18 @@ const updateOrderStatus = {
           payment_status: 'pending', // Always start as pending for admin review
           notes: 'Payment record created on delivery. Awaiting admin verification of user payment.'
         });
+
+        // Notify admin about new payment entry
+        try {
+          const { sendAdminNotification } = require('../services/adminNotification.service');
+          const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+          await sendAdminNotification(
+            'New Payment Entry 💰',
+            `Order #${order.order_id} — Vendor payment of ₹${vendorAmount} pending release. Delivery: ${fmt(deliveredAt)}, Release due: ${fmt(releaseDate)}.`,
+            'payment',
+            { orderId: String(order._id), orderNumber: order.order_id, vendorId, amount: vendorAmount }
+          );
+        } catch (e) { console.error('Admin payment notification error:', e); }
         
       } else {
         console.log(`Payment record already exists for order ${order.order_id}, vendor ${vendorId}`);
@@ -391,6 +403,18 @@ const bulkUpdateOrderStatus = {
             payment_status: 'pending',
             notes: 'Payment record created on delivery. Awaiting admin verification of user payment.'
           });
+
+          // Notify admin about new payment entry
+          try {
+            const { sendAdminNotification } = require('../services/adminNotification.service');
+            const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+            await sendAdminNotification(
+              'New Payment Entry 💰',
+              `Order #${order.order_id} — Vendor payment of ₹${vendorAmount} pending release. Delivery: ${fmt(deliveredAt)}, Release due: ${fmt(releaseDate)}.`,
+              'payment',
+              { orderId: String(order._id), orderNumber: order.order_id, vendorId, amount: vendorAmount }
+            );
+          } catch (e) { console.error('Admin payment notification error:', e); }
         }
       }
       

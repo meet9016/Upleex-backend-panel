@@ -525,13 +525,20 @@ const changeStatus = {
       if (vendorEmail && previousStatus !== status) {
         try {
           const { sendKycApprovalEmail, sendKycRejectionEmail, createKycNotification } = require('../../services/kycEmail.service');
+          const { sendNotificationToVendor } = require('../../services/vendorNotification.service');
 
           if (status === 'approved') {
             await sendKycApprovalEmail(vendorEmail, vendorName);
             await createKycNotification(v_id, vendorEmail, doc._id, 'admin_approval');
+            if (v_id) {
+              await sendNotificationToVendor(v_id, 'KYC Approved! 🎉', 'Your KYC has been approved by admin. You can now list products.', 'kyc_update', { status: 'approved' });
+            }
           } else if (status === 'rejected') {
             await sendKycRejectionEmail(vendorEmail, vendorName, rejection_reason);
             await createKycNotification(v_id, vendorEmail, doc._id, 'admin_rejection');
+            if (v_id) {
+              await sendNotificationToVendor(v_id, 'KYC Rejected', `Your KYC has been rejected. Reason: ${rejection_reason || 'Please contact support.'}`, 'kyc_update', { status: 'rejected' });
+            }
           }
         } catch (emailError) {
           console.error('Error sending status change email:', emailError);

@@ -173,7 +173,12 @@ const releasePayment = {
     const { paymentId } = req.params;
     const { notes } = req.body;
     
-    const payment = await VendorPayment.findById(paymentId);
+    const payment = await VendorPayment.findById(paymentId)
+      .populate('order_id')
+      .populate({
+        path: 'quote_id',
+        populate: { path: 'product_id' }
+      });
     
     if (!payment) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Payment not found');
@@ -190,6 +195,40 @@ const releasePayment = {
     if (notes) payment.notes = notes;
     
     await payment.save();
+
+    // Notify vendor about payment release with dates
+    try {
+      const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+      const deliveredAt = payment.delivered_at ? new Date(payment.delivered_at) : new Date();
+      const releaseDate = payment.release_date ? new Date(payment.release_date) : new Date();
+      const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      
+      // Get product name and type for notification
+      let productName = 'Product';
+      let productType = 'Order';
+      
+      if (payment.quote_id) {
+        productName = payment.quote_id.product_id?.product_name || 'Product';
+        productType = payment.quote_id.product_id?.product_type_name || 'Rent';
+      } else if (payment.order_id) {
+        const vendorItems = payment.order_id.items?.filter(i => String(i.vendor_id) === String(payment.vendor_id)) || [];
+        if (vendorItems.length > 0) {
+          productName = vendorItems[0].product_name;
+          if (vendorItems.length > 1) productName += ` (+${vendorItems.length - 1} more)`;
+        }
+        productType = 'Sell';
+      }
+
+      await sendNotificationToVendor(
+        payment.vendor_id,
+        'Payment Released! 💰',
+        `Your payment of ₹${payment.vendor_amount} for ${productType} "<b>${productName}</b>" has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
+        'order_request',
+        { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+      );
+    } catch (notifErr) {
+      console.error('Payment release notification error:', notifErr);
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,
@@ -271,6 +310,23 @@ const releaseOrderPayment = {
     if (notes) payment.notes = notes;
     
     await payment.save();
+
+    // Notify vendor about order payment release
+    try {
+      const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+      const deliveredAt = payment.delivered_at ? new Date(payment.delivered_at) : new Date();
+      const releaseDate = payment.release_date ? new Date(payment.release_date) : new Date();
+      const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+      await sendNotificationToVendor(
+        payment.vendor_id,
+        'Payment Released! 💰',
+        `Your payment of ₹${payment.vendor_amount} has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
+        'order_request',
+        { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+      );
+    } catch (notifErr) {
+      console.error('Order payment release notification error:', notifErr);
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,

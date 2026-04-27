@@ -145,6 +145,18 @@ const approveService = {
       const approved = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'approved' });
       const rejected = await Service.countDocuments({ vendor_id: vendorId, approval_status: 'rejected' });
 
+      // Send notification to vendor
+      try {
+        const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+        if (newStatus === 'approved') {
+          await sendNotificationToVendor(vendorId, 'Service Approved! ✅', `Your service "${updatedService.service_name}" has been approved.`, 'product_update', { serviceId: String(updatedService._id), status: 'approved' });
+        } else if (newStatus === 'rejected') {
+          await sendNotificationToVendor(vendorId, 'Service Rejected', `Your service "${updatedService.service_name}" has been rejected.`, 'product_update', { serviceId: String(updatedService._id), status: 'rejected' });
+        }
+      } catch (notifErr) {
+        console.error('Vendor service notification error:', notifErr);
+      }
+
       const message = newStatus === 'approved' 
         ? 'Service approved successfully. ₹29 deducted from vendor wallet.'
         : `Service ${newStatus} successfully`;
@@ -206,6 +218,17 @@ const bulkApproveServices = {
         { $set: { approval_status: 'approved' } }
       );
 
+      // Send FCM notifications to vendors (background)
+      const sendBulkServiceApproveNotifs = async () => {
+        try {
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+          for (const s of services) {
+            await sendNotificationToVendor(s.vendor_id, 'Service Approved! ✅', `Your service "${s.service_name}" has been approved.`, 'product_update', { serviceId: String(s._id), status: 'approved' });
+          }
+        } catch (e) { console.error('Bulk service approve notification error:', e); }
+      };
+      sendBulkServiceApproveNotifs();
+
       const vendors = await Service.find({ _id: { $in: service_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
       const countsByVendor = {};
@@ -242,6 +265,18 @@ const bulkRejectServices = {
         { _id: { $in: service_ids } },
         { $set: { approval_status: 'rejected' } }
       );
+
+      // Send FCM notifications to vendors (background)
+      const sendBulkServiceRejectNotifs = async () => {
+        try {
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+          const rejectedServices = await Service.find({ _id: { $in: service_ids } }, 'vendor_id service_name').lean();
+          for (const s of rejectedServices) {
+            await sendNotificationToVendor(s.vendor_id, 'Service Rejected', `Your service "${s.service_name}" has been rejected.`, 'product_update', { serviceId: String(s._id), status: 'rejected' });
+          }
+        } catch (e) { console.error('Bulk service reject notification error:', e); }
+      };
+      sendBulkServiceRejectNotifs();
 
       const vendors = await Service.find({ _id: { $in: service_ids } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);

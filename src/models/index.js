@@ -29,4 +29,7 @@ module.exports.ServicePlan = require('./servicePlan.model');
 module.exports.ServiceListingPlanPurchase = require('./serviceListingPlanPurchase.model');
 module.exports.ServicePriorityPlan = require('./servicePriorityPlan.model');
 module.exports.ServicePriorityPlanPurchase = require('./servicePriorityPlanPurchase.model');
+module.exports.AdminNotification = require('./adminNotification.model');
+module.exports.VendorNotification = require('./vendorNotification.model');
+module.exports.Notification = require('./notification.model');
 

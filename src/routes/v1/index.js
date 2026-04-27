@@ -38,6 +38,7 @@ const rentalBoostPlanRoute = require('./rentalBoostPlan.route');
 const adminOrdersRoute = require('./adminOrders.route');
 const invoiceRoute = require('./invoice.route');
 const notificationRoute = require('./notification.route');
+const vendorReportRoute = require('./vendorReport.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -197,6 +198,10 @@ const defaultRoutes = [
   {
     path: '/notifications',
     route: notificationRoute,
+  },
+  {
+    path: '/admin/vendor-report',
+    route: vendorReportRoute,
   },
 ];
 

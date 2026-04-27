@@ -41,6 +41,10 @@ const vendorSchema = new mongoose.Schema({
   otp: {
     type: String,
   },
+  fcmTokens: {
+    type: [String],
+    default: [],
+  },
   isVerified: {
     type: Boolean,
     default: false,

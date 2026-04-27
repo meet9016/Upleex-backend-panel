@@ -20,8 +20,8 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['order_update', 'payment_update', 'system', 'other'],
-      default: 'order_update',
+      enum: ['order_update', 'quote_update', 'payment_update', 'system', 'other'],
+      default: 'other',
     },
     data: {
       type: Object,

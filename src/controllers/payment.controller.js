@@ -257,19 +257,48 @@ const verifyPayment = catchAsync(async (req, res) => {
     if (userEmail && userEmail.includes('@')) {
       await sendOrderConfirmationEmail(userEmail, order.toObject());
     } else {
-      // Try to get email from database as fallback
       const User = require('../models/user.model');
       const userFromDB = await User.findById(order.user_id);
       if (userFromDB && userFromDB.email) {
         const fallbackEmail = userFromDB.email;
         await sendOrderConfirmationEmail(fallbackEmail, order.toObject());
-        // Update order with email for future reference
         order.user_email = fallbackEmail;
         await order.save();
       }
     }
   } catch (emailError) {
     // Don't fail the payment verification if email fails
+  }
+
+  // Notify each vendor about new order
+  try {
+    const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+    const { sendAdminNotification } = require('../services/adminNotification.service');
+    const vendorIds = [...new Set(order.items.map(i => i.vendor_id).filter(Boolean))];
+    const itemNames = order.items.map(i => i.product_name).join(', ');
+
+    // Notify admin about new payment
+    await sendAdminNotification(
+      'New Payment Received! 💰',
+      `Order #${order.order_id} payment of ₹${order.total_amount} received from ${order.user_name || 'User'}.`,
+      'payment',
+      { orderId: String(order._id), orderNumber: order.order_id, amount: order.total_amount }
+    );
+
+    // Notify each vendor
+    for (const vendorId of vendorIds) {
+      const vendorItems = order.items.filter(i => i.vendor_id === vendorId);
+      const names = vendorItems.map(i => i.product_name).join(', ');
+      await sendNotificationToVendor(
+        vendorId,
+        'New Order Received! 📦',
+        `You have a new order for: ${names}`,
+        'order_request',
+        { orderId: String(order._id), orderNumber: order.order_id }
+      );
+    }
+  } catch (notifErr) {
+    console.error('Notification error:', notifErr);
   }
 
   res.status(httpStatus.OK).send({
@@ -317,7 +346,7 @@ const getUserOrders = catchAsync(async (req, res) => {
         
         const vendor = await Vendor.findById(firstVendorId).lean();
         if (vendor) {
-          const kyc = await VendorKyc.findOne({ vendor_id: vendor._id }).lean();
+          const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
           const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
           const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
           const docs = (kyc?.Documents && Array.isArray(kyc.Documents)) ? kyc.Documents[0] : (kyc?.Documents || {});

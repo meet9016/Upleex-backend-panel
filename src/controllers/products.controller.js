@@ -57,8 +57,8 @@ const getNextSKUCounter = async (vendorId) => {
 const generateProductSKU = async (vendorId, categoryId) => {
   try {
     // Get vendor business name
-    const vendorKyc = await VendorKyc.findOne({ vendor_id: vendorId });
-    const businessName = vendorKyc?.business_name || vendorKyc?.full_name || 'Vendor';
+    const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendorId });
+    const businessName = vendorKyc?.Identity?.business_name || vendorKyc?.ContactDetails?.full_name || 'Vendor';
     
     // Get category name
     const category = await Category.findById(categoryId);
@@ -238,8 +238,8 @@ const createProduct = {
       // ───────────────────────────────────────────────
       if (pricingType === 'free') {
         let limit = 1;
-        const kyc = await VendorKyc.findOne({ vendor_id: String(data.vendor_id) });
-        const hasGST = !!(kyc && String(kyc.gst_number || '').trim());
+        const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': String(data.vendor_id) });
+        const hasGST = !!(kyc && String(kyc.Identity?.gst_number || '').trim());
         limit = hasGST ? 3 : 1;
 
         const startOfMonth = moment().startOf('month').toDate();
@@ -434,6 +434,29 @@ const createProduct = {
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
         : 'Product created successfully and submitted for admin approval';
+
+      // Notify admin about new product request
+      try {
+        const { sendAdminNotification } = require('../services/adminNotification.service');
+        const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': product.vendor_id });
+        console.log("vendorKyc",vendorKyc);
+        const vendorName = vendorKyc?.Identity?.business_name || vendorKyc?.ContactDetails?.full_name || 'Unknown Vendor';
+        const productType = product.product_type_name || 'Product';
+        
+        await sendAdminNotification(
+          `New ${productType} Request 📦`,
+        `${vendorName} submitted "<b>${product.product_name}</b>" (${productType}) for approval.`,
+          'product_request',
+          { 
+            productId: String(product._id), 
+            productName: product.product_name, 
+            vendorId: product.vendor_id,
+            vendorName: vendorName,
+            productType: productType
+          }
+        );
+      } catch (e) { console.error('Admin notification error:', e); }
+
       return res.status(200).json({
         status: 200,
         message: msg,

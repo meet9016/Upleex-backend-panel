@@ -86,6 +86,17 @@ const businessRegister = catchAsync(async (req, res) => {
   });
   const token = await generateAuthTokens(vendor, 'vendor');
 
+  // Notify admin about new vendor
+  try {
+    const { sendAdminNotification } = require('../../services/adminNotification.service');
+    await sendAdminNotification(
+      'New Vendor Registered 🏪',
+      `New vendor "${business_name}" (${full_name}) has registered and is awaiting KYC approval.`,
+      'new_vendor',
+      { vendorId: String(vendor._id), business_name, full_name }
+    );
+  } catch (e) { console.error('Admin notification error:', e); }
+
   res.status(httpStatus.CREATED).json({
     status: 200,
     success: true,
