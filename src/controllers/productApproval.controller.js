@@ -10,16 +10,33 @@ const { sendProductApprovalEmail } = require('../services/email.service');
 const getAllVendors = {
   handler: async (req, res) => {
     try {
-      const vendors = await VendorKyc.find({});
+      const { page, limit, filter_rent_sell } = req.query;
+      const pageNum = Math.max(parseInt(page) || 1, 1);
+      const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+      const skip = (pageNum - 1) * limitNum;
+
+      // Only fetch vendors who can sell/rent products (vendor_type: 'vendor' or 'both')
+      const eligibleVendors = await Vendor.find(
+        { vendor_type: { $in: ['vendor', 'both'] } },
+        { _id: 1 }
+      ).lean();
+      const eligibleVendorIds = eligibleVendors.map(v => String(v._id));
+
+      const total = await VendorKyc.countDocuments({
+        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
+      });
+
+      const vendors = await VendorKyc.find({
+        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
+      }).skip(skip).limit(limitNum);
 
       const vendorsWithCount = await Promise.all(
         vendors.map(async (vendor) => {
           const vendorId = vendor.ContactDetails?.vendor_id || '';
-          const pendingCount = await Product.countDocuments({
-            vendor_id: vendorId,
-            approval_status: 'pending'
-          });
-          
+          const query = { vendor_id: vendorId, approval_status: 'pending' };
+          if (filter_rent_sell === '1') query.product_type_name = 'Rent';
+          else if (filter_rent_sell === '2') query.product_type_name = 'Sell';
+          const pendingCount = await Product.countDocuments(query);
           return {
             _id: vendor._id,
             vendor_id: vendorId,
@@ -34,7 +51,10 @@ const getAllVendors = {
 
       res.status(200).json({
         status: 200,
-        data: vendorsWithCount
+        data: vendorsWithCount,
+        total,
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum)
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });

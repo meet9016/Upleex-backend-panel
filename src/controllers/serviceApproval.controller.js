@@ -2,13 +2,32 @@ const httpStatus = require('http-status');
 const Joi = require('joi');
 const { Service } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
 
 // Get all vendors with pending service count
 const getAllVendors = {
   handler: async (req, res) => {
     try {
-      const vendors = await VendorKyc.find({});
+      const { page, limit } = req.query;
+      const pageNum = Math.max(parseInt(page) || 1, 1);
+      const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+      const skip = (pageNum - 1) * limitNum;
+
+      // Only fetch vendors who can provide services (vendor_type: 'service' or 'both')
+      const eligibleVendors = await Vendor.find(
+        { vendor_type: { $in: ['service', 'both'] } },
+        { _id: 1 }
+      ).lean();
+      const eligibleVendorIds = eligibleVendors.map(v => String(v._id));
+
+      const total = await VendorKyc.countDocuments({
+        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
+      });
+
+      const vendors = await VendorKyc.find({
+        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
+      }).skip(skip).limit(limitNum);
 
       const vendorsWithCount = await Promise.all(
         vendors.map(async (vendor) => {
@@ -32,7 +51,10 @@ const getAllVendors = {
 
       res.status(200).json({
         status: 200,
-        data: vendorsWithCount
+        data: vendorsWithCount,
+        total,
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum)
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });

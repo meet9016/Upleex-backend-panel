@@ -2156,6 +2156,49 @@ const getRelatedProducts = {
   }
 };
 
+// Get rent availability: active rent quotes end_dates for a product
+const getRentAvailability = {
+  handler: async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const GetQuote = require('../models/getQuote.model');
+
+      // Active rent statuses - not yet returned
+      const activeStatuses = ['pending', 'approval', 'delivery'];
+
+      const activeQuotes = await GetQuote.find({
+        product_id: productId,
+        status: { $in: activeStatuses },
+        end_date: { $gte: new Date() },
+      }, { start_date: 1, end_date: 1, qty: 1, status: 1 }).sort({ end_date: 1 });
+
+      // Latest return date
+      const latestReturnDate = activeQuotes.length
+        ? activeQuotes[activeQuotes.length - 1].end_date
+        : null;
+
+      // All booked date ranges for calendar
+      const bookedRanges = activeQuotes.map(q => ({
+        start: q.start_date,
+        end: q.end_date,
+        qty: q.qty || 1,
+        status: q.status,
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          latestReturnDate,
+          bookedRanges,
+          hasActiveRent: activeQuotes.length > 0,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -2176,4 +2219,5 @@ module.exports = {
   getProductsByType,
   toggleProductVisibility,
   getRelatedProducts,
+  getRentAvailability,
 };

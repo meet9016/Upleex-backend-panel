@@ -130,4 +130,11 @@ router.post(
 );
 
 
+// Rent availability (booked dates & latest return date)
+router.get(
+  '/rent-availability/:productId',
+  auth(true),
+  catchAsync(productsController.getRentAvailability.handler)
+);
+
 module.exports = router;
