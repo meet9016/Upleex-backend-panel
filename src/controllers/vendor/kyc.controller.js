@@ -146,6 +146,15 @@ const saveKyc = {
             throw new Error(`${label} is already registered by another vendor`);
           }
         }
+
+        // Check Vendor collection for email and mobile
+        if (field === 'ContactDetails.email' || field === 'ContactDetails.mobile') {
+          const vendorField = field === 'ContactDetails.email' ? 'email' : 'number';
+          const existingVendor = await Vendor.findOne({ [vendorField]: value });
+          if (existingVendor && String(existingVendor._id) !== String(vendor_id)) {
+            throw new Error(`${label} is already used by another account`);
+          }
+        }
       };
 
       if (searchEmail) await checkUniqueness('ContactDetails.email', searchEmail, 'Email');
@@ -177,9 +186,15 @@ const saveKyc = {
           if (vendor_id) {
             doc.ContactDetails.vendor_id = vendor_id;
             
-            // Sync city back to Vendor record if provided in contact details
-            if (contact.city_id) {
-              await Vendor.findByIdAndUpdate(vendor_id, { city_id: contact.city_id });
+            // Sync contact details back to Vendor record if provided
+            const vendorUpdate = {};
+            if (contact.full_name) vendorUpdate.full_name = contact.full_name;
+            if (contact.email) vendorUpdate.email = contact.email;
+            if (contact.mobile) vendorUpdate.number = contact.mobile;
+            if (contact.city_id) vendorUpdate.city_id = contact.city_id;
+
+            if (Object.keys(vendorUpdate).length > 0) {
+              await Vendor.findByIdAndUpdate(vendor_id, vendorUpdate);
             }
           }
         }
@@ -242,11 +257,12 @@ const saveKyc = {
           if (v) {
             if (v.vendor_type) vendor_type = v.vendor_type;
             
-            // Sync city back to Vendor record if provided in contact details
-            if (initialContact.city_id) {
-              v.city_id = initialContact.city_id;
-              await v.save();
-            }
+            // Sync contact details back to Vendor record if provided
+            if (initialContact.full_name) v.full_name = initialContact.full_name;
+            if (initialContact.email) v.email = initialContact.email;
+            if (initialContact.mobile) v.number = initialContact.mobile;
+            if (initialContact.city_id) v.city_id = initialContact.city_id;
+            await v.save();
           }
         }
 

@@ -7,6 +7,7 @@ const adminSockets = new Set(); // set of admin socketIds
 
 const init = (server) => {
   io = new Server(server, {
+    // path: '/api/socket.io',
     cors: {
       origin: function(origin, callback) {
         const allowedOrigins = [
@@ -14,10 +15,14 @@ const init = (server) => {
           'http://localhost:3001',
           'http://localhost:3002',
           'http://localhost:3003',
-          'http://localhost:3688',
+          'https://upleex.2min.cloud',
+          'https://admin.upleex.2min.cloud',
+          'https://vendor.upleex.2min.cloud',
           'https://upleex.com',
+          'https://www.upleex.com',
           'https://admin.upleex.com',
           'https://vendor.upleex.com',
+          'https://upleex.digitalks.co.in',
         ];
         
         if (!origin || allowedOrigins.includes(origin)) {
