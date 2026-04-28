@@ -32,6 +32,8 @@ const init = (server) => {
     transports: ['websocket', 'polling'],
   });
 
+   console.log('[Socket] Socket.io initialized');
+
   io.on('connection', (socket) => {
     console.log('New Socket.io connection established:', socket.id, 'from origin:', socket.handshake.headers.origin);
 
