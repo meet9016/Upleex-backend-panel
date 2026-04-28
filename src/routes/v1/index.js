@@ -39,6 +39,7 @@ const adminOrdersRoute = require('./adminOrders.route');
 const invoiceRoute = require('./invoice.route');
 const notificationRoute = require('./notification.route');
 const vendorReportRoute = require('./vendorReport.route');
+const appVersionRoute = require('./appVersion.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -202,6 +203,10 @@ const defaultRoutes = [
   {
     path: '/admin/vendor-report',
     route: vendorReportRoute,
+  },
+  {
+    path: '/app-version',
+    route: appVersionRoute,
   },
 ];
 
