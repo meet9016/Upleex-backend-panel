@@ -55,7 +55,15 @@ const createPurchase = {
       );
 
       const start = new Date();
-      const expire = moment(start).add(months, 'months').toDate();
+      
+      // Fixed 30-day counting: each month = 30 days
+      const totalDays = months * 30;
+      const months30 = Math.floor(totalDays / 30);
+      const remainingDays = totalDays % 30;
+      
+      const expire = new Date(start);
+      expire.setMonth(expire.getMonth() + months30);
+      expire.setDate(expire.getDate() + remainingDays);
 
       // Update all vendor services with priority status
       const updateResult = await Service.updateMany(

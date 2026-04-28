@@ -36,6 +36,13 @@ router.delete(
 );
 
 router.post(
+  '/purchase',
+  auth(),
+  validate(rentalBoostPlanController.purchaseRentalBoostPlan.validation),
+  catchAsync(rentalBoostPlanController.purchaseRentalBoostPlan.handler)
+);
+
+router.post(
   '/purchase-bulk',
   auth(),
   validate(rentalBoostPlanController.purchaseBulkRentalBoostPlan.validation),

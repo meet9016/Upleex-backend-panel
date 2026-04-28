@@ -130,10 +130,23 @@ const purchasePriorityPlan = {
       });
 
       let finalExpiryDate = new Date();
+      // Fixed 30-day counting: each month = 30 days
       if (plan_duration === 'yearly') {
-        finalExpiryDate.setFullYear(finalExpiryDate.getFullYear() + 1);
+        // 12 months * 30 days = 360 days
+        const totalDays = 12 * 30;
+        const months30 = Math.floor(totalDays / 30);
+        const remainingDays = totalDays % 30;
+        
+        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + months30);
+        finalExpiryDate.setDate(finalExpiryDate.getDate() + remainingDays);
       } else {
-        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + 1);
+        // 1 month = 30 days
+        const totalDays = 1 * 30;
+        const months30 = Math.floor(totalDays / 30);
+        const remainingDays = totalDays % 30;
+        
+        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + months30);
+        finalExpiryDate.setDate(finalExpiryDate.getDate() + remainingDays);
       }
 
       // Only update if it's an explicit refill OR if it's an upgrade (adding addon to a yearly plan that doesn't have it)
