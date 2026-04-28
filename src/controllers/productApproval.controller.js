@@ -138,12 +138,24 @@ const approveProduct = {
       }
       
       // Update product approval status
+      let updateData = { 
+        approval_status: newStatus,
+        rejection_reason: newStatus === 'rejected' ? (rejection_reason || '') : ''
+      };
+
+      // If approving a free product, set free listing expiry (30 days from now)
+      if (newStatus === 'approved' && product.pricing_type === 'free') {
+        const freeExpiryDate = new Date();
+        freeExpiryDate.setDate(freeExpiryDate.getDate() + 30); // 30 days free listing
+        
+        updateData.expires_at = freeExpiryDate;
+        updateData.free_listing_expires_at = freeExpiryDate;
+        updateData.free_listing_remaining_days = 30;
+      }
+
       const updatedProduct = await Product.findByIdAndUpdate(
         productId,
-        { 
-          approval_status: newStatus,
-          rejection_reason: newStatus === 'rejected' ? (rejection_reason || '') : ''
-        },
+        updateData,
         { new: true }
       );
 

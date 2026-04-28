@@ -137,6 +137,13 @@ const productSchema = new mongoose.Schema(
     expires_at: {
       type: Date,
     },
+    free_listing_expires_at: {
+      type: Date,
+    },
+    free_listing_remaining_days: {
+      type: Number,
+      default: 0,
+    },
     is_new: {
       type: Boolean,
       default: false,

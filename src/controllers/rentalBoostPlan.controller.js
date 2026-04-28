@@ -99,14 +99,10 @@ const purchaseRentalBoostPlan = {
         throw new Error('Boost plan not found or inactive');
       }
 
-      // 2. Fetch Product (Check if it has priority plan)
+      // 2. Fetch Product (Any product - no priority check required)
       const product = await Product.findById(product_id).session(session);
       if (!product) {
         throw new Error('Product not found');
-      }
-
-      if (!product.is_priority) {
-        throw new Error('Booster Plan is only available for products with an active Priority Plan');
       }
 
       // 3. Deduct from Wallet
@@ -118,9 +114,15 @@ const purchaseRentalBoostPlan = {
       await walletService.deductMoneyFromWallet(vendor_id, plan.price, `Purchase of ${plan.name} for product: ${product.product_name}`);
 
       // 4. Update Product Boost Status
+      // Fixed 30-day counting: each month = 30 days
       const startDate = new Date();
-      const expiryDate = new Date();
-      expiryDate.setDate(startDate.getDate() + plan.days);
+      const totalDays = plan.days;
+      const months30 = Math.floor(totalDays / 30);
+      const remainingDays = totalDays % 30;
+      
+      const expiryDate = new Date(startDate);
+      expiryDate.setMonth(expiryDate.getMonth() + months30);
+      expiryDate.setDate(expiryDate.getDate() + remainingDays);
 
       product.is_boosted = true;
       product.boost_expiry = expiryDate;
@@ -161,13 +163,14 @@ const purchaseBulkRentalBoostPlan = {
   validation: {
     body: Joi.object().keys({
       plan_id: Joi.string().required(),
+      product_ids: Joi.array().items(Joi.string()).min(1).required(),
     }),
   },
   handler: async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-      const { plan_id } = req.body;
+      const { plan_id, product_ids } = req.body;
       const vendor_id = req.user.id || req.user._id;
 
       // 1. Fetch Plan
@@ -176,51 +179,45 @@ const purchaseBulkRentalBoostPlan = {
         throw new Error('Boost plan not found or inactive');
       }
 
-      // 2. Fetch Priority Products (That are not already boosted or have expired boost)
-      const now = new Date();
-      const priorityProducts = await Product.find({
-        vendor_id: vendor_id,
-        is_priority: true,
-        $or: [
-          { is_boosted: { $ne: true } },
-          { boost_expiry: { $lte: now } }
-        ]
+      // 2. Fetch Selected Products
+      const allProducts = await Product.find({
+        _id: { $in: product_ids },
+        vendor_id: vendor_id
       }).session(session);
 
-      if (priorityProducts.length === 0) {
-        throw new Error('No priority products found to boost');
+      if (allProducts.length === 0) {
+        throw new Error('No valid products found');
       }
 
-      // 3. Check for existing active Booster Plan for this vendor
-      const activePurchase = await RentalBoostPlanPurchase.findOne({
-        vendor_id: new mongoose.Types.ObjectId(vendor_id),
-        expiry_date: { $gt: now },
-        payment_status: 'completed'
-      }).sort({ expiry_date: -1 }).session(session);
-
-      let totalPrice = plan.price;
-      let expiryDate = new Date();
-      expiryDate.setDate(now.getDate() + plan.days);
-      const isFreeAddition = !!activePurchase;
-
-      if (isFreeAddition) {
-        totalPrice = 0; // FREE addition to existing active booster period
-        expiryDate = activePurchase.expiry_date; // Synchronize expiry
+      if (allProducts.length !== product_ids.length) {
+        throw new Error('Some products not found or not owned by you');
       }
 
-      // 4. Check Wallet (only if not free)
-      if (totalPrice > 0) {
-        const wallet = await Wallet.findOne({ vendor_id }).session(session);
-        if (!wallet || wallet.wallet_balance < totalPrice) {
-          throw new Error(`Insufficient wallet balance. Total required: ₹${totalPrice}`);
-        }
-        // Deduct Money
-        await walletService.deductMoneyFromWallet(vendor_id, totalPrice, `Bulk Boost for ${priorityProducts.length} products using ${plan.name} (Flat Fee)`);
+      // 3. Calculate total price: PER PRODUCT pricing
+      const totalPrice = plan.price * allProducts.length;
+      
+      // Fixed 30-day counting for bulk as well
+      const now = new Date();
+      const totalDays = plan.days;
+      const months30 = Math.floor(totalDays / 30);
+      const remainingDays = totalDays % 30;
+      
+      let expiryDate = new Date(now);
+      expiryDate.setMonth(expiryDate.getMonth() + months30);
+      expiryDate.setDate(expiryDate.getDate() + remainingDays);
+
+      // 4. Check Wallet
+      const wallet = await Wallet.findOne({ vendor_id }).session(session);
+      if (!wallet || wallet.wallet_balance < totalPrice) {
+        throw new Error(`Insufficient wallet balance. Total required: ₹${totalPrice} for ${allProducts.length} products`);
       }
+      
+      // Deduct Money
+      await walletService.deductMoneyFromWallet(vendor_id, totalPrice, `Bulk Boost for ${allProducts.length} products using ${plan.name} (₹${plan.price} per product)`);
 
       // 5. Update All Products
       const startDate = now;
-      const productIds = priorityProducts.map(p => p._id);
+      const productIds = allProducts.map(p => p._id);
 
       await Product.updateMany(
         { _id: { $in: productIds } },
@@ -233,22 +230,20 @@ const purchaseBulkRentalBoostPlan = {
         { session }
       );
 
-      // 6. Create Purchase Records (only for products that were not already boosted or need record update)
-      // For simplicity, we create records for all products being updated in this bulk action
-      const perProductPrice = isFreeAddition ? 0 : (plan.price / priorityProducts.length).toFixed(2);
-      const purchaseRecords = priorityProducts.map(product => ({
+      // 6. Create Purchase Records for each product
+      const purchaseRecords = allProducts.map(product => ({
         vendor_id: new mongoose.Types.ObjectId(vendor_id),
         vendor_name: req.user.name || 'Vendor',
         product_id: product._id,
         product_name: product.product_name,
         rental_boost_plan_id: plan._id,
         plan_name: plan.name,
-        price: perProductPrice,
-        days: isFreeAddition ? Math.ceil((expiryDate - startDate) / (1000 * 60 * 60 * 24)) : plan.days,
+        price: plan.price, // Full price per product
+        days: plan.days,
         payment_status: 'completed',
         start_date: startDate,
         expiry_date: expiryDate,
-        transaction_id: isFreeAddition ? `RB-FREE-${Date.now()}` : `RB-BULK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+        transaction_id: `RB-BULK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
       }));
 
       await RentalBoostPlanPurchase.insertMany(purchaseRecords, { session });
@@ -256,7 +251,7 @@ const purchaseBulkRentalBoostPlan = {
       await session.commitTransaction();
       res.status(httpStatus.OK).send({
         success: true,
-        message: `Boosted ${priorityProducts.length} priority products successfully!`,
+        message: `Boosted ${allProducts.length} products successfully! ₹${totalPrice} charged (₹${plan.price} per product).`,
       });
     } catch (error) {
       await session.abortTransaction();
@@ -272,6 +267,8 @@ const getVendorRentalBoostPurchases = {
     try {
       const vendor_id = req.user.id || req.user._id;
       const purchases = await RentalBoostPlanPurchase.find({ vendor_id: new mongoose.Types.ObjectId(vendor_id) })
+        .populate('product_id', 'product_name category_name sub_category_name product_type_name expires_at boost_expiry')
+        .populate('rental_boost_plan_id', 'name days price')
         .sort({ createdAt: -1 });
       res.status(httpStatus.OK).send({ success: true, data: purchases });
     } catch (error) {

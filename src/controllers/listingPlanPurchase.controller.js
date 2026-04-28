@@ -91,17 +91,45 @@ const createPurchase = {
 
       // Update product expiry
       const productsToUpdate = await Product.find({ _id: { $in: trulyNewProductIds }, vendor_id });
-      const bulkOps = productsToUpdate.map(product => ({
-        updateOne: {
-          filter: { _id: product._id },
-          update: {
-            $set: {
-              status: 'active',
-              expires_at: purchaseWithSpace.expire_at
-            }
+      const bulkOps = productsToUpdate.map(product => {
+        let updateData = {
+          $set: {
+            status: 'active',
+            expires_at: purchaseWithSpace.expire_at
           }
+        };
+
+        // If product is free and has existing free listing expiry, calculate remaining days
+        if (product.pricing_type === 'free' && product.free_listing_expires_at) {
+          const freeExpiry = new Date(product.free_listing_expires_at);
+          const planStart = new Date(); // Plan starts today
+          const planExpiry = new Date(purchaseWithSpace.expire_at);
+          
+          // Calculate when product was created (30 days before free_listing_expires_at)
+          const productCreatedAt = new Date(freeExpiry);
+          productCreatedAt.setDate(productCreatedAt.getDate() - 30);
+          
+          // Calculate how many free days were USED before plan started
+          const daysUsed = Math.ceil((planStart.getTime() - productCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+          const totalFreeDays = 30;
+          const remainingFreeDays = Math.max(0, totalFreeDays - daysUsed);
+          
+          // After paid plan expires, add the remaining free days
+          const newFreeExpiryAfterPlan = new Date(planExpiry);
+          newFreeExpiryAfterPlan.setDate(newFreeExpiryAfterPlan.getDate() + remainingFreeDays);
+          
+          // Store the remaining free days
+          updateData.$set.free_listing_remaining_days = remainingFreeDays;
+          updateData.$set.free_listing_expires_at = newFreeExpiryAfterPlan;
         }
-      }));
+
+        return {
+          updateOne: {
+            filter: { _id: product._id },
+            update: updateData
+          }
+        };
+      });
 
       if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
 
@@ -146,28 +174,75 @@ const createPurchase = {
       : product_ids;
 
     const start = start_at ? moment(start_at).toDate() : new Date();
-    const commonExpire = moment(start).add(months || 1, 'months').toDate();
+    
+    // Fixed 30-day counting: each month = 30 days
+    const totalDays = months * 30;
+    const months30 = Math.floor(totalDays / 30);
+    const remainingDays = totalDays % 30;
+    
+    const commonExpire = new Date(start);
+    commonExpire.setMonth(commonExpire.getMonth() + months30);
+    commonExpire.setDate(commonExpire.getDate() + remainingDays);
 
     const productsToUpdate = await Product.find({ _id: { $in: assignIds }, vendor_id });
     const bulkOps = productsToUpdate.map(product => {
-      let currentExpiry = product.expires_at ? moment(product.expires_at) : null;
+      let currentExpiry = product.expires_at ? new Date(product.expires_at) : null;
       let newProductExpiry;
 
-      if (currentExpiry && currentExpiry.isAfter(new Date())) {
-        newProductExpiry = currentExpiry.add(months, 'months').toDate();
+      if (currentExpiry && currentExpiry > new Date()) {
+        // Extend from current expiry using 30-day months
+        const totalDays = months * 30;
+        const months30 = Math.floor(totalDays / 30);
+        const remainingDays = totalDays % 30;
+        
+        newProductExpiry = new Date(currentExpiry);
+        newProductExpiry.setMonth(newProductExpiry.getMonth() + months30);
+        newProductExpiry.setDate(newProductExpiry.getDate() + remainingDays);
       } else {
-        newProductExpiry = moment(start).add(months, 'months').toDate();
+        // Fixed 30-day counting from start
+        const totalDays = months * 30;
+        const months30 = Math.floor(totalDays / 30);
+        const remainingDays = totalDays % 30;
+        
+        newProductExpiry = new Date(start);
+        newProductExpiry.setMonth(newProductExpiry.getMonth() + months30);
+        newProductExpiry.setDate(newProductExpiry.getDate() + remainingDays);
+      }
+
+      let updateData = {
+        $set: {
+          status: 'active',
+          expires_at: newProductExpiry
+        }
+      };
+
+      // If product is free and has existing free listing expiry, calculate remaining days
+      if (product.pricing_type === 'free' && product.free_listing_expires_at) {
+        const freeExpiry = new Date(product.free_listing_expires_at);
+        const planStart = new Date(); // Plan starts today
+        
+        // Calculate when product was created (30 days before free_listing_expires_at)
+        const productCreatedAt = new Date(freeExpiry);
+        productCreatedAt.setDate(productCreatedAt.getDate() - 30);
+        
+        // Calculate how many free days were USED before plan started
+        const daysUsed = Math.ceil((planStart.getTime() - productCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const totalFreeDays = 30;
+        const remainingFreeDays = Math.max(0, totalFreeDays - daysUsed);
+        
+        // After paid plan expires, add the remaining free days
+        const newFreeExpiryAfterPlan = new Date(newProductExpiry);
+        newFreeExpiryAfterPlan.setDate(newFreeExpiryAfterPlan.getDate() + remainingFreeDays);
+        
+        // Store the remaining free days
+        updateData.$set.free_listing_remaining_days = remainingFreeDays;
+        updateData.$set.free_listing_expires_at = newFreeExpiryAfterPlan;
       }
 
       return {
         updateOne: {
           filter: { _id: product._id },
-          update: {
-            $set: {
-              status: 'active',
-              expires_at: newProductExpiry
-            }
-          }
+          update: updateData
         }
       };
     });
