@@ -1000,14 +1000,25 @@ const getVendorProducts = {
         };
       });
 
-      res.status(200).json({
+      const responseObj = {
         success: true,
         total,
         page: limit ? page : 1,
         limit: limit || total,
         totalPages: limit ? Math.ceil(total / limit) : 1,
         data: normalized,
-      });
+      };
+
+      // If specific vendor is queried, fetch their videos
+      if (vendor_id) {
+        const Vendor = require('../models/vendor/vendor.model');
+        const v = await Vendor.findById(vendor_id).select('store_videos');
+        if (v && v.store_videos) {
+          responseObj.vendor_videos = v.store_videos;
+        }
+      }
+
+      res.status(200).json(responseObj);
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,

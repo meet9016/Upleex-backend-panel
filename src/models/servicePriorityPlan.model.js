@@ -6,8 +6,10 @@ const servicePriorityPlanSchema = new mongoose.Schema(
     plan_name: { type: String, default: "Priority Plan" },
     monthly_price: { type: Number, required: true },
     yearly_price: { type: Number, required: true },
-    addon_price: { type: Number, default: 129 },
+    addon_price: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    is_popular: { type: Boolean, default: false },
+    features: { type: [String], default: [] },
   },
   { timestamps: true }
 );

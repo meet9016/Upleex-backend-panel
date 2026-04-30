@@ -86,6 +86,25 @@ router.get(
   catchAsync(kycController.downloadKycPDF.handler)
 );
 
+// Store video endpoints
+router.post(
+  '/vendor-store-video',
+  auth(),
+  upload.single('video'),
+  catchAsync(kycController.uploadStoreVideo.handler)
+);
+
+router.get(
+  '/vendor-store-video',
+  auth(),
+  catchAsync(kycController.getStoreVideos.handler)
+);
+
+router.delete(
+  '/vendor-store-video',
+  auth(),
+  catchAsync(kycController.deleteStoreVideo.handler)
+);
 // Location Routes
 router.post(
   '/vendor-country-list',

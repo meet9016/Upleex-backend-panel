@@ -20,6 +20,7 @@ const createPriorityPlan = {
       addon_available_for_yearly: Joi.boolean().default(true),
       addon_price_per_year: Joi.number().min(0).default(0),
       addon_max_slots: Joi.number().integer().min(0).default(0),
+      features: Joi.array().items(Joi.string()).default([]),
     }),
   },
   handler: async (req, res) => {
@@ -64,6 +65,7 @@ const updatePriorityPlan = {
       addon_available_for_yearly: Joi.boolean(),
       addon_price_per_year: Joi.number().min(0),
       addon_max_slots: Joi.number().integer().min(0),
+      features: Joi.array().items(Joi.string()),
     }),
   },
   handler: async (req, res) => {

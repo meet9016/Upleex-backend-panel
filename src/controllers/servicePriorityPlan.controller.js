@@ -9,6 +9,8 @@ const createPlan = {
       yearly_price: Joi.number().min(0).required(),
       addon_price: Joi.number().min(0).default(129),
       status: Joi.string().valid('active', 'inactive').default('active'),
+      is_popular: Joi.boolean().default(false),
+      features: Joi.array().items(Joi.string()).default([]),
     }),
   },
   handler: async (req, res) => {
@@ -26,6 +28,16 @@ const getAllPlans = {
 };
 
 const updatePlan = {
+  validation: {
+    body: Joi.object().keys({
+      monthly_price: Joi.number().min(0),
+      yearly_price: Joi.number().min(0),
+      addon_price: Joi.number().min(0),
+      status: Joi.string().valid('active', 'inactive'),
+      is_popular: Joi.boolean(),
+      features: Joi.array().items(Joi.string()),
+    }),
+  },
   handler: async (req, res) => {
     const { _id } = req.params;
     const plan = await ServicePriorityPlan.findByIdAndUpdate(_id, req.body, { new: true });

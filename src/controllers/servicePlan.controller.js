@@ -11,6 +11,8 @@ const createPlan = {
       amount: Joi.number().min(0).required(),
       max_services: Joi.number().integer().min(0).default(0),
       status: Joi.string().valid('active', 'inactive').default('active'),
+      is_popular: Joi.boolean().default(false),
+      features: Joi.array().items(Joi.string()).default([]),
     }),
   },
   handler: async (req, res) => {
@@ -69,6 +71,8 @@ const updatePlan = {
         amount: Joi.number().min(0),
         max_services: Joi.number().integer().min(0),
         status: Joi.string().valid('active', 'inactive'),
+        is_popular: Joi.boolean(),
+        features: Joi.array().items(Joi.string()),
       })
       .prefs({ convert: true }),
   },

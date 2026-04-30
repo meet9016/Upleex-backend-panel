@@ -8,6 +8,7 @@ const rentalBoostPlanSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     is_popular: { type: Boolean, default: false },
+    features: { type: [String], default: [] },
   },
   { timestamps: true }
 );

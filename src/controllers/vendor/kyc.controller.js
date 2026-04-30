@@ -940,6 +940,119 @@ const getApprovedLogos = {
   }
 };
 
+const uploadStoreVideo = {
+  handler: async (req, res) => {
+    try {
+      const vendor_id = req.user.id || req.user._id;
+      if (!req.file) {
+        return res.status(400).json({ message: 'No video file uploaded' });
+      }
+      
+      const fs = require('fs');
+      const path = require('path');
+      const ext = path.extname(req.file.originalname) || '.mp4';
+      const fileName = `video_${vendor_id}_${Date.now()}${ext}`;
+      const compressedFileName = `compressed_${fileName}`;
+      const uploadDir = path.join(process.cwd(), 'uploads', 'vendor_videos');
+      
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      const finalFilePath = path.join(uploadDir, fileName);
+      const compressedFilePath = path.join(uploadDir, compressedFileName);
+      
+      // Save original file immediately for fast response
+      fs.writeFileSync(finalFilePath, req.file.buffer);
+
+      // Return response instantly so frontend doesn't hang
+      const url = `${req.protocol}://${req.get('host')}/uploads/vendor_videos/${fileName}`;
+      
+      await Vendor.findByIdAndUpdate(vendor_id, {
+        $push: { store_videos: url }
+      });
+      
+      res.status(200).json({ success: true, message: 'Video uploaded successfully', video_url: url });
+
+      // Run compression in the background
+      const ffmpeg = require('fluent-ffmpeg');
+      const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+      ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+      
+      ffmpeg(finalFilePath)
+        .outputOptions([
+          '-vcodec libx264',
+          '-crf 28',
+          '-preset veryfast',
+        ])
+        .save(compressedFilePath)
+        .on('end', () => {
+          // Once compressed, replace the original file
+          if (fs.existsSync(compressedFilePath)) {
+             fs.renameSync(compressedFilePath, finalFilePath);
+          }
+        })
+        .on('error', (err) => {
+          // If compression fails, just clean up the temp file and keep original
+          if (fs.existsSync(compressedFilePath)) {
+            fs.unlinkSync(compressedFilePath);
+          }
+          console.error("Video compression failed:", err);
+        });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+};
+
+const getStoreVideos = {
+  handler: async (req, res) => {
+    try {
+      const vendor_id = req.user.id || req.user._id;
+      const Vendor = require('../../models/vendor/vendor.model');
+      const vendor = await Vendor.findById(vendor_id).select('store_videos');
+      return res.status(200).json({ success: true, videos: vendor?.store_videos || [] });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+};
+
+const deleteStoreVideo = {
+  handler: async (req, res) => {
+    try {
+      const vendor_id = req.user.id || req.user._id;
+      const { video_url } = req.body;
+      if (!video_url) return res.status(400).json({ message: 'Video URL required' });
+
+      const Vendor = require('../../models/vendor/vendor.model');
+      await Vendor.findByIdAndUpdate(vendor_id, {
+        $pull: { store_videos: video_url }
+      });
+
+      // Attempt to delete file from local storage if it's stored locally
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const urlParts = video_url.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        if (fileName) {
+          const filePath = path.join(process.cwd(), 'uploads', 'vendor_videos', fileName);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to delete video file:", err);
+      }
+
+      return res.status(200).json({ success: true, message: 'Video deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+};
+
 module.exports = {
   saveKyc,
   getSingleKyc,
@@ -951,4 +1064,7 @@ module.exports = {
   downloadKycPDF,
   updateVendorType,
   getApprovedLogos,
+  uploadStoreVideo,
+  getStoreVideos,
+  deleteStoreVideo,
 };

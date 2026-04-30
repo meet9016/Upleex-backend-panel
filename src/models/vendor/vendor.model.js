@@ -41,6 +41,10 @@ const vendorSchema = new mongoose.Schema({
   otp: {
     type: String,
   },
+  store_videos: {
+    type: [String],
+    default: [],
+  },
   fcmTokens: {
     type: [String],
     default: [],
