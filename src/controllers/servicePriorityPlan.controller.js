@@ -15,6 +15,10 @@ const createPlan = {
   },
   handler: async (req, res) => {
     const data = req.body;
+    // If this plan is marked as popular, remove popular from all other plans
+    if (data.is_popular) {
+      await ServicePriorityPlan.updateMany({}, { is_popular: false });
+    }
     const plan = await ServicePriorityPlan.create(data);
     res.status(httpStatus.CREATED).send({ success: true, data: plan });
   },
@@ -40,6 +44,10 @@ const updatePlan = {
   },
   handler: async (req, res) => {
     const { _id } = req.params;
+    // If this plan is being marked as popular, remove popular from all other plans
+    if (req.body.is_popular === true) {
+      await ServicePriorityPlan.updateMany({ _id: { $ne: _id } }, { is_popular: false });
+    }
     const plan = await ServicePriorityPlan.findByIdAndUpdate(_id, req.body, { new: true });
     res.send({ success: true, data: plan });
   },

@@ -20,6 +20,10 @@ const createRentalBoostPlan = {
   },
   handler: async (req, res) => {
     try {
+      // If this plan is marked as popular, remove popular from all other plans
+      if (req.body.is_popular) {
+        await RentalBoostPlan.updateMany({}, { is_popular: false });
+      }
       const plan = await RentalBoostPlan.create(req.body);
       res.status(httpStatus.CREATED).send({ success: true, message: 'Rental boost plan created successfully', data: plan });
     } catch (error) {
@@ -60,6 +64,10 @@ const updateRentalBoostPlan = {
   },
   handler: async (req, res) => {
     try {
+      // If this plan is being marked as popular, remove popular from all other plans
+      if (req.body.is_popular === true) {
+        await RentalBoostPlan.updateMany({ _id: { $ne: req.params._id } }, { is_popular: false });
+      }
       const plan = await RentalBoostPlan.findByIdAndUpdate(req.params._id, req.body, { new: true });
       if (!plan) return res.status(httpStatus.NOT_FOUND).send({ success: false, message: 'Plan not found' });
       res.status(httpStatus.OK).send({ success: true, message: 'Rental boost plan updated successfully', data: plan });

@@ -23,6 +23,11 @@ const createPlan = {
       return res.status(httpStatus.BAD_REQUEST).json({ message: 'Plan name already exists' });
     }
     
+    // If this plan is marked as popular, remove popular from all other plans
+    if (data.is_popular) {
+      await ServicePlan.updateMany({}, { is_popular: false });
+    }
+    
     const plan = await ServicePlan.create(data);
     return res.status(201).json({ success: true, message: 'Service plan created', data: plan });
   },
@@ -86,6 +91,11 @@ const updatePlan = {
       body.plan_name = String(body.plan_name || '').trim().toLowerCase();
       const dup = await ServicePlan.findOne({ _id: { $ne: _id }, plan_name: body.plan_name });
       if (dup) return res.status(httpStatus.BAD_REQUEST).json({ message: 'Plan name already exists' });
+    }
+    
+    // If this plan is being marked as popular, remove popular from all other plans
+    if (body.is_popular === true) {
+      await ServicePlan.updateMany({ _id: { $ne: _id } }, { is_popular: false });
     }
     
     const updated = await ServicePlan.findByIdAndUpdate(_id, body, { new: true });
