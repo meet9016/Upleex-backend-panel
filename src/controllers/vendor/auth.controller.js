@@ -117,7 +117,7 @@ const vendorLogin = catchAsync(async (req, res) => {
   const vendor = await Vendor.findOne({ number });
 
   if (!vendor) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor not found');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor not found with this mobile number');
   }
 
   const isOtpProvided = otp && otp.trim() !== '';
