@@ -7,7 +7,7 @@ const adminSockets = new Set(); // set of admin socketIds
 
 const init = (server) => {
   io = new Server(server, {
-    path: '/api/api/socket.io',
+    path: process.env.SOCKET_PATH || '/api/socket.io',
     cors: {
       origin: function(origin, callback) {
         const allowedOrigins = [
@@ -35,11 +35,11 @@ const init = (server) => {
       methods: ['GET', 'POST'],
       credentials: true,
     },
-    transports: ['polling'],
-    pingTimeout: 60000,       // 60s — wait before declaring connection dead
-    pingInterval: 25000,      // 25s — heartbeat every 25s
-    upgradeTimeout: 30000,    // 30s — time to upgrade from polling to websocket
-    maxHttpBufferSize: 1e6,   // 1MB
+    transports: ['polling', 'websocket'],
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e6,
   });
 
    console.log('[Socket] Socket.io initialized');
