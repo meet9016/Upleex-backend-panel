@@ -25,7 +25,8 @@ const init = (server) => {
           'https://upleex.digitalks.co.in',
         ];
         
-        if (!origin || allowedOrigins.includes(origin)) {
+        // if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.some(o => origin.startsWith(o))){
           callback(null, true);
         } else {
           callback(new Error('Not allowed by CORS'));
