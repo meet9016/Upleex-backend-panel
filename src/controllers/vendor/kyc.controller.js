@@ -1,6 +1,7 @@
 const Joi = require('joi');
 const httpStatus = require('http-status');
 const VendorKyc = require('../../models/vendor/vendorKyc.model');
+const PriorityPlanPurchase = require('../../models/priorityPlanPurchase.model');
 const Vendor = require('../../models/vendor/vendor.model');
 const { AccountType } = require('../../models');
 const { uploadToExternalService } = require('../../utils/fileUpload');
@@ -944,6 +945,22 @@ const uploadStoreVideo = {
   handler: async (req, res) => {
     try {
       const vendor_id = req.user.id || req.user._id;
+
+      // Check: only Priority Plan + Yearly vendors can upload videos
+      const activePriorityYearly = await PriorityPlanPurchase.findOne({
+        vendor_id,
+        plan_duration: 'yearly',
+        status: 'active',
+        expire_at: { $gt: new Date() },
+      });
+
+      if (!activePriorityYearly) {
+        return res.status(403).json({
+          success: false,
+          message: 'Video upload is only available for vendors with an active Yearly Priority Plan.'
+        });
+      }
+
       if (!req.file) {
         return res.status(400).json({ message: 'No video file uploaded' });
       }
