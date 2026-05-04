@@ -400,17 +400,7 @@ const createProduct = {
           return res.status(httpStatus.BAD_REQUEST).json({ message: 'Price is required for Sell' });
         }
       }
-      const existing = await Product.findOne({
-        product_name: data.product_name,
-        category_id: data.category_id,
-        sub_category_id: data.sub_category_id,
-      });
 
-      if (existing) {
-        return res
-          .status(httpStatus.BAD_REQUEST)
-          .json({ message: 'Product with this name already exists' });
-      }
 
       // Set expiry date to 1 month from creation date
       const expiryDate = new Date();
@@ -1330,18 +1320,7 @@ const updateProduct = {
         }
       }
 
-      const duplicate = await Product.findOne({
-        _id: { $ne: _id },
-        product_name: body.product_name,
-        category_id: body.category_id,
-        sub_category_id: body.sub_category_id,
-      });
 
-      if (duplicate) {
-        return res.status(httpStatus.BAD_REQUEST).json({
-          message: 'Product with this name already exists',
-        });
-      }
 
       const updateData = {
         ...body,
