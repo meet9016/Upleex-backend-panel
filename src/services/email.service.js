@@ -782,6 +782,9 @@ const sendOrderConfirmationEmail = async (to, orderData) => {
           <div>
             <p style="margin: 0; font-weight: bold; color: #232323;">${item.product_name}</p>
             <p style="margin: 2px 0; font-size: 14px; color: #666;">Qty: ${item.quantity} × ₹${item.price.toLocaleString('en-IN')}</p>
+            ${item.vendor_name ? `<p style="margin: 4px 0 2px; font-size: 13px; color: #4F46E5;"><strong>Sold by:</strong> ${item.vendor_name}</p>` : ''}
+            ${item.vendor_address ? `<p style="margin: 2px 0; font-size: 13px; color: #666;">📍 ${item.vendor_address}${item.vendor_city ? `, ${item.vendor_city}` : ''}</p>` : ''}
+            ${item.vendor_mobile ? `<p style="margin: 2px 0; font-size: 13px; color: #666;">📞 ${item.vendor_mobile}</p>` : ''}
           </div>
         </div>
       </td>

@@ -1415,7 +1415,7 @@ const verifyQuotePayment = {
         }
 
         // Find and update quote
-        const existingQuote = await GetQuote.findById(quote_id);
+        const existingQuote = await GetQuote.findById(quote_id).populate('product_id');
         if (!existingQuote) {
           return res.status(httpStatus.NOT_FOUND).json({
             success: false,
@@ -1430,6 +1430,33 @@ const verifyQuotePayment = {
         existingQuote.razorpay_signature = razorpay_signature;
 
         await existingQuote.save();
+
+        // Enrich with vendor details for Success Modal
+        let enrichedQuote = existingQuote.toObject();
+        if (existingQuote.product_id && existingQuote.product_id.vendor_id) {
+          try {
+            const mongoose = require('mongoose');
+            const Vendor = mongoose.model('Vendor');
+            const VendorKyc = mongoose.model('VendorKyc');
+            const vendorId = existingQuote.product_id.vendor_id;
+            
+            const vendor = await Vendor.findById(vendorId).lean();
+            if (vendor) {
+              const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
+              const identity = (kyc?.Identity && Array.isArray(kyc.Identity)) ? kyc.Identity[0] : (kyc?.Identity || {});
+              const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+              
+              enrichedQuote.vendor_details = {
+                vendor_name: identity.business_name || vendor.business_name || vendor.businessName || 'Vendor',
+                vendor_address: contact.address || vendor.address || '',
+                vendor_city: contact.city_name || vendor.city_name || vendor.city || '',
+                vendor_mobile: contact.mobile || vendor.mobile || vendor.phone || ''
+              };
+            }
+          } catch (e) {
+            console.error('Error enriching quote with vendor details:', e);
+          }
+        }
 
         // Notify admin about quote payment
         try {
@@ -1449,7 +1476,7 @@ const verifyQuotePayment = {
         return res.status(httpStatus.OK).json({
           success: true,
           message: 'Quote payment verified and status updated',
-          data: existingQuote
+          data: enrichedQuote
         });
       }
 

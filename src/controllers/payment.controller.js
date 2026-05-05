@@ -250,18 +250,43 @@ const verifyPayment = catchAsync(async (req, res) => {
     }
   }
 
+  // Enrich order with vendor details for email
+  let enrichedOrder = order.toObject();
+  try {
+    const mongoose = require('mongoose');
+    const Vendor = mongoose.model('Vendor');
+    const VendorKyc = mongoose.model('VendorKyc');
+    
+    for (const item of enrichedOrder.items) {
+      if (item.vendor_id) {
+        const vendor = await Vendor.findById(item.vendor_id).lean();
+        if (vendor) {
+          const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendor._id }).lean();
+          const contact = (kyc?.ContactDetails && Array.isArray(kyc.ContactDetails)) ? kyc.ContactDetails[0] : (kyc?.ContactDetails || {});
+          
+          item.vendor_name = vendor.business_name || vendor.businessName || 'Vendor';
+          item.vendor_address = contact.address || vendor.address || '';
+          item.vendor_city = contact.city_name || vendor.city_name || vendor.city || '';
+          item.vendor_mobile = contact.mobile || vendor.mobile || vendor.number || vendor.phone || '';
+        }
+      }
+    }
+  } catch (enrichError) {
+    console.error('Error enriching order with vendor details for email:', enrichError);
+  }
+
   // Send order confirmation email
   try {
     const userEmail = order.user_email;
     
     if (userEmail && userEmail.includes('@')) {
-      await sendOrderConfirmationEmail(userEmail, order.toObject());
+      await sendOrderConfirmationEmail(userEmail, enrichedOrder);
     } else {
       const User = require('../models/user.model');
       const userFromDB = await User.findById(order.user_id);
       if (userFromDB && userFromDB.email) {
         const fallbackEmail = userFromDB.email;
-        await sendOrderConfirmationEmail(fallbackEmail, order.toObject());
+        await sendOrderConfirmationEmail(fallbackEmail, enrichedOrder);
         order.user_email = fallbackEmail;
         await order.save();
       }
@@ -309,6 +334,7 @@ const verifyPayment = catchAsync(async (req, res) => {
       order_id: order.order_id,
       payment_status: order.payment_status,
       order_status: order.order_status,
+      order_details: enrichedOrder,
     },
   });
 });
