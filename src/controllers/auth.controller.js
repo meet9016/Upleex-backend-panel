@@ -349,7 +349,7 @@ const webLoginRegister = {
         const origin = req.get('origin') || '';
         const referer = req.get('referer') || '';
         // Case 1: Web Frontend (url matches 'upleex.com' or standard headers)
-        const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+        const allowedDomains = ['upleex.com', 'https://upleex.com', 'vendor.upleex.com'];
         const isFromWebsite =
           allowedDomains.some(domain =>
             url === domain ||
@@ -393,7 +393,7 @@ const webLoginRegister = {
       if (!detectedPlatform) {
         const origin = req.get('origin') || '';
         const referer = req.get('referer') || '';
-        const isFromWebsite = ['upleex.com', 'vendor.upleex.com'].some(domain =>
+        const isFromWebsite = ['upleex.com','https://upleex.com', 'vendor.upleex.com'].some(domain =>
           url === domain || origin.includes(domain) || referer.includes(domain)
         );
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');

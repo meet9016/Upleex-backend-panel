@@ -29,7 +29,7 @@ const businessRegister = catchAsync(async (req, res) => {
     const referer = req.get('referer') || '';
 
     // Check if the domain is allowed
-    const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+    const allowedDomains = ['upleex.com','https://upleex.com', 'vendor.upleex.com'];
     const isFromWebsite =
       allowedDomains.some(domain =>
         url === domain ||
@@ -127,7 +127,7 @@ const vendorLogin = catchAsync(async (req, res) => {
     const referer = req.get('referer') || '';
 
     // Check if the domain is allowed
-    const allowedDomains = ['upleex.com', 'vendor.upleex.com'];
+    const allowedDomains = ['upleex.com','https://upleex.com', 'vendor.upleex.com'];
     const isFromWebsite =
       allowedDomains.some(domain =>
         url === domain ||
