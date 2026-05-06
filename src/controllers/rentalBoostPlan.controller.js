@@ -276,11 +276,25 @@ const getVendorRentalBoostPurchases = {
   handler: async (req, res) => {
     try {
       const vendor_id = req.user.id || req.user._id;
-      const purchases = await RentalBoostPlanPurchase.find({ vendor_id: new mongoose.Types.ObjectId(vendor_id) })
+      const { filter_rent_sell } = req.query;
+      
+      let purchases = await RentalBoostPlanPurchase.find({ vendor_id: new mongoose.Types.ObjectId(vendor_id) })
         .populate('product_id', 'product_name category_name sub_category_name product_type_name expires_at boost_expiry')
         .populate('rental_boost_plan_id', 'name days price')
         .sort({ createdAt: -1 });
-      res.status(httpStatus.OK).send({ success: true, data: purchases });
+      
+      if (filter_rent_sell) {
+        const targetProductType = filter_rent_sell === '1' ? 'Rent' : 'Sell';
+        
+        purchases = purchases.filter(purchase => {
+          return purchase.product_id && 
+            String(purchase.product_id.product_type_name).toLowerCase() === targetProductType.toLowerCase();
+        });
+      }
+      
+      const total = purchases.length;
+      
+      res.status(httpStatus.OK).send({ success: true, data: purchases, total });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).send({ success: false, message: error.message });
     }

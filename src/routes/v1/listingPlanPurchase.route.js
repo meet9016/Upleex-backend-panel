@@ -36,6 +36,12 @@ router.get(
 );
 
 router.get(
+  '/vendor/purchases',
+  auth(),
+  catchAsync(listingPlanPurchaseController.getVendorListingPurchases.handler)
+);
+
+router.get(
   '/getById/:_id',
   catchAsync(listingPlanPurchaseController.getPurchaseById.handler)
 );

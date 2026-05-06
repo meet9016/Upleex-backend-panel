@@ -285,10 +285,11 @@ const getAllPurchases = {
       q: Joi.string().allow(''),
       page: Joi.number().integer().min(1),
       limit: Joi.number().integer().min(1).max(200),
+      filter_rent_sell: Joi.string().allow(''),
     }),
   },
   handler: async (req, res) => {
-    const { vendor_id, plan_type, amount, start_month, expire_month, q: searchText } = req.query;
+    const { vendor_id, plan_type, amount, start_month, expire_month, q: searchText, filter_rent_sell } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
     const query = {};
@@ -336,16 +337,10 @@ const getAllPurchases = {
       query.$or = dateConditions;
     }
 
-    let mongo = ListingPlanPurchase.find(query).populate('product_ids', 'product_name category_name sub_category_name expires_at').sort({ createdAt: -1 });
-    let data;
-    if (searchText) {
-      data = await mongo;
-    } else {
-      if (limit) mongo = mongo.skip((page - 1) * limit).limit(limit);
-      data = await mongo;
-    }
+    let mongo = ListingPlanPurchase.find(query).populate('product_ids', 'product_name category_name sub_category_name product_type_name expires_at').sort({ createdAt: -1 });
+    let allData = await mongo;
 
-    const vendorIds = [...new Set(data.map((d) => d.vendor_id).filter(Boolean))];
+    const vendorIds = [...new Set(allData.map((d) => d.vendor_id).filter(Boolean))];
     let vendorMap = {};
     if (vendorIds.length) {
       const kycs = await VendorKyc.find(
@@ -360,23 +355,40 @@ const getAllPurchases = {
       });
     }
 
-    let enriched = data.map((d) => {
+    let enriched = allData.map((d) => {
       const obj = d.toObject ? d.toObject() : d;
       return { ...obj, vendor_name: vendorMap[String(d.vendor_id)] || '' };
     });
+
+    if (filter_rent_sell) {
+      const targetProductType = filter_rent_sell === '1' ? 'Rent' : 'Sell';
+      
+      enriched = enriched.map(purchase => {
+        purchase.product_ids = purchase.product_ids.filter(product => 
+          product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
+        );
+        return purchase;
+      });
+    }
 
     if (searchText) {
       const s = String(searchText).toLowerCase();
       enriched = enriched.filter((e) => (e.vendor_name || '').toLowerCase().includes(s));
     }
 
-    const total = searchText ? enriched.length : await ListingPlanPurchase.countDocuments(query);
+    const total = enriched.length;
+    
+    let totalCount = 0;
+    enriched.forEach(purchase => {
+      totalCount += purchase.product_ids?.length || 0;
+    });
+
     let paged = enriched;
     if (limit) {
       const startIdx = (page - 1) * limit;
       paged = enriched.slice(startIdx, startIdx + limit);
     }
-
+    
     res.status(200).json({
       success: true,
       total,
@@ -384,6 +396,7 @@ const getAllPurchases = {
       limit: limit || total,
       totalPages: limit ? Math.ceil(total / limit) : 1,
       data: paged,
+      totalCount,
     });
   },
 };
@@ -466,6 +479,39 @@ const updatePurchase = {
   },
 };
 
+const getVendorListingPurchases = {
+  handler: async (req, res) => {
+    const vendor_id = req.user.id || req.user._id;
+    const { filter_rent_sell } = req.query;
+
+    let purchases = await ListingPlanPurchase.find({
+      vendor_id,
+      expire_at: { $gt: new Date() }
+    })
+      .populate('product_ids', 'product_name category_name sub_category_name product_type_name expires_at')
+      .sort({ createdAt: -1 });
+
+    if (filter_rent_sell) {
+      const targetProductType = filter_rent_sell === '1' ? 'Rent' : 'Sell';
+
+      purchases = purchases.map(purchase => {
+        const obj = purchase.toObject();
+        obj.product_ids = (obj.product_ids || []).filter(product =>
+          product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
+        );
+        return obj;
+      });
+    }
+
+    let total = 0;
+    purchases.forEach(purchase => {
+      total += purchase.product_ids?.length || 0;
+    });
+
+    return res.status(200).json({ success: true, data: purchases, total });
+  },
+};
+
 const deletePurchase = {
   handler: async (req, res) => {
     const { _id } = req.params;
@@ -533,4 +579,5 @@ module.exports = {
   deletePurchase,
   getPlanOptions,
   customPlanRequest,
+  getVendorListingPurchases,
 };

@@ -84,8 +84,9 @@ const exportToExcel = async (res, data, columns, filename, sheetName = 'Sheet1')
  * @param {String} filename - Output filename
  * @param {String} title - Report title
  * @param {Function} rowMapper - Function to map data item to row array
+ * @param {Object} options - PDF options { size, layout }
  */
-const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMapper) => {
+const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMapper, options = {}) => {
   return new Promise((resolve, reject) => {
     try {
       console.log('exportToPDF called with data length:', data.length);
@@ -96,7 +97,11 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
         return resolve();
       }
 
-      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      const doc = new PDFDocument({ 
+        margin: 30, 
+        size: options.size || 'A4',
+        layout: options.layout || 'portrait'
+      });
       const brandColor = '#4A90E2';
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
 
