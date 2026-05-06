@@ -188,7 +188,9 @@ const getVendorReport = catchAsync(async (req, res) => {
           revenue: totalQuoteRevenue
         },
         revenue: {
-          total: totalOrderRevenue + totalQuoteRevenue,
+          total_sell_value: totalOrders * totalOrderRevenue,
+          total_rent_value: totalQuotes * totalQuoteRevenue,
+          total: (totalOrders * totalOrderRevenue) + (totalQuotes * totalQuoteRevenue),
           from_orders: totalOrderRevenue,
           from_quotes: totalQuoteRevenue
         },

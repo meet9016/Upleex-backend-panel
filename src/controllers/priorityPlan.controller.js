@@ -332,12 +332,38 @@ const purchasePriorityPlan = {
 const getVendorPriorityPurchases = {
   handler: async (req, res) => {
     const vendor_id = req.user.id || req.user._id;
-    const purchases = await PriorityPlanPurchase.find({
+    const { filter_rent_sell } = req.query;
+    
+    let purchases = await PriorityPlanPurchase.find({
       vendor_id,
       status: 'active',
       expire_at: { $gt: new Date() }
+    }).populate('product_ids', 'product_name category_name sub_category_name product_type_name expires_at priority_expiry').populate('addon_product_ids', 'product_name category_name sub_category_name product_type_name expires_at');
+    
+    if (filter_rent_sell) {
+      const targetProductType = filter_rent_sell === '1' ? 'Rent' : 'Sell';
+      
+      purchases = purchases.map(purchase => {
+        const obj = purchase.toObject();
+        
+        obj.product_ids = obj.product_ids.filter(product => 
+          product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
+        );
+        
+        obj.addon_product_ids = obj.addon_product_ids.filter(product => 
+          product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
+        );
+        
+        return obj;
+      });
+    }
+    
+    let total = 0;
+    purchases.forEach(purchase => {
+      total += (purchase.product_ids?.length || 0) + (purchase.addon_product_ids?.length || 0);
     });
-    return res.status(200).json({ success: true, data: purchases });
+    
+    return res.status(200).json({ success: true, data: purchases, total });
   },
 };
 

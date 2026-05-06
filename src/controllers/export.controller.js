@@ -137,7 +137,7 @@ const exportProductsToPDF = {
             product.product_name || '',
             product.category_name || '',
             product.product_type_name || '',
-            product.price ? `₹${Number(product.price).toFixed(2)}` : '₹0.00',
+            product.price ? `${Number(product.price).toFixed(2)}` : '0.00',
             product.status || '',
             product.vendor_name || 'N/A'
           ];
@@ -243,7 +243,7 @@ const exportQuotesToPDF = {
           quote._id.toString().slice(-8),
           quote.product_id?.product_name || '',
           quote.qty || '1',
-          quote.calculated_price ? `₹${Number(quote.calculated_price).toFixed(2)}` : '₹0.00',
+          quote.calculated_price ? `${Number(quote.calculated_price).toFixed(2)}` : '0.00',
           quote.status || ''
         ];
 
@@ -367,7 +367,7 @@ const exportOrdersToPDF = {
         return [
           `#${order.order_id}`,
           order.user_id?.name || 'N/A',
-          `₹${Number(vendorTotal).toFixed(2)}`,
+          `${Number(vendorTotal).toFixed(2)}`,
           order.vendor_status || 'pending',
           new Date(order.createdAt).toLocaleDateString()
         ];
@@ -405,7 +405,7 @@ const exportPaymentsToPDF = {
 
       const rowMapper = (payment) => [
         `#${payment.order_id?.order_id || 'N/A'}`,
-        `₹${Number(payment.vendor_amount).toFixed(2)}`,
+        `${Number(payment.vendor_amount).toFixed(2)}`,
         payment.payment_status,
         new Date(payment.delivered_at).toLocaleDateString(),
         new Date(payment.release_date).toLocaleDateString()
@@ -503,7 +503,7 @@ const exportWalletTransactionsToPDF = {
       const rowMapper = (t) => [
         t.description || '',
         t.type?.toUpperCase() || '',
-        `₹${Number(t.amount).toFixed(2)}`,
+        `${Number(t.amount).toFixed(2)}`,
         t.status?.toUpperCase() || '',
         new Date(t.createdAt).toLocaleDateString('en-IN')
       ];
@@ -588,7 +588,7 @@ const exportServicesToPDF = {
       const rowMapper = (s) => [
         s.service_name || '',
         s.category_name || '',
-        s.price ? `₹${Number(s.price).toFixed(2)}` : '₹0.00',
+        s.price ? `${Number(s.price).toFixed(2)}` : '0.00',
         s.status || '',
         s.duration || ''
       ];
@@ -810,9 +810,9 @@ const exportVendorWalletsToPDF = {
       const rowMapper = (wallet) => [
         wallet.vendor_id?.full_name || 'N/A',
         wallet.vendor_id?.email || 'N/A',
-        `₹${Number(wallet.balance || 0).toFixed(2)}`,
-        `₹${Number(wallet.total_credited || 0).toFixed(2)}`,
-        `₹${Number(wallet.total_debited || 0).toFixed(2)}`,
+        `${Number(wallet.balance || 0).toFixed(2)}`,
+        `${Number(wallet.total_credited || 0).toFixed(2)}`,
+        `${Number(wallet.total_debited || 0).toFixed(2)}`,
         wallet.is_active ? 'Active' : 'Inactive',
         wallet.transaction_count || 0
       ];
@@ -833,61 +833,33 @@ const exportVendorWalletsToPDF = {
 const exportVendorReportToExcel = {
   handler: async (req, res) => {
     try {
-      const { 
-        vendor_type, 
-        date_range, 
-        start_date, 
-        end_date,
-        search
-      } = req.query;
+      const { vendor_type, date_range, start_date, end_date, search, min_revenue, max_revenue } = req.query;
 
-      console.log('Excel Export Params:', { vendor_type, date_range, start_date, end_date, search });
-
-      // Get all vendors with products or services
-      const vendorIdsWithProducts = await Product.distinct('vendor_id');
-      const vendorIdsWithServices = await Service.distinct('vendor_id');
-      const allVendorIds = [...new Set([...vendorIdsWithProducts, ...vendorIdsWithServices])];
-      
       const vendorQuery = {};
-      if (allVendorIds.length > 0) {
-        vendorQuery._id = { $in: allVendorIds.map(id => new mongoose.Types.ObjectId(id)) };
-      }
-
-      // Apply search filter
       if (search) {
         const searchRegex = new RegExp(search.trim(), 'i');
         vendorQuery.$or = [
           { full_name: searchRegex },
           { email: searchRegex },
-          { business_name: searchRegex }
+          { business_name: searchRegex },
+          { number: searchRegex }
         ];
       }
+      
+      if (vendor_type && vendor_type !== 'all') {
+        vendorQuery.vendor_type = vendor_type.toLowerCase();
+      }
 
-      // Apply date filter on vendor registration
       if (date_range && date_range !== 'all') {
         const now = new Date();
         let startDate;
-        
         switch (date_range) {
-          case 'today':
-            startDate = new Date(now.setHours(0, 0, 0, 0));
-            break;
-          case 'week':
-            startDate = new Date();
-            startDate.setDate(now.getDate() - 7);
-            break;
-          case 'month':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            break;
-          case '3months':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            break;
-          case '6months':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-            break;
-          case 'year':
-            startDate = new Date(now.getFullYear(), 0, 1);
-            break;
+          case 'today': startDate = new Date(now.setHours(0, 0, 0, 0)); break;
+          case 'week': startDate = new Date(); startDate.setDate(now.getDate() - 7); break;
+          case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+          case '3months': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break;
+          case '6months': startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1); break;
+          case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
           case 'custom':
             if (start_date && end_date) {
               startDate = new Date(start_date);
@@ -895,111 +867,105 @@ const exportVendorReportToExcel = {
             }
             break;
         }
-        
         if (startDate && date_range !== 'custom') {
           vendorQuery.createdAt = { $gte: startDate, $lte: new Date() };
         }
       }
 
-      console.log('Vendor Query:', JSON.stringify(vendorQuery, null, 2));
+      const vendors = await Vendor.find(vendorQuery).lean();
+      
+      const vendorReports = await Promise.all(
+        vendors.map(async (vendor) => {
+          const vendorId = vendor._id.toString();
+          const [totalProducts, rentProducts, sellProducts, totalServices, totalOrders] = await Promise.all([
+            Product.countDocuments({ vendor_id: vendorId }),
+            Product.countDocuments({ vendor_id: vendorId, listing_type: 'rent' }),
+            Product.countDocuments({ vendor_id: vendorId, listing_type: 'sell' }),
+            Service.countDocuments({ vendor_id: vendorId }),
+            Order.countDocuments({ 'items.vendor_id': vendorId })
+          ]);
 
-      const vendors = await Vendor.find(vendorQuery).select('_id full_name first_name last_name email phone business_name createdAt');
-      console.log('Found vendors:', vendors.length);
+          const orders = await Order.find({ 'items.vendor_id': vendorId }).lean();
+          const totalOrderRevenue = orders.reduce((sum, order) => {
+            const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
+            return sum + (vendorPayment?.vendor_amount || 0);
+          }, 0);
 
-      const columns = [
-        { header: 'Vendor Name', key: 'vendor_name', width: 25 },
-        { header: 'Email', key: 'email', width: 30 },
-        { header: 'Phone', key: 'phone', width: 15 },
-        { header: 'Business Name', key: 'business_name', width: 25 },
-        { header: 'Type', key: 'vendor_type', width: 12 },
-        { header: 'Total Products', key: 'total_products', width: 15 },
-        { header: 'Rent Products', key: 'rent_products', width: 15 },
-        { header: 'Sell Products', key: 'sell_products', width: 15 },
-        { header: 'Total Services', key: 'total_services', width: 15 },
-        { header: 'Total Orders', key: 'total_orders', width: 12 },
-        { header: 'Total Quotes', key: 'total_quotes', width: 12 },
-        { header: 'Order Revenue (₹)', key: 'order_revenue', width: 18 },
-        { header: 'Quote Revenue (₹)', key: 'quote_revenue', width: 18 },
-        { header: 'Total Revenue (₹)', key: 'total_revenue', width: 18 },
-        { header: 'Wallet Balance (₹)', key: 'wallet_balance', width: 18 },
-        { header: 'Registered Date', key: 'registered_date', width: 15 }
-      ];
+          const vendorProducts = await Product.find({ vendor_id: vendorId }).select('_id').lean();
+          const vendorProductIds = vendorProducts.map(p => p._id);
+          const quotes = await GetQuote.find({ 
+            product_id: { $in: vendorProductIds },
+            status: { $in: ['successful', 'complete', 'delivery'] }
+          }).lean();
+          const totalQuoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
+          const wallet = await Wallet.findOne({ vendor_id: vendor._id }).lean();
 
-      const data = [];
+          // Calculations as per user requirement: Total Revenue = Total Sell + Total Rent
+          const totalSellValue = totalOrders * totalOrderRevenue; // Currently as per Image 1 logic
+          const totalRentValue = quotes.length * totalQuoteRevenue; // Currently as per Image 1 logic
+          const totalRevenue = totalSellValue + totalRentValue;
 
-      for (const vendor of vendors) {
-        const vendorId = vendor._id.toString();
+          return {
+            full_name: vendor.full_name || 'N/A',
+            email: vendor.email || 'N/A',
+            phone: vendor.number || 'N/A',
+            business_name: vendor.business_name || 'N/A',
+            vendor_type: vendor.vendor_type || 'both',
+            total_products: totalProducts,
+            rent_products: rentProducts,
+            sell_products: sellProducts,
+            total_services: totalServices,
+            total_orders: totalOrders,
+            order_revenue: totalOrderRevenue,
+            total_sell_value: totalSellValue,
+            total_quotes: quotes.length,
+            quote_revenue: totalQuoteRevenue,
+            total_rent_value: totalRentValue,
+            total_revenue: totalRevenue,
+            wallet_balance: wallet?.balance || 0,
+            registered_date: vendor.createdAt ? new Date(vendor.createdAt).toLocaleDateString('en-GB') : 'N/A'
+          };
+        })
+      );
 
-        const [totalProducts, rentProducts, sellProducts] = await Promise.all([
-          Product.countDocuments({ vendor_id: vendorId }),
-          Product.countDocuments({ vendor_id: vendorId, product_type_name: { $regex: /rent/i } }),
-          Product.countDocuments({ vendor_id: vendorId, product_type_name: { $regex: /sell/i } })
-        ]);
-
-        const totalServices = await Service.countDocuments({ vendor_id: vendorId });
-
-        const orders = await Order.find({ 'items.vendor_id': vendorId });
-        let orderRevenue = 0;
-        orders.forEach(order => {
-          const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
-          if (vendorPayment) {
-            orderRevenue += vendorPayment.vendor_amount || 0;
-          }
-        });
-
-        const vendorProducts = await Product.find({ vendor_id: vendorId }).select('_id');
-        const vendorProductIds = vendorProducts.map(p => p._id);
-        const quotes = await GetQuote.find({ 
-          product_id: { $in: vendorProductIds },
-          status: { $in: ['successful', 'complete', 'delivery'] }
-        });
-        const quoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
-
-        const wallet = await Wallet.findOne({ vendor_id: vendorId });
-
-        // Determine vendor type based on products
-        let vType = 'both';
-        if (totalProducts > 0) {
-          if (rentProducts > 0 && sellProducts === 0) vType = 'vendor';
-          else if (sellProducts > 0 && rentProducts === 0) vType = 'vendor';
-        }
-        if (totalServices > 0 && totalProducts === 0) vType = 'service';
-        if (totalServices > 0 && totalProducts > 0) vType = 'both';
-
-        // Apply vendor_type filter
-        if (vendor_type && vendor_type !== 'all') {
-          if (vType !== vendor_type) continue;
-        }
-
-        const totalRevenue = orderRevenue + quoteRevenue;
-
-        data.push({
-          vendor_name: vendor.full_name || `${vendor.first_name || ''} ${vendor.last_name || ''}`.trim() || 'N/A',
-          email: vendor.email || 'N/A',
-          phone: vendor.phone || 'N/A',
-          business_name: vendor.business_name || 'N/A',
-          vendor_type: vType,
-          total_products: totalProducts,
-          rent_products: rentProducts,
-          sell_products: sellProducts,
-          total_services: totalServices,
-          total_orders: orders.length,
-          total_quotes: quotes.length,
-          order_revenue: `₹${orderRevenue.toFixed(2)}`,
-          quote_revenue: `₹${quoteRevenue.toFixed(2)}`,
-          total_revenue: `₹${totalRevenue.toFixed(2)}`,
-          wallet_balance: wallet ? `₹${(wallet.balance || 0).toFixed(2)}` : '₹0.00',
-          registered_date: vendor.createdAt ? new Date(vendor.createdAt).toLocaleDateString('en-GB') : ''
-        });
+      let filteredVendors = vendorReports;
+      if (min_revenue || max_revenue) {
+        const min = min_revenue ? parseFloat(min_revenue) : 0;
+        const max = max_revenue ? parseFloat(max_revenue) : Infinity;
+        filteredVendors = vendorReports.filter(v => v.total_revenue >= min && v.total_revenue <= max);
       }
 
-      console.log('Final data count:', data.length);
+      const columns = [
+        { header: 'Vendor Name', key: 'full_name', width: 25 },
+        { header: 'Business', key: 'business_name', width: 25 },
+        { header: 'Type', key: 'vendor_type', width: 12 },
+        { header: 'Prods', key: 'total_products', width: 10 },
+        { header: 'Rent', key: 'rent_products', width: 10 },
+        { header: 'Sell', key: 'sell_products', width: 10 },
+        { header: 'Serv', key: 'total_services', width: 10 },
+        { header: 'Orders', key: 'total_orders', width: 10 },
+        { header: 'Ord Rev', key: 'order_revenue', width: 15 },
+        { header: 'Total Sell', key: 'total_sell_value', width: 15 },
+        { header: 'Quotes', key: 'total_quotes', width: 10 },
+        { header: 'Quo Rev', key: 'quote_revenue', width: 15 },
+        { header: 'Total Rent', key: 'total_rent_value', width: 15 },
+        { header: 'Total Rev', key: 'total_revenue', width: 15 },
+        { header: 'Wallet', key: 'wallet_balance', width: 15 },
+        { header: 'Reg Date', key: 'registered_date', width: 15 }
+      ];
 
-      const filename = `vendor_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-      await exportToExcel(res, data, columns, filename, 'Vendor Report');
+      const excelData = filteredVendors.map(v => ({
+        ...v,
+        order_revenue: `₹${v.order_revenue.toLocaleString('en-IN')}`,
+        total_sell_value: `₹${v.total_sell_value.toLocaleString('en-IN')}`,
+        quote_revenue: `₹${v.quote_revenue.toLocaleString('en-IN')}`,
+        total_rent_value: `₹${v.total_rent_value.toLocaleString('en-IN')}`,
+        total_revenue: `₹${v.total_revenue.toLocaleString('en-IN')}`,
+        wallet_balance: `₹${v.wallet_balance.toLocaleString('en-IN')}`
+      }));
 
+      await exportToExcel(res, excelData, columns, `vendor-report-${Date.now()}.xlsx`, 'Vendor Report');
     } catch (error) {
-      console.error('Excel export error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
@@ -1009,61 +975,33 @@ const exportVendorReportToExcel = {
 const exportVendorReportToPDF = {
   handler: async (req, res) => {
     try {
-      const { 
-        vendor_type, 
-        date_range, 
-        start_date, 
-        end_date,
-        search
-      } = req.query;
+      const { vendor_type, date_range, start_date, end_date, search, min_revenue, max_revenue } = req.query;
 
-      console.log('PDF Export Params:', { vendor_type, date_range, start_date, end_date, search });
-
-      // Get all vendors with products or services
-      const vendorIdsWithProducts = await Product.distinct('vendor_id');
-      const vendorIdsWithServices = await Service.distinct('vendor_id');
-      const allVendorIds = [...new Set([...vendorIdsWithProducts, ...vendorIdsWithServices])];
-      
       const vendorQuery = {};
-      if (allVendorIds.length > 0) {
-        vendorQuery._id = { $in: allVendorIds.map(id => new mongoose.Types.ObjectId(id)) };
-      }
-
-      // Apply search filter
       if (search) {
         const searchRegex = new RegExp(search.trim(), 'i');
         vendorQuery.$or = [
           { full_name: searchRegex },
           { email: searchRegex },
-          { business_name: searchRegex }
+          { business_name: searchRegex },
+          { number: searchRegex }
         ];
       }
+      
+      if (vendor_type && vendor_type !== 'all') {
+        vendorQuery.vendor_type = vendor_type.toLowerCase();
+      }
 
-      // Apply date filter on vendor registration
       if (date_range && date_range !== 'all') {
         const now = new Date();
         let startDate;
-        
         switch (date_range) {
-          case 'today':
-            startDate = new Date(now.setHours(0, 0, 0, 0));
-            break;
-          case 'week':
-            startDate = new Date();
-            startDate.setDate(now.getDate() - 7);
-            break;
-          case 'month':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            break;
-          case '3months':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            break;
-          case '6months':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-            break;
-          case 'year':
-            startDate = new Date(now.getFullYear(), 0, 1);
-            break;
+          case 'today': startDate = new Date(now.setHours(0, 0, 0, 0)); break;
+          case 'week': startDate = new Date(); startDate.setDate(now.getDate() - 7); break;
+          case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+          case '3months': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break;
+          case '6months': startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1); break;
+          case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
           case 'custom':
             if (start_date && end_date) {
               startDate = new Date(start_date);
@@ -1071,112 +1009,99 @@ const exportVendorReportToPDF = {
             }
             break;
         }
-        
         if (startDate && date_range !== 'custom') {
           vendorQuery.createdAt = { $gte: startDate, $lte: new Date() };
         }
       }
 
-      console.log('Vendor Query:', JSON.stringify(vendorQuery, null, 2));
+      const vendors = await Vendor.find(vendorQuery).lean();
+      
+      const vendorReports = await Promise.all(
+        vendors.map(async (vendor) => {
+          const vendorId = vendor._id.toString();
+          const [totalProducts, rentProducts, sellProducts, totalServices, totalOrders] = await Promise.all([
+            Product.countDocuments({ vendor_id: vendorId }),
+            Product.countDocuments({ vendor_id: vendorId, listing_type: 'rent' }),
+            Product.countDocuments({ vendor_id: vendorId, listing_type: 'sell' }),
+            Service.countDocuments({ vendor_id: vendorId }),
+            Order.countDocuments({ 'items.vendor_id': vendorId })
+          ]);
 
-      const vendors = await Vendor.find(vendorQuery).select('_id full_name first_name last_name email phone business_name createdAt');
-      console.log('Found vendors:', vendors.length);
+          const orders = await Order.find({ 'items.vendor_id': vendorId }).lean();
+          const totalOrderRevenue = orders.reduce((sum, order) => {
+            const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
+            return sum + (vendorPayment?.vendor_amount || 0);
+          }, 0);
 
-      const headers = [
-        'Vendor Name', 
-        'Type', 
-        'Products', 
-        'Services', 
-        'Orders', 
-        'Quotes', 
-        'Total Revenue',
-        'Wallet'
-      ];
-      const columnWidths = [130, 70, 80, 80, 70, 70, 110, 100];
-      const filename = `vendor_report_${new Date().toISOString().split('T')[0]}.pdf`;
-      const title = 'Comprehensive Vendor Report';
+          const vendorProducts = await Product.find({ vendor_id: vendorId }).select('_id').lean();
+          const vendorProductIds = vendorProducts.map(p => p._id);
+          const quotes = await GetQuote.find({ 
+            product_id: { $in: vendorProductIds },
+            status: { $in: ['successful', 'complete', 'delivery'] }
+          }).lean();
+          const totalQuoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
+          const wallet = await Wallet.findOne({ vendor_id: vendor._id }).lean();
 
-      const vendorData = [];
+          const totalSellValue = totalOrders * totalOrderRevenue;
+          const totalRentValue = quotes.length * totalQuoteRevenue;
+          const totalRevenue = totalSellValue + totalRentValue;
 
-      for (const vendor of vendors) {
-        const vendorId = vendor._id.toString();
+          return {
+            full_name: vendor.full_name || 'N/A',
+            business_name: vendor.business_name || 'N/A',
+            vendor_type: vendor.vendor_type || 'both',
+            total_products: totalProducts,
+            rent_products: rentProducts,
+            sell_products: sellProducts,
+            total_services: totalServices,
+            total_orders: totalOrders,
+            order_revenue: totalOrderRevenue,
+            total_sell_value: totalSellValue,
+            total_quotes: quotes.length,
+            quote_revenue: totalQuoteRevenue,
+            total_rent_value: totalRentValue,
+            total_revenue: totalRevenue,
+            wallet_balance: wallet?.balance || 0,
+            registered_date: vendor.createdAt ? new Date(vendor.createdAt).toLocaleDateString('en-GB') : 'N/A'
+          };
+        })
+      );
 
-        const [totalProducts, rentProducts, sellProducts] = await Promise.all([
-          Product.countDocuments({ vendor_id: vendorId }),
-          Product.countDocuments({ vendor_id: vendorId, product_type_name: { $regex: /rent/i } }),
-          Product.countDocuments({ vendor_id: vendorId, product_type_name: { $regex: /sell/i } })
-        ]);
-
-        const totalServices = await Service.countDocuments({ vendor_id: vendorId });
-
-        const orders = await Order.find({ 'items.vendor_id': vendorId });
-        let orderRevenue = 0;
-        orders.forEach(order => {
-          const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
-          if (vendorPayment) {
-            orderRevenue += vendorPayment.vendor_amount || 0;
-          }
-        });
-
-        const vendorProducts = await Product.find({ vendor_id: vendorId }).select('_id');
-        const vendorProductIds = vendorProducts.map(p => p._id);
-        const quotes = await GetQuote.find({ 
-          product_id: { $in: vendorProductIds },
-          status: { $in: ['successful', 'complete', 'delivery'] }
-        });
-        const quoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
-
-        const wallet = await Wallet.findOne({ vendor_id: vendorId });
-
-        // Determine vendor type based on products
-        let vType = 'both';
-        if (totalProducts > 0) {
-          if (rentProducts > 0 && sellProducts === 0) vType = 'vendor';
-          else if (sellProducts > 0 && rentProducts === 0) vType = 'vendor';
-        }
-        if (totalServices > 0 && totalProducts === 0) vType = 'service';
-        if (totalServices > 0 && totalProducts > 0) vType = 'both';
-
-        // Apply vendor_type filter
-        if (vendor_type && vendor_type !== 'all') {
-          if (vType !== vendor_type) continue;
-        }
-
-        const totalRevenue = orderRevenue + quoteRevenue;
-
-        vendorData.push({
-          vendor_name: vendor.full_name || `${vendor.first_name || ''} ${vendor.last_name || ''}`.trim() || 'N/A',
-          vendor_type: vType,
-          total_products: totalProducts,
-          total_services: totalServices,
-          total_orders: orders.length,
-          total_quotes: quotes.length,
-          total_revenue: totalRevenue,
-          wallet_balance: wallet ? wallet.balance || 0 : 0
-        });
+      let filteredVendors = vendorReports;
+      if (min_revenue || max_revenue) {
+        const min = min_revenue ? parseFloat(min_revenue) : 0;
+        const max = max_revenue ? parseFloat(max_revenue) : Infinity;
+        filteredVendors = vendorReports.filter(v => v.total_revenue >= min && v.total_revenue <= max);
       }
 
-      console.log('Final data count:', vendorData.length);
+      const headers = ['Vendor', 'Business', 'Type', 'Prods', 'Rent', 'Sell', 'Serv', 'Orders', 'Ord Rev', 'Total Sell', 'Quotes', 'Quo Rev', 'Total Rent', 'Total Rev', 'Wallet', 'Reg Date'];
+      const columnWidths = [70, 70, 30, 35, 35, 35, 35, 40, 50, 60, 40, 50, 60, 70, 60, 60];
+      const filename = `vendor-report-${Date.now()}.pdf`;
+      const title = 'Vendors Report';
 
       const rowMapper = (v) => [
-        v.vendor_name,
-        v.vendor_type,
+        v.full_name.substring(0, 15),
+        v.business_name.substring(0, 15),
+        v.vendor_type.charAt(0).toUpperCase(),
         v.total_products.toString(),
+        v.rent_products.toString(),
+        v.sell_products.toString(),
         v.total_services.toString(),
         v.total_orders.toString(),
+        `${v.order_revenue.toLocaleString('en-IN')}`,
+        `${v.total_sell_value.toLocaleString('en-IN')}`,
         v.total_quotes.toString(),
-        `₹${v.total_revenue.toFixed(2)}`,
-        `₹${v.wallet_balance.toFixed(2)}`
+        `${v.quote_revenue.toLocaleString('en-IN')}`,
+        `${v.total_rent_value.toLocaleString('en-IN')}`,
+        `${v.total_revenue.toLocaleString('en-IN')}`,
+        `${v.wallet_balance.toLocaleString('en-IN')}`,
+        v.registered_date
       ];
 
-      await exportToPDF(res, vendorData, headers, columnWidths, filename, title, rowMapper);
-
+      await exportToPDF(res, filteredVendors, headers, columnWidths, filename, title, rowMapper, { layout: 'landscape' });
     } catch (error) {
-      console.error('PDF export error:', error);
       if (!res.headersSent) {
         res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
-      } else {
-        res.destroy();
       }
     }
   }
