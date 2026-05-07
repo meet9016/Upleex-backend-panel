@@ -726,6 +726,7 @@ const getAllProducts = {
             city_id: contact.city_id || '',
             city_name: contact.city_name || '',
             vendor_name: (identity.business_name || contact.full_name || ''),
+            business_name: identity.business_name || '',
             vendor_address: contact.address || '',
           };
         });
@@ -765,6 +766,7 @@ const getAllProducts = {
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
           vendor_name: p.vendor_name || v.vendor_name || '',
+          business_name: v.business_name || '',
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
@@ -952,6 +954,7 @@ const getVendorProducts = {
             city_id: contact.city_id || '',
             city_name: contact.city_name || '',
             vendor_name: (identity.business_name || contact.full_name || ''),
+            business_name: identity.business_name || '',
             vendor_address: contact.address || '',
           };
         });
@@ -979,6 +982,7 @@ const getVendorProducts = {
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
           vendor_name: p.vendor_name || v.vendor_name || '',
+          business_name: v.business_name || '',
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
