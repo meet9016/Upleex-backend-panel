@@ -2172,28 +2172,33 @@ const getRentAvailability = {
     try {
       const { productId } = req.params;
       const GetQuote = require('../models/getQuote.model');
+      const Product = require('../models/product.model');
 
-      // Active rent statuses - not yet returned
-      const activeStatuses = ['pending', 'approval', 'delivery'];
+      const product = await Product.findById(productId).select('available_quantity').lean();
+      const availableQty = product?.available_quantity || 0;
+
+      const activeStatuses = ['approval', 'delivery'];
 
       const activeQuotes = await GetQuote.find({
         product_id: productId,
         status: { $in: activeStatuses },
-        end_date: { $gte: new Date() },
       }, { start_date: 1, end_date: 1, qty: 1, status: 1 }).sort({ end_date: 1 });
 
-      // Latest return date
-      const latestReturnDate = activeQuotes.length
-        ? activeQuotes[activeQuotes.length - 1].end_date
+      const validQuotes = activeQuotes.filter(q => q.end_date && q.end_date >= new Date());
+      const latestReturnDate = validQuotes.length
+        ? validQuotes[0].end_date
         : null;
 
-      // All booked date ranges for calendar
-      const bookedRanges = activeQuotes.map(q => ({
+      const bookedRanges = validQuotes.map(q => ({
         start: q.start_date,
         end: q.end_date,
         qty: q.qty || 1,
         status: q.status,
       }));
+
+      const totalBookedQty = validQuotes.reduce((sum, q) => sum + (q.qty || 1), 0);
+      const total_quantity = availableQty;
+      const actual_available = availableQty - totalBookedQty;
 
       res.status(200).json({
         success: true,
@@ -2201,6 +2206,8 @@ const getRentAvailability = {
           latestReturnDate,
           bookedRanges,
           hasActiveRent: activeQuotes.length > 0,
+          available_quantity: actual_available >= 0 ? actual_available : 0,
+          total_quantity,
         }
       });
     } catch (error) {
