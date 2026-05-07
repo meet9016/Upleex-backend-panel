@@ -242,19 +242,15 @@ const createProduct = {
         const hasGST = !!(kyc && String(kyc.Identity?.gst_number || '').trim());
         limit = hasGST ? 3 : 1;
 
-        const startOfMonth = moment().startOf('month').toDate();
-        const endOfMonth = moment().endOf('month').toDate();
-
         const activeFreeCount = await Product.countDocuments({
           vendor_id: data.vendor_id,
-          status: 'active',
-          pricing_type: 'free',           // ← મહત્વની લાઈન
-          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+          pricing_type: 'free',
+          status: { $in: ['active', 'draft'] },
         });
 
         if (activeFreeCount >= limit) {
           return res.status(httpStatus.BAD_REQUEST).json({
-            message: `Free listing limit reached (${activeFreeCount}/${limit}) for this month. Upgrade to paid plan for Base listings.`
+            message: `Free listing limit reached (${activeFreeCount}/${limit}). ${hasGST ? 'You can add up to 3 free products.' : 'Add GST to get 3 free listings or upgrade to paid plan.'}`,
           });
         }
       }
@@ -1059,7 +1055,8 @@ const getProductById = {
           productObj.vendor_address = contact.address || '';
           productObj.vendor_city_id = contact.city_id || '';
           productObj.vendor_city_name = contact.city_name || '';
-          productObj.vendor_name = productObj.vendor_name || identity.business_name || contact.full_name || '';
+         productObj.vendor_name = contact.full_name || '';
+          productObj.business_name = identity.business_name || '';
           productObj.is_wishlist = is_wishlist;
           return res.status(200).json({ status: 200, data: productObj });
         }
