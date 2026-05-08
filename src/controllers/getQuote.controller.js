@@ -1461,16 +1461,32 @@ const verifyQuotePayment = {
         // Notify admin about quote payment
         try {
           const { sendAdminNotification } = require('../services/adminNotification.service');
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
           const mongoose = require('mongoose');
           const User = mongoose.model('User');
           const user = await User.findById(existingQuote.user_id).lean();
           const userName = user?.name || user?.full_name || 'User';
+          const productName = existingQuote.product_id?.product_name || 'Product';
+          const vendorId = existingQuote.product_id?.vendor_id;
+
+          // Notify admin
           await sendAdminNotification(
             'Quote Payment Received! 💰',
-            `Payment of ₹${existingQuote.calculated_price} received for quote  from <b>${userName}</b>.`,
+            `Payment of ₹${existingQuote.calculated_price} received for quote from <b>${userName}</b>.`,
             'payment',
             { quoteId: String(existingQuote._id), amount: existingQuote.calculated_price }
           );
+
+          // Notify vendor
+          if (vendorId) {
+            await sendNotificationToVendor(
+              vendorId,
+              'Quote Payment Received! 💰',
+              `Payment of ₹${existingQuote.calculated_price} received for quote product: "${productName}" from ${userName}.`,
+              'payment_received',
+              { quoteId: String(existingQuote._id), amount: String(existingQuote.calculated_price) }
+            );
+          }
         } catch (e) {}
 
         return res.status(httpStatus.OK).json({

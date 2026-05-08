@@ -1,4 +1,4 @@
-const httpStatus = require('http-status');
+﻿const httpStatus = require('http-status');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { Cart, Product, Order, Wallet } = require('../models');
@@ -299,12 +299,12 @@ const verifyPayment = catchAsync(async (req, res) => {
   try {
     const { sendNotificationToVendor } = require('../services/vendorNotification.service');
     const { sendAdminNotification } = require('../services/adminNotification.service');
-    const vendorIds = [...new Set(order.items.map(i => i.vendor_id).filter(Boolean))];
+    const vendorIds = [...new Set(order.items.map(i => String(i.vendor_id)).filter(Boolean))];
     const itemNames = order.items.map(i => i.product_name).join(', ');
 
     // Notify admin about new payment
     await sendAdminNotification(
-      'New Payment Received! 💰',
+      'New Order Payment Received! 💰',
       `Order #${order.order_id} payment of ₹${order.total_amount} received from ${order.user_name || 'User'}.`,
       'payment',
       { orderId: String(order._id), orderNumber: order.order_id, amount: order.total_amount }
@@ -312,14 +312,27 @@ const verifyPayment = catchAsync(async (req, res) => {
 
     // Notify each vendor
     for (const vendorId of vendorIds) {
-      const vendorItems = order.items.filter(i => i.vendor_id === vendorId);
+      const vendorItems = order.items.filter(i => String(i.vendor_id) === String(vendorId));
       const names = vendorItems.map(i => i.product_name).join(', ');
+      const vendorPayment = order.vendor_payments.find(vp => String(vp.vendor_id) === String(vendorId));
+      const vendorAmount = vendorPayment ? vendorPayment.vendor_amount : 0;
+
+      // New Order notification
       await sendNotificationToVendor(
         vendorId,
-        'New Order Received! 📦',
-        `You have a new order for: ${names}`,
+        'New Order Received! \ud83d\udce6',
+        `New order #${order.order_id} for: ${names}`,
         'order_request',
         { orderId: String(order._id), orderNumber: order.order_id }
+      );
+
+      // Payment Received notification
+      await sendNotificationToVendor(
+        vendorId,
+        'Order Payment Received! \ud83d\udcb0',
+        `Payment of \u20b9${vendorAmount} received for order #${order.order_id}. Products: ${names}`,
+        'payment_received',
+        { orderId: String(order._id), orderNumber: order.order_id, amount: String(vendorAmount) }
       );
     }
   } catch (notifErr) {
