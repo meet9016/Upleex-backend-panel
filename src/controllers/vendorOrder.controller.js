@@ -21,7 +21,11 @@ const getVendorOrders = {
     } = req.query;
     
     const filter = {
-      'items.vendor_id': vendorId
+      'items.vendor_id': vendorId,
+      $or: [
+        { payment_status: { $ne: 'pending' } },
+        { payment_method: { $ne: 'razorpay' } }
+      ]
     };
     
     // Multiple status filter support

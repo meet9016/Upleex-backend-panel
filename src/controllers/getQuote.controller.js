@@ -1554,7 +1554,13 @@ const getUserDashboardData = {
         .lean();
 
       // Fetch all orders for this user
-      const orders = await Order.find({ user_id })
+      const orders = await Order.find({ 
+        user_id,
+        $or: [
+          { payment_status: { $ne: 'pending' } },
+          { payment_method: { $ne: 'razorpay' } }
+        ]
+      })
         .sort({ createdAt: -1 })
         .lean();
 

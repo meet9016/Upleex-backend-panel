@@ -130,7 +130,13 @@ const getVendorReport = catchAsync(async (req, res) => {
       ]);
 
       // Get orders and calculate revenue
-      const orders = await Order.find({ 'items.vendor_id': vendorId }).lean();
+      const orders = await Order.find({ 
+        'items.vendor_id': vendorId,
+        $or: [
+          { payment_status: { $ne: 'pending' } },
+          { payment_method: { $ne: 'razorpay' } }
+        ]
+      }).lean();
       const totalOrders = orders.length;
       const totalOrderRevenue = orders.reduce((sum, order) => {
         const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
@@ -188,9 +194,9 @@ const getVendorReport = catchAsync(async (req, res) => {
           revenue: totalQuoteRevenue
         },
         revenue: {
-          total_sell_value: totalOrders * totalOrderRevenue,
-          total_rent_value: totalQuotes * totalQuoteRevenue,
-          total: (totalOrders * totalOrderRevenue) + (totalQuotes * totalQuoteRevenue),
+          total_sell_value: totalOrderRevenue,
+          total_rent_value: totalQuoteRevenue,
+          total: totalOrderRevenue + totalQuoteRevenue,
           from_orders: totalOrderRevenue,
           from_quotes: totalQuoteRevenue
         },
@@ -203,8 +209,8 @@ const getVendorReport = catchAsync(async (req, res) => {
     })
   );
 
-  // Apply revenue filter
-  let filteredVendors = vendorReports;
+  // Filter to show only active vendors (those with at least one order or quote)
+  let filteredVendors = vendorReports.filter(v => v.orders.total > 0 || v.quotes.total > 0);
   if (min_revenue || max_revenue) {
     const min = min_revenue ? parseFloat(min_revenue) : 0;
     const max = max_revenue ? parseFloat(max_revenue) : Infinity;

@@ -48,7 +48,13 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
   });
 
   // 2. Total Orders (Count of orders containing vendor's products)
-  const orderCountQuery = { 'items.vendor_id': vId };
+  const orderCountQuery = { 
+    'items.vendor_id': vId,
+    $or: [
+      { payment_status: { $ne: 'pending' } },
+      { payment_method: { $ne: 'razorpay' } }
+    ]
+  };
   if (dateFilter) orderCountQuery.createdAt = dateFilter;
   const totalOrders = await Order.countDocuments(orderCountQuery);
 
@@ -80,7 +86,13 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
   const totalProducts = await Product.countDocuments({ vendor_id: vId });
 
   // 6. Total Customers (Unique customers who ordered from this vendor)
-  const customerQuery = { 'items.vendor_id': vId };
+  const customerQuery = { 
+    'items.vendor_id': vId,
+    $or: [
+      { payment_status: { $ne: 'pending' } },
+      { payment_method: { $ne: 'razorpay' } }
+    ]
+  };
   if (dateFilter) customerQuery.createdAt = dateFilter;
   const uniqueCustomers = await Order.distinct('user_id', customerQuery);
   const totalCustomers = uniqueCustomers.length;

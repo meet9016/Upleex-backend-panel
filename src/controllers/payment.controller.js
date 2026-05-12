@@ -1,4 +1,4 @@
-﻿const httpStatus = require('http-status');
+const httpStatus = require('http-status');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { Cart, Product, Order, Wallet } = require('../models');
@@ -362,7 +362,13 @@ const getUserOrders = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const orders = await Order.find({ user_id: req.user.id })
+  const orders = await Order.find({ 
+    user_id: req.user.id,
+    $or: [
+      { payment_status: { $ne: 'pending' } },
+      { payment_method: { $ne: 'razorpay' } }
+    ]
+  })
     .populate('user_id', 'name email phone mobile')
     .sort({ createdAt: -1 })
     .skip(skip)

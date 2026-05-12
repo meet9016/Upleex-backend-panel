@@ -185,7 +185,7 @@ const createProduct = {
       is_new: Joi.boolean().default(false),
       deposit_amount: Joi.string().allow('').default('0'),
       available_quantity: Joi.number().integer().min(0).default(1),
-      pricing_type: Joi.string().valid('free', 'paid').default('paid'),
+      pricing_type: Joi.string().valid('free', 'paid').default('free'),
       is_visible: Joi.boolean().default(true),
     }).prefs({ convert: true }),
   },
@@ -220,7 +220,7 @@ const createProduct = {
       // ───────────────────────────────────────────────
       //          pricing_type handling + validation
       // ───────────────────────────────────────────────
-      const pricingType = (data.pricing_type || 'paid').toLowerCase();
+      const pricingType = (data.pricing_type || 'free').toLowerCase();
 
       if (!['free', 'paid'].includes(pricingType)) {
         return res.status(400).json({ message: 'Invalid pricing_type. Use "free" or "paid"' });
@@ -790,13 +790,19 @@ const getAllProducts = {
       
       // Determine if product is within plan limit (Free) or over (Paid)
       if (req.user && req.user.userType === 'vendor' && query.vendor_id) {
-        const activePurchases = await ListingPlanPurchase.find({
-          vendor_id: query.vendor_id,
-          expire_at: { $gt: new Date() }
-        });
+        const [activePurchases, kyc] = await Promise.all([
+          ListingPlanPurchase.find({
+            vendor_id: query.vendor_id,
+            expire_at: { $gt: new Date() }
+          }),
+          VendorKyc.findOne({ 'ContactDetails.vendor_id': String(query.vendor_id) })
+        ]);
         
-        const totalAllowed = activePurchases.reduce((acc, p) => acc + (p.max_products || 0), 0);
-        const assignedIds = new Set(activePurchases.flatMap(p => p.product_ids.map(id => String(id))));
+        const hasGST = !!(kyc && String(kyc.Identity?.gst_number || '').trim());
+        const baseLimit = hasGST ? 3 : 1;
+        const totalAllowedFromPlans = activePurchases.reduce((acc, p) => acc + (p.max_products || 0), 0);
+        const totalAllowed = baseLimit + totalAllowedFromPlans;
+        const isUnlimited = activePurchases.some(p => p.is_unlimited);
         
         // Count how many products are currently listed (status active/pending)
         const currentProducts = await Product.find({
@@ -809,7 +815,7 @@ const getAllProducts = {
         let slotsUsed = 0;
 
         currentProducts.forEach((prod, index) => {
-          if (slotsUsed < totalAllowed) {
+          if (isUnlimited || slotsUsed < totalAllowed) {
             productPricingMap[String(prod._id)] = 'free';
             slotsUsed++;
           } else {
@@ -1051,6 +1057,45 @@ const getVendorProducts = {
           vendor_mobile: v.vendor_mobile || '',
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
+      });
+
+      // Determine if product is within plan limit (Free) or over (Paid)
+      const [activePurchases, kyc] = await Promise.all([
+        ListingPlanPurchase.find({
+          vendor_id: vendor_id,
+          expire_at: { $gt: new Date() }
+        }),
+        VendorKyc.findOne({ 'ContactDetails.vendor_id': String(vendor_id) })
+      ]);
+      
+      const hasGST = !!(kyc && String(kyc.Identity?.gst_number || '').trim());
+      const baseLimit = hasGST ? 3 : 1;
+      const totalAllowedFromPlans = activePurchases.reduce((acc, p) => acc + (p.max_products || 0), 0);
+      const totalAllowed = baseLimit + totalAllowedFromPlans;
+      const isUnlimited = activePurchases.some(p => p.is_unlimited);
+
+      // We need to fetch all active products to determine which ones fit in the slots
+      const currentProducts = await Product.find({
+        vendor_id: vendor_id,
+        status: { $in: ['active', 'draft'] },
+        approval_status: { $ne: 'rejected' }
+      }).sort({ createdAt: 1 });
+
+      const productPricingMap = {};
+      let slotsUsed = 0;
+      currentProducts.forEach((prod) => {
+        if (isUnlimited || slotsUsed < totalAllowed) {
+          productPricingMap[String(prod._id)] = 'free';
+          slotsUsed++;
+        } else {
+          productPricingMap[String(prod._id)] = 'paid';
+        }
+      });
+
+      normalized.forEach(p => {
+        if (productPricingMap[String(p._id)]) {
+          p.pricing_type = productPricingMap[String(p._id)];
+        }
       });
 
       const responseObj = {

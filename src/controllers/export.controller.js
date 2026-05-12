@@ -264,7 +264,13 @@ const exportOrdersToExcel = {
       const vendorId = user.id || user._id;
 
       // Build query
-      const query = { 'items.vendor_id': vendorId };
+      const query = { 
+        'items.vendor_id': vendorId,
+        $or: [
+          { payment_status: { $ne: 'pending' } },
+          { payment_method: { $ne: 'razorpay' } }
+        ]
+      };
       if (status && status !== 'all') query.vendor_status = status;
       if (search) {
         const searchRegex = new RegExp(search.trim(), 'i');
@@ -348,7 +354,13 @@ const exportOrdersToPDF = {
       const user = req.user;
       const vendorId = user.id || user._id;
 
-      const query = { 'items.vendor_id': vendorId };
+      const query = { 
+        'items.vendor_id': vendorId,
+        $or: [
+          { payment_status: { $ne: 'pending' } },
+          { payment_method: { $ne: 'razorpay' } }
+        ]
+      };
       if (status && status !== 'all') query.vendor_status = status;
       if (search) {
         const searchRegex = new RegExp(search.trim(), 'i');
@@ -882,10 +894,22 @@ const exportVendorReportToExcel = {
             Product.countDocuments({ vendor_id: vendorId, listing_type: 'rent' }),
             Product.countDocuments({ vendor_id: vendorId, listing_type: 'sell' }),
             Service.countDocuments({ vendor_id: vendorId }),
-            Order.countDocuments({ 'items.vendor_id': vendorId })
+            Order.countDocuments({ 
+              'items.vendor_id': vendorId,
+              $or: [
+                { payment_status: { $ne: 'pending' } },
+                { payment_method: { $ne: 'razorpay' } }
+              ]
+            })
           ]);
 
-          const orders = await Order.find({ 'items.vendor_id': vendorId }).lean();
+          const orders = await Order.find({ 
+            'items.vendor_id': vendorId,
+            $or: [
+              { payment_status: { $ne: 'pending' } },
+              { payment_method: { $ne: 'razorpay' } }
+            ]
+          }).lean();
           const totalOrderRevenue = orders.reduce((sum, order) => {
             const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
             return sum + (vendorPayment?.vendor_amount || 0);
@@ -900,9 +924,9 @@ const exportVendorReportToExcel = {
           const totalQuoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
           const wallet = await Wallet.findOne({ vendor_id: vendor._id }).lean();
 
-          // Calculations as per user requirement: Total Revenue = Total Sell + Total Rent
-          const totalSellValue = totalOrders * totalOrderRevenue; // Currently as per Image 1 logic
-          const totalRentValue = quotes.length * totalQuoteRevenue; // Currently as per Image 1 logic
+          // Calculations: Total Revenue = Total Sell + Total Rent
+          const totalSellValue = totalOrderRevenue;
+          const totalRentValue = totalQuoteRevenue;
           const totalRevenue = totalSellValue + totalRentValue;
 
           return {
@@ -928,7 +952,8 @@ const exportVendorReportToExcel = {
         })
       );
 
-      let filteredVendors = vendorReports;
+      // Filter to show only active vendors (those with at least one order or quote)
+      let filteredVendors = vendorReports.filter(v => v.total_orders > 0 || v.total_quotes > 0);
       if (min_revenue || max_revenue) {
         const min = min_revenue ? parseFloat(min_revenue) : 0;
         const max = max_revenue ? parseFloat(max_revenue) : Infinity;
@@ -1024,10 +1049,22 @@ const exportVendorReportToPDF = {
             Product.countDocuments({ vendor_id: vendorId, listing_type: 'rent' }),
             Product.countDocuments({ vendor_id: vendorId, listing_type: 'sell' }),
             Service.countDocuments({ vendor_id: vendorId }),
-            Order.countDocuments({ 'items.vendor_id': vendorId })
+            Order.countDocuments({ 
+              'items.vendor_id': vendorId,
+              $or: [
+                { payment_status: { $ne: 'pending' } },
+                { payment_method: { $ne: 'razorpay' } }
+              ]
+            })
           ]);
 
-          const orders = await Order.find({ 'items.vendor_id': vendorId }).lean();
+          const orders = await Order.find({ 
+            'items.vendor_id': vendorId,
+            $or: [
+              { payment_status: { $ne: 'pending' } },
+              { payment_method: { $ne: 'razorpay' } }
+            ]
+          }).lean();
           const totalOrderRevenue = orders.reduce((sum, order) => {
             const vendorPayment = order.vendor_payments?.find(p => p.vendor_id === vendorId);
             return sum + (vendorPayment?.vendor_amount || 0);
@@ -1042,8 +1079,8 @@ const exportVendorReportToPDF = {
           const totalQuoteRevenue = quotes.reduce((sum, quote) => sum + (quote.calculated_price || 0), 0);
           const wallet = await Wallet.findOne({ vendor_id: vendor._id }).lean();
 
-          const totalSellValue = totalOrders * totalOrderRevenue;
-          const totalRentValue = quotes.length * totalQuoteRevenue;
+          const totalSellValue = totalOrderRevenue;
+          const totalRentValue = totalQuoteRevenue;
           const totalRevenue = totalSellValue + totalRentValue;
 
           return {
@@ -1067,7 +1104,8 @@ const exportVendorReportToPDF = {
         })
       );
 
-      let filteredVendors = vendorReports;
+      // Filter to show only active vendors (those with at least one order or quote)
+      let filteredVendors = vendorReports.filter(v => v.total_orders > 0 || v.total_quotes > 0);
       if (min_revenue || max_revenue) {
         const min = min_revenue ? parseFloat(min_revenue) : 0;
         const max = max_revenue ? parseFloat(max_revenue) : Infinity;
