@@ -12,6 +12,8 @@ const listingPlanPurchaseSchema = new mongoose.Schema(
     start_at: { type: Date, default: () => new Date() },
     expire_at: { type: Date },
     priority_purchase_id: { type: mongoose.Schema.Types.ObjectId, ref: 'PriorityPlanPurchase' },
+    is_unlimited: { type: Boolean, default: false },
+    is_extra_per_product: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

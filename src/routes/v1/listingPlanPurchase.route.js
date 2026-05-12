@@ -9,6 +9,7 @@ const router = express.Router();
 
 router.get(
   '/options',
+  auth(true),
   catchAsync(listingPlanPurchaseController.getPlanOptions.handler)
 );
 

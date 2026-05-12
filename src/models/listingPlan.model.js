@@ -9,6 +9,9 @@ const listingPlanSchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     popular: { type: Boolean, default: false },
+    unlimited_amount: { type: Number, default: 0 },
+    extra_product_price: { type: Number, default: 0 },
+    free_listing: { type: Boolean, default: false },
     features: { type: [String], default: [] },
   },
   { timestamps: true }

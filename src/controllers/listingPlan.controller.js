@@ -12,6 +12,8 @@ const createPlan = {
       amount: Joi.number().min(0).required(),
       status: Joi.string().valid('active', 'inactive').default('active'),
       popular: Joi.boolean().default(false),
+      unlimited_amount: Joi.number().min(0).default(0),
+      extra_product_price: Joi.number().min(0).default(0),
       features: Joi.array().items(Joi.string()).default([]),
     }),
   },
@@ -89,6 +91,8 @@ const updatePlan = {
         amount: Joi.number().min(0),
         status: Joi.string().valid('active', 'inactive'),
         popular: Joi.boolean(),
+        unlimited_amount: Joi.number().min(0),
+        extra_product_price: Joi.number().min(0),
         features: Joi.array().items(Joi.string()),
       })
       .prefs({ convert: true }),

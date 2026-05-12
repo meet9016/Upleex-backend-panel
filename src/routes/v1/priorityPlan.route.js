@@ -17,6 +17,7 @@ router.post(
 
 router.get(
   '/getall',
+  auth(),
   validate(priorityPlanController.getAllPriorityPlans.validation),
   catchAsync(priorityPlanController.getAllPriorityPlans.handler)
 );

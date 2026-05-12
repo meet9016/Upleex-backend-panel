@@ -15,6 +15,16 @@ const priorityPlanPurchaseSchema = new mongoose.Schema(
     is_addon_purchased: { type: Boolean, default: false },
     addon_max_slots: { type: Number, default: 0 },
     addon_product_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Product', default: [] },
+    // Legacy fields (for compatibility)
+    is_unlimited: { type: Boolean, default: false },
+    is_extra_per_product: { type: Boolean, default: false },
+    // New 4 fields for duration-specific tracking
+    is_monthly_extra: { type: Boolean, default: false },
+    is_monthly_unlimited: { type: Boolean, default: false },
+    is_yearly_extra: { type: Boolean, default: false },
+    is_yearly_unlimited: { type: Boolean, default: false },
+    // New field: free_listing (per purchase, default true)
+    free_listing: { type: Boolean, default: true },
     status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' },
   },
   { timestamps: true }

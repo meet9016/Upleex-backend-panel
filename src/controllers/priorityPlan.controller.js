@@ -20,6 +20,11 @@ const createPriorityPlan = {
       addon_available_for_yearly: Joi.boolean().default(true),
       addon_price_per_year: Joi.number().min(0).default(0),
       addon_max_slots: Joi.number().integer().min(0).default(0),
+      unlimited_amount_monthly: Joi.number().min(0).default(0),
+      extra_product_price_monthly: Joi.number().min(0).default(0),
+      unlimited_amount_yearly: Joi.number().min(0).default(0),
+      extra_product_price_yearly: Joi.number().min(0).default(0),
+      free_listing: Joi.boolean().default(false),
       features: Joi.array().items(Joi.string()).default([]),
     }),
   },
@@ -48,7 +53,28 @@ const getAllPriorityPlans = {
     const { status } = req.query;
     const query = {};
     if (status) query.status = status;
-    const data = await PriorityPlan.find(query).sort({ createdAt: -1 });
+    let data = await PriorityPlan.find(query).sort({ createdAt: -1 });
+
+    // If vendor is authenticated, calculate their total priority products (rent + sell)
+    let totalVendorPriorityProducts = 0;
+    if (req.user && (req.user.id || req.user._id)) {
+      const vendor_id = req.user.id || req.user._id;
+      const allActivePurchases = await PriorityPlanPurchase.find({
+        vendor_id,
+        status: 'active',
+        expire_at: { $gt: new Date() }
+      });
+
+      totalVendorPriorityProducts = allActivePurchases.reduce((sum, p) =>
+        sum + (p.product_ids?.length || 0) + (p.addon_product_ids?.length || 0), 0);
+    }
+
+    // For each plan, set free_listing to false if vendor has used >= product_slots
+    data = data.map(plan => ({
+      ...plan.toObject(),
+      free_listing: totalVendorPriorityProducts < (plan.product_slots || 0)
+    }));
+
     return res.status(200).json({ success: true, data });
   },
 };
@@ -65,6 +91,11 @@ const updatePriorityPlan = {
       addon_available_for_yearly: Joi.boolean(),
       addon_price_per_year: Joi.number().min(0),
       addon_max_slots: Joi.number().integer().min(0),
+      unlimited_amount_monthly: Joi.number().min(0),
+      extra_product_price_monthly: Joi.number().min(0),
+      unlimited_amount_yearly: Joi.number().min(0),
+      extra_product_price_yearly: Joi.number().min(0),
+      free_listing: Joi.boolean(),
       features: Joi.array().items(Joi.string()),
     }),
   },
@@ -104,222 +135,200 @@ const purchasePriorityPlan = {
   validation: {
     body: Joi.object().keys({
       plan_id: Joi.string().required(),
-      product_ids: Joi.array().items(Joi.string()).default([]),
-      price: Joi.number().required(),
+      product_ids: Joi.array().items(Joi.string()).required().min(1).required(),
+      price: Joi.number().optional(),
       plan_duration: Joi.string().valid('monthly', 'yearly').default('monthly'),
       is_addon_purchased: Joi.boolean().default(false),
       addon_product_ids: Joi.array().items(Joi.string()).default([]),
-      is_refill: Joi.boolean().default(false),
-      purchase_id: Joi.string().allow(''),
+      is_unlimited: Joi.boolean(),
+      is_extra_per_product: Joi.boolean(),
     }),
   },
   handler: async (req, res) => {
-    const { plan_id, product_ids, price, plan_duration, is_addon_purchased, addon_product_ids, is_refill, purchase_id } = req.body;
     const vendor_id = req.user.id || req.user._id;
+    let { plan_id, is_unlimited, is_extra_per_product, plan_duration } = req.body;
+    const { product_ids } = req.body;
 
     try {
       const plan = await PriorityPlan.findById(plan_id);
       if (!plan) {
-        return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Plan not found' });
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Invalid plan selection' });
       }
 
-      // Check for all active purchases for this plan type
+      // 1. Check for active purchases of this plan and duration that are not expired
       const activePurchases = await PriorityPlanPurchase.find({
         vendor_id,
         plan_id,
-        status: 'active',
+        plan_duration,
         expire_at: { $gt: new Date() }
       });
 
-      let finalExpiryDate = new Date();
-      // Fixed 30-day counting: each month = 30 days
-      if (plan_duration === 'yearly') {
-        // 12 months * 30 days = 360 days
-        const totalDays = 12 * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + months30);
-        finalExpiryDate.setDate(finalExpiryDate.getDate() + remainingDays);
+      const activeUnlimited = activePurchases.find(p => p.is_unlimited);
+
+      // 2. Identify truly new products (filter out those already in some active plan of this type)
+      const allCurrentlyAssignedIds = activePurchases.flatMap(p => p.product_ids.map(id => String(id)));
+      const trulyNewProductIds = product_ids.filter(pid => !allCurrentlyAssignedIds.includes(String(pid)));
+
+      // 3. If no new products are being added, just return success
+      if (trulyNewProductIds.length === 0 && activePurchases.length > 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'All selected products are already part of your active priority plans',
+          data: activePurchases[0]
+        });
+      }
+
+      // 4. Calculate Final Amount
+      let finalAmount = plan_duration === "monthly" ? plan.monthly_price : plan.yearly_price;
+      const extraPrice = plan_duration === "monthly" ? plan.extra_product_price_monthly : plan.extra_product_price_yearly;
+      const unlimitedAmt = plan_duration === "monthly" ? plan.unlimited_amount_monthly : plan.unlimited_amount_yearly;
+      let purchaseToUpdate = null;
+
+      if (activeUnlimited) {
+        finalAmount = 0;
+        purchaseToUpdate = activeUnlimited;
+      } else if (is_unlimited) {
+        finalAmount = unlimitedAmt || 0;
       } else {
-        // 1 month = 30 days
-        const totalDays = 1 * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        finalExpiryDate.setMonth(finalExpiryDate.getMonth() + months30);
-        finalExpiryDate.setDate(finalExpiryDate.getDate() + remainingDays);
-      }
+        // Check remaining slots across all active purchases of this plan and duration
+        const totalAvailableSlots = activePurchases.reduce((acc, p) => {
+          const remaining = (p.total_slots || 0) - (p.product_ids || []).length;
+          return acc + Math.max(0, remaining);
+        }, 0);
 
-      // Only update if it's an explicit refill OR if it's an upgrade (adding addon to a yearly plan that doesn't have it)
-      const existingYearlyWithoutAddon = activePurchases.find(p => p.plan_duration === 'yearly' && !p.is_addon_purchased);
-
-      if ((is_refill && purchase_id) || (is_addon_purchased && existingYearlyWithoutAddon)) {
-        const pId = purchase_id || existingYearlyWithoutAddon?._id;
-        const purchase = await PriorityPlanPurchase.findById(pId);
-        if (!purchase) return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Purchase record not found' });
-
-        // Update expiry to newest extension if it's a new yearly purchase being treated as upgrade
-        if (is_addon_purchased && !purchase.is_addon_purchased) {
-          purchase.is_addon_purchased = true;
-          purchase.addon_max_slots = plan.addon_max_slots;
-          purchase.expire_at = finalExpiryDate; // Upgrade to full year from now
+        if (trulyNewProductIds.length <= totalAvailableSlots) {
+          finalAmount = 0;
+          purchaseToUpdate = activePurchases.find(
+            p => Math.max(0, (p.total_slots || 0) - (p.product_ids || []).length) >= trulyNewProductIds.length
+          ) || activePurchases[0];
+        } else if (is_extra_per_product) {
+          const extraProducts = Math.max(0, trulyNewProductIds.length - totalAvailableSlots);
+          finalAmount = extraProducts * (extraPrice || 0);
+          purchaseToUpdate = activePurchases[0] || null;
+        } else {
+          finalAmount = plan_duration === "monthly" ? plan.monthly_price : plan.yearly_price;
         }
-
-        // Handle Addon Refill
-        if (addon_product_ids && addon_product_ids.length > 0) {
-          const currentAddonIds = (purchase.addon_product_ids || []).map(id => id.toString());
-          const newAddonIds = addon_product_ids.filter(id => !currentAddonIds.includes(id.toString()));
-
-          if (newAddonIds.length > 0) {
-            const totalPlanned = currentAddonIds.length + newAddonIds.length;
-            if (totalPlanned > (purchase.addon_max_slots || 0)) {
-              return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: `Addon slots exceeded. Max: ${purchase.addon_max_slots}` });
-            }
-
-            purchase.addon_product_ids.push(...newAddonIds);
-            await purchase.save();
-
-            // Update Products
-            await Product.updateMany(
-              { _id: { $in: newAddonIds }, vendor_id },
-              { status: 'active', expires_at: purchase.expire_at }
-            );
-
-            // Sync with ListingPlanPurchase (Find existing addon record to avoid duplicates)
-            let listingPurchase = await ListingPlanPurchase.findOne({
-              vendor_id,
-              plan_type: 'Priority Addon',
-              priority_purchase_id: purchase._id
-            });
-
-            if (listingPurchase) {
-              // Update existing
-              await ListingPlanPurchase.updateOne(
-                { _id: listingPurchase._id },
-                {
-                  $addToSet: { product_ids: { $each: newAddonIds } },
-                  $set: {
-                    priority_purchase_id: purchase._id, // Ensure it's linked now
-                    expire_at: purchase.expire_at
-                  }
-                }
-              );
-            } else {
-              // Create new only if absolutely none found
-              await ListingPlanPurchase.create({
-                vendor_id,
-                plan_type: 'Priority Addon',
-                months: 12,
-                max_products: purchase.addon_max_slots,
-                amount: 0,
-                product_ids: newAddonIds,
-                start_at: new Date(),
-                expire_at: purchase.expire_at,
-                priority_purchase_id: purchase._id
-              });
-            }
-          }
-        }
-
-        // Handle Priority Refill
-        if (product_ids && product_ids.length > 0) {
-          const currentPriorityIds = (purchase.product_ids || []).map(id => id.toString());
-          const newPriorityIds = product_ids.filter(id => !currentPriorityIds.includes(id.toString()));
-
-          if (newPriorityIds.length > 0) {
-            const totalPlanned = currentPriorityIds.length + newPriorityIds.length;
-            if (totalPlanned > purchase.total_slots) {
-              return res.status(httpStatus.BAD_REQUEST).json({ success: false, message: `Priority slots exceeded. Max: ${purchase.total_slots}` });
-            }
-
-            purchase.product_ids.push(...newPriorityIds);
-            await purchase.save();
-
-            await Product.updateMany(
-              { _id: { $in: newPriorityIds }, vendor_id },
-              { is_priority: true, priority_expiry: purchase.expire_at }
-            );
-          }
-        }
-
-        return res.status(200).json({ success: true, message: 'Priority Plan updated successfully', expiry: purchase.expire_at });
       }
 
-      // If we got here, it's a NEW purchase (no existing compatible plan found or not a refill)
-      if (product_ids.length > plan.product_slots) {
-        return res.status(httpStatus.BAD_REQUEST).json({
-          success: false,
-          message: `Plan only allows up to ${plan.product_slots} products`
-        });
-      }
+      if (purchaseToUpdate && finalAmount === 0) {
+        purchaseToUpdate.product_ids.push(...trulyNewProductIds);
+        await purchaseToUpdate.save();
 
-      // Deduct money from wallet if price > 0
-      if (price > 0) {
-        const description = `Priority Plan Purchase: ${plan.name} (${plan_duration})`;
-        await walletService.deductMoneyFromWallet(vendor_id, price, description, {
-          plan_id,
-          plan_name: plan.name,
-          type: 'priority_plan_purchase'
-        });
-      }
-
-      const purchaseData = {
-        vendor_id,
-        plan_id,
-        plan_name: plan.name,
-        amount: price,
-        total_slots: plan.product_slots,
-        product_ids,
-        expire_at: finalExpiryDate,
-        plan_duration: plan_duration || 'monthly',
-        is_addon_purchased: !!is_addon_purchased,
-        addon_max_slots: is_addon_purchased ? plan.addon_max_slots : 0,
-      };
-
-      if (is_addon_purchased && addon_product_ids && addon_product_ids.length) {
-        purchaseData.addon_product_ids = addon_product_ids;
-      }
-
-      const newPurchase = await PriorityPlanPurchase.create(purchaseData);
-
-      // Update products to be priority
-      await Product.updateMany(
-        { _id: { $in: product_ids }, vendor_id },
-        {
-          is_priority: true,
-          priority_expiry: finalExpiryDate
-        }
-      );
-
-      // If addon was purchased, update listing expiry and create listing purchase record
-      if (is_addon_purchased && addon_product_ids && addon_product_ids.length) {
         await Product.updateMany(
-          { _id: { $in: addon_product_ids }, vendor_id },
-          {
-            status: 'active',
-            expires_at: finalExpiryDate
-          }
+          { _id: { $in: trulyNewProductIds }, vendor_id },
+          { is_priority: true, priority_expiry: purchaseToUpdate.expire_at }
         );
 
-        await ListingPlanPurchase.create({
-          vendor_id,
-          plan_type: 'Priority Addon',
-          months: 12,
-          max_products: plan.addon_max_slots,
-          amount: 0,
-          product_ids: addon_product_ids,
-          start_at: new Date(),
-          expire_at: finalExpiryDate,
-          priority_purchase_id: newPurchase._id
+        return res.status(200).json({
+          success: true,
+          message: 'Products added to your existing priority plan successfully',
+          data: purchaseToUpdate
         });
       }
 
-      return res.status(200).json({
-        success: true,
-        message: is_addon_purchased ? 'Priority Plan & Annual Benefit activated successfully!' : 'Priority plan purchased successfully',
-        expiry: finalExpiryDate
-      });
+      // Check wallet balance
+      const hasBalance = await walletService.hasSufficientBalance(vendor_id, finalAmount);
+      if (!hasBalance) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          message: `Insufficient wallet balance. Charge is ₹${finalAmount}. Please add money.`
+        });
+      }
+
+      // Deduct money
+      if (finalAmount > 0) {
+        await walletService.deductMoneyFromWallet(
+          vendor_id,
+          finalAmount,
+          `Priority Plan: ${is_unlimited ? 'Unlimited Priority' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')}`,
+          { purpose: 'priority_plan_purchase', is_unlimited }
+        );
+      }
+
+      const start = new Date();
+
+      // Fixed 30-day counting: each month = 30 days
+      let totalDays = 30; // monthly
+      if (plan_duration === "yearly") {
+        totalDays = 12 * 30;
+      }
+      const months30 = Math.floor(totalDays / 30);
+      const remainingDays = totalDays % 30;
+
+      const commonExpire = new Date(start);
+      commonExpire.setMonth(commonExpire.getMonth() + months30);
+      commonExpire.setDate(commonExpire.getDate() + remainingDays);
+
+      if (purchaseToUpdate) {
+        purchaseToUpdate.product_ids.push(...trulyNewProductIds);
+        if (is_unlimited !== undefined) {
+          purchaseToUpdate.is_unlimited = is_unlimited;
+          if (plan_duration === "monthly") purchaseToUpdate.is_monthly_unlimited = is_unlimited;
+          if (plan_duration === "yearly") purchaseToUpdate.is_yearly_unlimited = is_unlimited;
+        }
+        if (is_extra_per_product !== undefined) {
+          purchaseToUpdate.is_extra_per_product = is_extra_per_product;
+          if (plan_duration === "monthly") purchaseToUpdate.is_monthly_extra = is_extra_per_product;
+          if (plan_duration === "yearly") purchaseToUpdate.is_yearly_extra = is_extra_per_product;
+        }
+        await purchaseToUpdate.save();
+
+        await Product.updateMany(
+          { _id: { $in: trulyNewProductIds }, vendor_id },
+          { is_priority: true, priority_expiry: purchaseToUpdate.expire_at }
+        );
+
+        const updatedBalance = await walletService.getWalletBalance(vendor_id);
+
+        return res.status(200).json({
+          success: true,
+          message: 'Plan updated successfully',
+          data: { ...purchaseToUpdate.toObject(), wallet_balance: updatedBalance }
+        });
+      } else {
+        // Calculate total products for free_listing
+        const allActivePurchases = await PriorityPlanPurchase.find({
+          vendor_id,
+          status: 'active',
+          expire_at: { $gt: new Date() }
+        });
+
+        const totalUsedProducts = allActivePurchases.reduce((sum, p) =>
+          sum + (p.product_ids?.length || 0) + (p.addon_product_ids?.length || 0), 0);
+
+        const totalProductsAfter = totalUsedProducts + trulyNewProductIds.length;
+
+        const purchase = await PriorityPlanPurchase.create({
+          vendor_id,
+          plan_id,
+          plan_name: plan.name,
+          amount: finalAmount,
+          total_slots: plan.product_slots,
+          product_ids: trulyNewProductIds,
+          start_at: start,
+          expire_at: commonExpire,
+          plan_duration,
+          is_unlimited: !!is_unlimited,
+          is_extra_per_product: !!is_extra_per_product,
+          is_monthly_extra: plan_duration === "monthly" && !!is_extra_per_product,
+          is_monthly_unlimited: plan_duration === "monthly" && !!is_unlimited,
+          is_yearly_extra: plan_duration === "yearly" && !!is_extra_per_product,
+          is_yearly_unlimited: plan_duration === "yearly" && !!is_unlimited,
+          free_listing: !(totalProductsAfter >= plan.product_slots && !is_unlimited && !is_extra_per_product)
+        });
+
+        await Product.updateMany(
+          { _id: { $in: trulyNewProductIds }, vendor_id },
+          { is_priority: true, priority_expiry: purchase.expire_at }
+        );
+
+        const updatedBalance = await walletService.getWalletBalance(vendor_id);
+
+        return res.status(201).json({
+          success: true,
+          message: 'Plan activated successfully',
+          data: { ...purchase.toObject(), wallet_balance: updatedBalance }
+        });
+      }
     } catch (error) {
       return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
@@ -333,36 +342,36 @@ const getVendorPriorityPurchases = {
   handler: async (req, res) => {
     const vendor_id = req.user.id || req.user._id;
     const { filter_rent_sell } = req.query;
-    
+
     let purchases = await PriorityPlanPurchase.find({
       vendor_id,
       status: 'active',
       expire_at: { $gt: new Date() }
     }).populate('product_ids', 'product_name category_name sub_category_name product_type_name expires_at priority_expiry').populate('addon_product_ids', 'product_name category_name sub_category_name product_type_name expires_at');
-    
+
     if (filter_rent_sell) {
       const targetProductType = filter_rent_sell === '1' ? 'Rent' : 'Sell';
-      
+
       purchases = purchases.map(purchase => {
         const obj = purchase.toObject();
-        
-        obj.product_ids = obj.product_ids.filter(product => 
+
+        obj.product_ids = obj.product_ids.filter(product =>
           product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
         );
-        
-        obj.addon_product_ids = obj.addon_product_ids.filter(product => 
+
+        obj.addon_product_ids = obj.addon_product_ids.filter(product =>
           product && String(product.product_type_name).toLowerCase() === targetProductType.toLowerCase()
         );
-        
+
         return obj;
       });
     }
-    
+
     let total = 0;
     purchases.forEach(purchase => {
       total += (purchase.product_ids?.length || 0) + (purchase.addon_product_ids?.length || 0);
     });
-    
+
     return res.status(200).json({ success: true, data: purchases, total });
   },
 };

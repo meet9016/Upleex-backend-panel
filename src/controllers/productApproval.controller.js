@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
 const { Product, ProductMonth, ProductType, Category, SubCategory } = require('../models');
+const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
@@ -16,19 +17,20 @@ const getAllVendors = {
       const skip = (pageNum - 1) * limitNum;
 
       // Only fetch vendors who can sell/rent products (vendor_type: 'vendor' or 'both')
-      const eligibleVendors = await Vendor.find(
-        { vendor_type: { $in: ['vendor', 'both'] } },
-        { _id: 1 }
-      ).lean();
-      const eligibleVendorIds = eligibleVendors.map(v => String(v._id));
+      const kycQuery = { 
+        $or: [
+          { vendor_type: { $regex: /vendor|both/i } },
+          { vendor_type: { $exists: false } },
+          { vendor_type: null }
+        ]
+      };
 
-      const total = await VendorKyc.countDocuments({
-        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
-      });
+      const total = await VendorKyc.countDocuments(kycQuery);
 
-      const vendors = await VendorKyc.find({
-        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
-      }).skip(skip).limit(limitNum);
+      const vendors = await VendorKyc.find(kycQuery)
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
 
       const vendorsWithCount = await Promise.all(
         vendors.map(async (vendor) => {
@@ -37,6 +39,13 @@ const getAllVendors = {
           if (filter_rent_sell === '1') query.product_type_name = 'Rent';
           else if (filter_rent_sell === '2') query.product_type_name = 'Sell';
           const pendingCount = await Product.countDocuments(query);
+
+          // Fetch latest active listing plan to get billing flags
+          const activePlan = await ListingPlanPurchase.findOne({
+            vendor_id: vendorId,
+            expire_at: { $gt: new Date() }
+          }).sort({ createdAt: -1 });
+
           return {
             _id: vendor._id,
             vendor_id: vendorId,
@@ -44,7 +53,9 @@ const getAllVendors = {
             business_name: vendor.Identity?.business_name || '',
             email: vendor.ContactDetails?.email || '',
             number: vendor.ContactDetails?.mobile || '',
-            pendingCount
+            pendingCount,
+            is_unlimited: activePlan?.is_unlimited || false,
+            is_extra_per_product: activePlan?.is_extra_per_product || false,
           };
         })
       );

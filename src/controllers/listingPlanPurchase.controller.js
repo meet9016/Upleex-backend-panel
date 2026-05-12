@@ -26,6 +26,8 @@ const createPurchase = {
       product_ids: Joi.array().items(Joi.string().required()).min(1).required(),
       start_at: Joi.date(),
       expire_at: Joi.date(),
+      is_unlimited: Joi.boolean(),
+      is_extra_per_product: Joi.boolean(),
     }),
   },
   handler: async (req, res) => {
@@ -33,12 +35,13 @@ const createPurchase = {
     if (!vendor_id && req.user) {
       vendor_id = req.user.id || req.user._id;
     }
-    let { plan_type, plan_id } = req.body;
+    let { plan_type, plan_id, is_unlimited, is_extra_per_product } = req.body;
     const { product_ids } = req.body;
     plan_type = String(plan_type || '').trim().toLowerCase();
     let { months, max_products, amount, start_at, expire_at } = req.body;
+    
+    let def = null;
     if (plan_type !== 'custom') {
-      let def = null;
       try {
         if (plan_id) {
           def = await ListingPlan.findOne({ _id: plan_id, status: 'active' });
@@ -68,6 +71,8 @@ const createPurchase = {
       expire_at: { $gt: new Date() }
     });
 
+    const activeUnlimited = activePurchases.find(p => p.is_unlimited);
+
     // 2. Identify truly new products (filter out those already in some active plan of this type)
     const allCurrentlyAssignedIds = activePurchases.flatMap(p => p.product_ids.map(id => String(id)));
     const trulyNewProductIds = product_ids.filter(pid => !allCurrentlyAssignedIds.includes(String(pid)));
@@ -81,97 +86,78 @@ const createPurchase = {
       });
     }
 
-    // 4. Try to find an existing purchase with space
-    const purchaseWithSpace = activePurchases.find(p => (p.max_products - p.product_ids.length) >= trulyNewProductIds.length);
+    // 4. Calculate Final Price and handle Unlimited/Extra logic
+    let finalAmount = amount;
+    let purchaseToUpdate = null;
 
-    if (purchaseWithSpace) {
-      // Add products to existing plan
-      purchaseWithSpace.product_ids.push(...trulyNewProductIds);
-      await purchaseWithSpace.save();
+    if (activeUnlimited) {
+      // If already has unlimited, no more charges for this plan type
+      finalAmount = 0;
+      purchaseToUpdate = activeUnlimited;
+    } else if (is_unlimited) {
+      // Purchasing unlimited option
+      finalAmount = def?.unlimited_amount || 0;
+    } else {
+      // Check remaining slots across all active purchases of this plan type
+      const totalAvailableSlots = activePurchases.reduce((acc, p) => {
+        const remaining = (p.max_products || 0) - (p.product_ids || []).length;
+        return acc + Math.max(0, remaining);
+      }, 0);
+
+      if (trulyNewProductIds.length <= totalAvailableSlots) {
+        // Fits within existing slots — FREE, no charge
+        finalAmount = 0;
+        purchaseToUpdate = activePurchases.find(
+          p => Math.max(0, (p.max_products || 0) - (p.product_ids || []).length) >= trulyNewProductIds.length
+        ) || activePurchases[0];
+      } else if (is_extra_per_product) {
+        // Exceeds slots — charge per extra product
+        const extraProducts = Math.max(0, trulyNewProductIds.length - totalAvailableSlots);
+        finalAmount = extraProducts * (def?.extra_product_price || 0);
+        purchaseToUpdate = activePurchases[0] || null;
+      } else {
+        // New bundle purchase — charge full plan amount
+        finalAmount = def?.amount || 0;
+      }
+    }
+
+    if (purchaseToUpdate && finalAmount === 0) {
+      // Just update existing purchase
+      purchaseToUpdate.product_ids.push(...trulyNewProductIds);
+      await purchaseToUpdate.save();
 
       // Update product expiry
       const productsToUpdate = await Product.find({ _id: { $in: trulyNewProductIds }, vendor_id });
       const bulkOps = productsToUpdate.map(product => {
-        let updateData = {
-          $set: {
-            status: 'active',
-            expires_at: purchaseWithSpace.expire_at
-          }
-        };
-
-        // If product is free and has existing free listing expiry, calculate remaining days
-        if (product.pricing_type === 'free' && product.free_listing_expires_at) {
-          const freeExpiry = new Date(product.free_listing_expires_at);
-          const planStart = new Date(); // Plan starts today
-          const planExpiry = new Date(purchaseWithSpace.expire_at);
-          
-          // Calculate when product was created (30 days before free_listing_expires_at)
-          const productCreatedAt = new Date(freeExpiry);
-          productCreatedAt.setDate(productCreatedAt.getDate() - 30);
-          
-          // Calculate how many free days were USED before plan started
-          const daysUsed = Math.ceil((planStart.getTime() - productCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
-          const totalFreeDays = 30;
-          const remainingFreeDays = Math.max(0, totalFreeDays - daysUsed);
-          
-          // After paid plan expires, add the remaining free days
-          const newFreeExpiryAfterPlan = new Date(planExpiry);
-          newFreeExpiryAfterPlan.setDate(newFreeExpiryAfterPlan.getDate() + remainingFreeDays);
-          
-          // Store the remaining free days
-          updateData.$set.free_listing_remaining_days = remainingFreeDays;
-          updateData.$set.free_listing_expires_at = newFreeExpiryAfterPlan;
-        }
-
-        return {
-          updateOne: {
-            filter: { _id: product._id },
-            update: updateData
-          }
-        };
+        let updateData = { $set: { status: 'active', expires_at: purchaseToUpdate.expire_at } };
+        return { updateOne: { filter: { _id: product._id }, update: updateData } };
       });
-
       if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
 
       return res.status(200).json({
         success: true,
         message: 'Products added to your existing listing plan successfully',
-        data: purchaseWithSpace
+        data: purchaseToUpdate
       });
     }
 
-    // 5. If no space, create a new purchase (existing logic)
-    // Check wallet balance before deducting
-    const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
+    // Check wallet balance
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, finalAmount);
     if (!hasBalance) {
       return res.status(httpStatus.BAD_REQUEST).json({
-        message: `Insufficient wallet balance. Plan costs ₹${amount}. Please add money to your wallet.`
+        message: `Insufficient wallet balance. Charge is ₹${finalAmount}. Please add money.`
       });
     }
 
-    // Deduct amount from wallet
-    try {
+    // Deduct money
+    if (finalAmount > 0) {
       await walletService.deductMoneyFromWallet(
         vendor_id,
-        amount,
-        `${plan_type.charAt(0).toUpperCase() + plan_type.slice(1)} plan purchase - ${months} months, ${max_products} products`,
-        {
-          purpose: 'plan_purchase',
-          plan_type: plan_type,
-          months: months,
-          max_products: max_products,
-        }
+        finalAmount,
+        `${plan_type} plan: ${is_unlimited ? 'Unlimited Listing' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')}`,
+        { purpose: 'plan_purchase', plan_type, is_unlimited }
       );
-    } catch (walletError) {
-      return res.status(httpStatus.BAD_REQUEST).json({
-        message: 'Failed to process wallet payment. Please try again.'
-      });
     }
-
-    // Assign products to new plan
-    const assignIds = max_products && max_products < product_ids.length
-      ? product_ids.slice(0, max_products)
-      : product_ids;
 
     const start = start_at ? moment(start_at).toDate() : new Date();
     
@@ -184,93 +170,59 @@ const createPurchase = {
     commonExpire.setMonth(commonExpire.getMonth() + months30);
     commonExpire.setDate(commonExpire.getDate() + remainingDays);
 
-    const productsToUpdate = await Product.find({ _id: { $in: assignIds }, vendor_id });
-    const bulkOps = productsToUpdate.map(product => {
-      let currentExpiry = product.expires_at ? new Date(product.expires_at) : null;
-      let newProductExpiry;
+    if (purchaseToUpdate) {
+      // Adding extra products or upgrading to unlimited on existing plan
+      purchaseToUpdate.product_ids.push(...trulyNewProductIds);
+      if (is_unlimited !== undefined) purchaseToUpdate.is_unlimited = is_unlimited;
+      if (is_extra_per_product !== undefined) purchaseToUpdate.is_extra_per_product = is_extra_per_product;
+      await purchaseToUpdate.save();
 
-      if (currentExpiry && currentExpiry > new Date()) {
-        // Extend from current expiry using 30-day months
-        const totalDays = months * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        newProductExpiry = new Date(currentExpiry);
-        newProductExpiry.setMonth(newProductExpiry.getMonth() + months30);
-        newProductExpiry.setDate(newProductExpiry.getDate() + remainingDays);
-      } else {
-        // Fixed 30-day counting from start
-        const totalDays = months * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        newProductExpiry = new Date(start);
-        newProductExpiry.setMonth(newProductExpiry.getMonth() + months30);
-        newProductExpiry.setDate(newProductExpiry.getDate() + remainingDays);
-      }
+      // Update products
+      const productsToUpdate = await Product.find({ _id: { $in: trulyNewProductIds }, vendor_id });
+      const bulkOps = productsToUpdate.map(product => ({
+        updateOne: { filter: { _id: product._id }, update: { $set: { status: 'active', expires_at: purchaseToUpdate.expire_at } } }
+      }));
+      if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
 
-      let updateData = {
-        $set: {
-          status: 'active',
-          expires_at: newProductExpiry
-        }
-      };
+      // Get updated wallet balance
+      const updatedBalance = await walletService.getWalletBalance(vendor_id);
 
-      // If product is free and has existing free listing expiry, calculate remaining days
-      if (product.pricing_type === 'free' && product.free_listing_expires_at) {
-        const freeExpiry = new Date(product.free_listing_expires_at);
-        const planStart = new Date(); // Plan starts today
-        
-        // Calculate when product was created (30 days before free_listing_expires_at)
-        const productCreatedAt = new Date(freeExpiry);
-        productCreatedAt.setDate(productCreatedAt.getDate() - 30);
-        
-        // Calculate how many free days were USED before plan started
-        const daysUsed = Math.ceil((planStart.getTime() - productCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
-        const totalFreeDays = 30;
-        const remainingFreeDays = Math.max(0, totalFreeDays - daysUsed);
-        
-        // After paid plan expires, add the remaining free days
-        const newFreeExpiryAfterPlan = new Date(newProductExpiry);
-        newFreeExpiryAfterPlan.setDate(newFreeExpiryAfterPlan.getDate() + remainingFreeDays);
-        
-        // Store the remaining free days
-        updateData.$set.free_listing_remaining_days = remainingFreeDays;
-        updateData.$set.free_listing_expires_at = newFreeExpiryAfterPlan;
-      }
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Plan updated successfully', 
+        data: { ...purchaseToUpdate.toObject(), wallet_balance: updatedBalance } 
+      });
+    } else {
+      // Create new purchase
+      const purchase = await ListingPlanPurchase.create({
+        vendor_id,
+        plan_type,
+        months,
+        max_products,
+        amount: finalAmount,
+        product_ids: trulyNewProductIds,
+        start_at: start,
+        expire_at: expire_at ? new Date(expire_at) : commonExpire,
+        is_unlimited: !!is_unlimited,
+        is_extra_per_product: !!is_extra_per_product
+      });
 
-      return {
-        updateOne: {
-          filter: { _id: product._id },
-          update: updateData
-        }
-      };
-    });
+      // Update products
+      const productsToUpdate = await Product.find({ _id: { $in: trulyNewProductIds }, vendor_id });
+      const bulkOps = productsToUpdate.map(product => ({
+        updateOne: { filter: { _id: product._id }, update: { $set: { status: 'active', expires_at: purchase.expire_at } } }
+      }));
+      if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
 
-    if (bulkOps.length > 0) await Product.bulkWrite(bulkOps);
+      // Get updated wallet balance
+      const updatedBalance = await walletService.getWalletBalance(vendor_id);
 
-    const purchase = await ListingPlanPurchase.create({
-      vendor_id,
-      plan_type,
-      months,
-      max_products,
-      amount,
-      product_ids: assignIds,
-      start_at: start,
-      expire_at: expire_at ? new Date(expire_at) : commonExpire,
-    });
-    // Get updated wallet balance
-    const updatedBalance = await walletService.getWalletBalance(vendor_id);
-
-    return res.status(201).json({
-      success: true,
-      status: 201,
-      message: `Plan applied successfully. ₹${amount} deducted from wallet.`,
-      data: {
-        ...purchase.toObject(),
-        wallet_balance: updatedBalance,
-      }
-    });
+      return res.status(201).json({ 
+        success: true, 
+        message: 'Plan activated successfully', 
+        data: { ...purchase.toObject(), wallet_balance: updatedBalance } 
+      });
+    }
   },
 };
 
@@ -531,11 +483,47 @@ const getPlanOptions = {
   handler: async (req, res) => {
     try {
       const plans = await ListingPlan.find({ status: 'active' }).sort({ amount: 1 });
-      if (plans && plans.length) {
-        return res.status(200).json({ success: true, data: plans });
+      let data = plans;
+
+      if (!plans || !plans.length) {
+        data = fallbackPlanOptions;
       }
-    } catch (e) { }
-    return res.status(200).json({ success: true, data: fallbackPlanOptions });
+
+      // If user is logged in, calculate free listing availability
+      if (req.user && (req.user.id || req.user._id)) {
+        const vendor_id = req.user.id || req.user._id;
+        
+        // Fetch all active purchases for this vendor to calculate usage
+        const activePurchases = await ListingPlanPurchase.find({
+          vendor_id,
+          expire_at: { $gt: new Date() }
+        });
+
+        data = data.map(plan => {
+          const planObj = plan.toObject ? plan.toObject() : { ...plan };
+          
+          // Check for any active unlimited purchase for this plan type
+          const hasUnlimited = activePurchases.some(p => p.plan_type === planObj.plan_type && p.is_unlimited);
+          
+          if (hasUnlimited) {
+            planObj.free_listing = true;
+          } else {
+            // Count how many products are currently listed under this specific plan type
+            const planPurchases = activePurchases.filter(p => p.plan_type === planObj.plan_type);
+            const usedProductsCount = planPurchases.reduce((acc, p) => acc + (p.product_ids?.length || 0), 0);
+            
+            // If used products count is greater than or equal to max_products, set free_listing to false
+            planObj.free_listing = usedProductsCount < (planObj.max_products || 0);
+          }
+          
+          return planObj;
+        });
+      }
+
+      return res.status(200).json({ success: true, data });
+    } catch (e) {
+      return res.status(200).json({ success: true, data: fallbackPlanOptions });
+    }
   },
 };
 

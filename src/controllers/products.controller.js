@@ -22,6 +22,7 @@ const moment = require('moment');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
+const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
 const walletService = require('../services/wallet.service');
 const generateSKU = (categoryName, businessName, counter) => {
   const categoryCode = categoryName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
@@ -717,17 +718,29 @@ const getAllProducts = {
           'ContactDetails.city_name': 1, 
           'ContactDetails.full_name': 1, 
           'ContactDetails.address': 1,
+          'ContactDetails.mobile': 1,
           'Identity.business_name': 1 
         });
+        
+        // Check which vendors have active priority plans
+        const vendorsWithPriorityPlans = await PriorityPlanPurchase.find({
+          vendor_id: { $in: vendorIds },
+          status: 'active',
+          expire_at: { $gt: new Date() }
+        }).select('vendor_id');
+        const priorityVendorIds = new Set(vendorsWithPriorityPlans.map(p => String(p.vendor_id)));
+        
         kycs.forEach((k) => {
           const contact = k.ContactDetails || {};
           const identity = k.Identity || {};
-          vendorMap[String(contact.vendor_id)] = {
+          const vendorId = String(contact.vendor_id);
+          vendorMap[vendorId] = {
             city_id: contact.city_id || '',
             city_name: contact.city_name || '',
             vendor_name: (identity.business_name || contact.full_name || ''),
             business_name: identity.business_name || '',
             vendor_address: contact.address || '',
+            vendor_mobile: priorityVendorIds.has(vendorId) ? contact.mobile || '' : ''
           };
         });
       }
@@ -759,7 +772,7 @@ const getAllProducts = {
         wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
       }
 
-      const normalizedRaw = data.map((p) => {
+      const normalizedRaw = await Promise.all(data.map(async (p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
         return {
           ...p.toObject(),
@@ -770,9 +783,46 @@ const getAllProducts = {
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
+          vendor_mobile: v.vendor_mobile || '',
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
-      });
+      }));
+      
+      // Determine if product is within plan limit (Free) or over (Paid)
+      if (req.user && req.user.userType === 'vendor' && query.vendor_id) {
+        const activePurchases = await ListingPlanPurchase.find({
+          vendor_id: query.vendor_id,
+          expire_at: { $gt: new Date() }
+        });
+        
+        const totalAllowed = activePurchases.reduce((acc, p) => acc + (p.max_products || 0), 0);
+        const assignedIds = new Set(activePurchases.flatMap(p => p.product_ids.map(id => String(id))));
+        
+        // Count how many products are currently listed (status active/pending)
+        const currentProducts = await Product.find({
+          vendor_id: query.vendor_id,
+          status: { $in: ['active', 'draft'] },
+          approval_status: { $ne: 'rejected' }
+        }).sort({ createdAt: 1 }); // Oldest first to prioritize for free slots
+
+        const productPricingMap = {};
+        let slotsUsed = 0;
+
+        currentProducts.forEach((prod, index) => {
+          if (slotsUsed < totalAllowed) {
+            productPricingMap[String(prod._id)] = 'free';
+            slotsUsed++;
+          } else {
+            productPricingMap[String(prod._id)] = 'paid';
+          }
+        });
+
+        normalizedRaw.forEach(p => {
+          if (productPricingMap[String(p._id)]) {
+            p.pricing_type = productPricingMap[String(p._id)];
+          }
+        });
+      }
 
       // ── Time-based fair rotation ──────────────────────────────────────
       // If rotation_seed is passed (from user panel), shuffle each tier
@@ -945,17 +995,29 @@ const getVendorProducts = {
           'ContactDetails.city_name': 1, 
           'ContactDetails.full_name': 1, 
           'ContactDetails.address': 1,
+          'ContactDetails.mobile': 1,
           'Identity.business_name': 1 
         });
+        
+        // Check which vendors have active priority plans
+        const vendorsWithPriorityPlans = await PriorityPlanPurchase.find({
+          vendor_id: { $in: vendorIds },
+          status: 'active',
+          expire_at: { $gt: new Date() }
+        }).select('vendor_id');
+        const priorityVendorIds = new Set(vendorsWithPriorityPlans.map(p => String(p.vendor_id)));
+        
         kycs.forEach((k) => {
           const contact = k.ContactDetails || {};
           const identity = k.Identity || {};
-          vendorMap[String(contact.vendor_id)] = {
+          const vendorId = String(contact.vendor_id);
+          vendorMap[vendorId] = {
             city_id: contact.city_id || '',
             city_name: contact.city_name || '',
             vendor_name: (identity.business_name || contact.full_name || ''),
             business_name: identity.business_name || '',
             vendor_address: contact.address || '',
+            vendor_mobile: priorityVendorIds.has(vendorId) ? contact.mobile || '' : ''
           };
         });
       }
@@ -986,6 +1048,7 @@ const getVendorProducts = {
           vendor_city_id: v.city_id || '',
           vendor_city_name: v.city_name || '',
           vendor_address: v.vendor_address || '',
+          vendor_mobile: v.vendor_mobile || '',
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -1044,11 +1107,19 @@ const getProductById = {
 
       // Add vendor address from KYC data
       if (product.vendor_id) {
+        // Check if vendor has active priority plan
+        const hasActivePriorityPlan = await PriorityPlanPurchase.exists({
+          vendor_id: product.vendor_id,
+          status: 'active',
+          expire_at: { $gt: new Date() }
+        });
+        
         const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': product.vendor_id }, {
           'ContactDetails.address': 1,
           'ContactDetails.full_name': 1,
           'ContactDetails.city_id': 1,
           'ContactDetails.city_name': 1,
+          'ContactDetails.mobile': 1,
           'Identity.business_name': 1
         });
         
@@ -1062,6 +1133,10 @@ const getProductById = {
          productObj.vendor_name = contact.full_name || '';
           productObj.business_name = identity.business_name || '';
           productObj.is_wishlist = is_wishlist;
+          // Add vendor mobile if they have active priority plan
+          if (hasActivePriorityPlan) {
+            productObj.vendor_mobile = contact.mobile || '';
+          }
           return res.status(200).json({ status: 200, data: productObj });
         }
       }
@@ -1827,6 +1902,40 @@ const purchaseListingPlan = {
     let { plan_type, product_ids } = req.body;
     plan_type = String(plan_type || '').trim().toLowerCase();
     let { months, max_products, amount } = req.body;
+    // Check if vendor already has an active plan of this type with remaining slots
+    const now = new Date();
+    const existingActivePlan = await ListingPlanPurchase.findOne({
+      vendor_id,
+      plan_type,
+      expire_at: { $gt: now },
+    });
+
+    if (existingActivePlan) {
+      const usedSlots = (existingActivePlan.product_ids || []).length;
+      const remainingSlots = Math.max(0, existingActivePlan.max_products - usedSlots);
+
+      if (remainingSlots >= product_ids.length) {
+        // Enough slots available — add products for free, no wallet deduction
+        const assignIds = product_ids.slice(0, remainingSlots);
+        const expire = existingActivePlan.expire_at;
+
+        await ListingPlanPurchase.findByIdAndUpdate(existingActivePlan._id, {
+          $addToSet: { product_ids: { $each: assignIds } },
+        });
+        await Product.updateMany(
+          { _id: { $in: assignIds }, vendor_id },
+          { $set: { status: 'active', expires_at: expire } }
+        );
+        return res.status(200).json({
+          success: true,
+          status: 200,
+          message: `${assignIds.length} product(s) added to your active plan for free.`,
+          data: existingActivePlan,
+        });
+      }
+    }
+
+    // No active plan or not enough slots — charge full plan amount
     if (plan_type !== 'custom') {
       let def = null;
       try {
