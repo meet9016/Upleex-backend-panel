@@ -239,7 +239,13 @@ const createProduct = {
       // ───────────────────────────────────────────────
       if (pricingType === 'free') {
         let limit = 1;
-        const kyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': String(data.vendor_id) });
+        // Robust KYC lookup checking both possible vendor_id locations
+        const kyc = await VendorKyc.findOne({ 
+          $or: [
+            { 'ContactDetails.vendor_id': String(data.vendor_id) },
+            { 'vendor_id': String(data.vendor_id) }
+          ]
+        });
         const hasGST = !!(kyc && String(kyc.Identity?.gst_number || '').trim());
         limit = hasGST ? 3 : 1;
 
@@ -251,7 +257,7 @@ const createProduct = {
 
         if (activeFreeCount >= limit) {
           return res.status(httpStatus.BAD_REQUEST).json({
-            message: `Free listing limit reached (${activeFreeCount}/${limit}). ${hasGST ? 'You can add up to 3 free products.' : 'Add GST to get 3 free listings or upgrade to paid plan.'}`,
+            message: `Free listing limit reached (${activeFreeCount}/${limit}). This limit is combined for all Rent and Sell products. ${hasGST ? 'You can add up to 3 free products total.' : 'Add GST to your profile to get 3 free listings or select "Base (Paid listing)" for this product.'}`,
           });
         }
       }
@@ -814,12 +820,17 @@ const getAllProducts = {
         const productPricingMap = {};
         let slotsUsed = 0;
 
-        currentProducts.forEach((prod, index) => {
-          if (isUnlimited || slotsUsed < totalAllowed) {
-            productPricingMap[String(prod._id)] = 'free';
-            slotsUsed++;
-          } else {
+        currentProducts.forEach((prod) => {
+          const storedPricingType = prod.pricing_type || 'free';
+          if (storedPricingType === 'paid') {
             productPricingMap[String(prod._id)] = 'paid';
+          } else {
+            if (isUnlimited || slotsUsed < totalAllowed) {
+              productPricingMap[String(prod._id)] = 'free';
+              slotsUsed++;
+            } else {
+              productPricingMap[String(prod._id)] = 'paid';
+            }
           }
         });
 
@@ -1084,11 +1095,16 @@ const getVendorProducts = {
       const productPricingMap = {};
       let slotsUsed = 0;
       currentProducts.forEach((prod) => {
-        if (isUnlimited || slotsUsed < totalAllowed) {
-          productPricingMap[String(prod._id)] = 'free';
-          slotsUsed++;
-        } else {
+        const storedPricingType = prod.pricing_type || 'free';
+        if (storedPricingType === 'paid') {
           productPricingMap[String(prod._id)] = 'paid';
+        } else {
+          if (isUnlimited || slotsUsed < totalAllowed) {
+            productPricingMap[String(prod._id)] = 'free';
+            slotsUsed++;
+          } else {
+            productPricingMap[String(prod._id)] = 'paid';
+          }
         }
       });
 
