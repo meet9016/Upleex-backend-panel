@@ -11,6 +11,8 @@ const servicePriorityPlanPurchaseSchema = new mongoose.Schema(
     service_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Service', default: [] },
     has_duration_addon: { type: Boolean, default: false },
     addon_amount: { type: Number, default: 0 },
+    gst_amount: { type: Number, default: 0 },
+    total_amount: { type: Number, default: 0 },
     start_at: { type: Date, default: () => new Date() },
     expire_at: { type: Date },
   },

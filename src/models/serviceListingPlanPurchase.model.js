@@ -10,6 +10,8 @@ const serviceListingPlanPurchaseSchema = new mongoose.Schema(
     amount: { type: Number, default: 0 },
     max_services: { type: Number, default: 0 },
     service_ids: { type: [mongoose.Schema.Types.ObjectId], ref: 'Service', default: [] },
+    gst_amount: { type: Number, default: 0 },
+    total_amount: { type: Number, default: 0 },
     start_at: { type: Date, default: () => new Date() },
     expire_at: { type: Date },
   },

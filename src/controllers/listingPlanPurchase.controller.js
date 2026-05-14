@@ -121,6 +121,9 @@ const createPurchase = {
       }
     }
 
+    const gstAmount = finalAmount > 0 ? Number((finalAmount * 0.18).toFixed(2)) : 0;
+    const totalAmountWithGst = Number((finalAmount + gstAmount).toFixed(2));
+
     if (purchaseToUpdate && finalAmount === 0) {
       // Just update existing purchase
       purchaseToUpdate.product_ids.push(...trulyNewProductIds);
@@ -142,20 +145,20 @@ const createPurchase = {
     }
 
     // Check wallet balance
-    const hasBalance = await walletService.hasSufficientBalance(vendor_id, finalAmount);
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
     if (!hasBalance) {
       return res.status(httpStatus.BAD_REQUEST).json({
-        message: `Insufficient wallet balance. Charge is ₹${finalAmount}. Please add money.`
+        message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
       });
     }
 
     // Deduct money
-    if (finalAmount > 0) {
+    if (totalAmountWithGst > 0) {
       await walletService.deductMoneyFromWallet(
         vendor_id,
-        finalAmount,
-        `${plan_type} plan: ${is_unlimited ? 'Unlimited Listing' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')}`,
-        { purpose: 'plan_purchase', plan_type, is_unlimited }
+        totalAmountWithGst,
+        `${plan_type} plan: ${is_unlimited ? 'Unlimited Listing' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
+        { purpose: 'plan_purchase', plan_type, is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
       );
     }
 
@@ -204,7 +207,9 @@ const createPurchase = {
         start_at: start,
         expire_at: expire_at ? new Date(expire_at) : commonExpire,
         is_unlimited: !!is_unlimited,
-        is_extra_per_product: !!is_extra_per_product
+        is_extra_per_product: !!is_extra_per_product,
+        gst_amount: gstAmount,
+        total_amount: totalAmountWithGst,
       });
 
       // Update products

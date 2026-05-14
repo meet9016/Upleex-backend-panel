@@ -25,6 +25,8 @@ const priorityPlanPurchaseSchema = new mongoose.Schema(
     is_yearly_unlimited: { type: Boolean, default: false },
     // New field: free_listing (per purchase, default true)
     free_listing: { type: Boolean, default: true },
+    gst_amount: { type: Number, default: 0 },
+    total_amount: { type: Number, default: 0 },
     status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' },
   },
   { timestamps: true }

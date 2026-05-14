@@ -31,6 +31,8 @@ const rentalBoostPlanPurchaseSchema = new mongoose.Schema(
       default: 'pending',
     },
     transaction_id: { type: String, default: '' },
+    gst_amount: { type: Number, default: 0 },
+    total_amount: { type: Number, default: 0 },
     start_date: { type: Date },
     expiry_date: { type: Date },
   },

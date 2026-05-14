@@ -210,6 +210,9 @@ const purchasePriorityPlan = {
         }
       }
 
+      const gstAmount = finalAmount > 0 ? Number((finalAmount * 0.18).toFixed(2)) : 0;
+      const totalAmountWithGst = Number((finalAmount + gstAmount).toFixed(2));
+
       if (purchaseToUpdate && finalAmount === 0) {
         purchaseToUpdate.product_ids.push(...trulyNewProductIds);
         await purchaseToUpdate.save();
@@ -227,20 +230,20 @@ const purchasePriorityPlan = {
       }
 
       // Check wallet balance
-      const hasBalance = await walletService.hasSufficientBalance(vendor_id, finalAmount);
+      const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
       if (!hasBalance) {
         return res.status(httpStatus.BAD_REQUEST).json({
-          message: `Insufficient wallet balance. Charge is ₹${finalAmount}. Please add money.`
+          message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
         });
       }
 
       // Deduct money
-      if (finalAmount > 0) {
+      if (totalAmountWithGst > 0) {
         await walletService.deductMoneyFromWallet(
           vendor_id,
-          finalAmount,
-          `Priority Plan: ${is_unlimited ? 'Unlimited Priority' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')}`,
-          { purpose: 'priority_plan_purchase', is_unlimited }
+          totalAmountWithGst,
+          `Priority Plan: ${is_unlimited ? 'Unlimited Priority' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
+          { purpose: 'priority_plan_purchase', is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
         );
       }
 
@@ -313,6 +316,8 @@ const purchasePriorityPlan = {
           is_monthly_unlimited: plan_duration === "monthly" && !!is_unlimited,
           is_yearly_extra: plan_duration === "yearly" && !!is_extra_per_product,
           is_yearly_unlimited: plan_duration === "yearly" && !!is_unlimited,
+          gst_amount: gstAmount,
+          total_amount: totalAmountWithGst,
           free_listing: !(totalProductsAfter >= plan.product_slots && !is_unlimited && !is_extra_per_product)
         });
 

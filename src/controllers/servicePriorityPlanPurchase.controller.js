@@ -31,8 +31,11 @@ const createPurchase = {
         amount += addonAmount;
       }
 
-      const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
-      if (!hasBalance) return res.status(httpStatus.BAD_REQUEST).json({ message: 'Insufficient wallet balance.' });
+      const gstAmount = amount > 0 ? Math.round(amount * 0.18) : 0;
+      const totalAmountWithGst = amount + gstAmount;
+
+      const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
+      if (!hasBalance) return res.status(httpStatus.BAD_REQUEST).json({ message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${amount} + GST: ₹${gstAmount}).` });
 
       // Get all vendor's approved services
       const vendorServices = await Service.find({ 
@@ -49,9 +52,9 @@ const createPurchase = {
 
       await walletService.deductMoneyFromWallet(
         vendor_id,
-        amount,
-        `Service Priority Plan - ${duration}${has_duration_addon ? ' + Annual Benefit' : ''}`,
-        { purpose: 'service_priority_purchase', plan_id }
+        totalAmountWithGst,
+        `Service Priority Plan - ${duration}${has_duration_addon ? ' + Annual Benefit' : ''} (Includes 18% GST)`,
+        { purpose: 'service_priority_purchase', plan_id, base_amount: amount, gst_amount: gstAmount }
       );
 
       const start = new Date();
@@ -91,6 +94,8 @@ const createPurchase = {
         service_ids: serviceIds, // Store all affected service IDs
         has_duration_addon,
         addon_amount: addonAmount,
+        gst_amount: gstAmount,
+        total_amount: totalAmountWithGst,
         start_at: start,
         expire_at: expire,
       });
