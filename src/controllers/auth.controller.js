@@ -361,9 +361,17 @@ const webLoginRegister = {
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
 
         // Real random OTP for the website, static 123456 for mobile app and others
-        const generatedOtp = (isFromWebsite && !isFromMobileApp)
-          ? Math.floor(100000 + Math.random() * 900000).toString()
-          : '123456';
+        // Special case: 111111 for 8200199856
+        let generatedOtp;
+        const isSpecialNumber = number && (number === '8200199856' || number.endsWith('8200199856'));
+        
+        if (isSpecialNumber) {
+          generatedOtp = '111111';
+        } else {
+          generatedOtp = (isFromWebsite && !isFromMobileApp)
+            ? Math.floor(100000 + Math.random() * 900000).toString()
+            : '123456';
+        }
 
         // Save/Update OTP in database
         await Otp.findOneAndUpdate(
@@ -381,7 +389,7 @@ const webLoginRegister = {
         return res.status(200).send({
           status: 200,
           success: true,
-          message: shouldSendSms ? 'OTP sent successfully' : 'Static OTP generated (123456)',
+          message: shouldSendSms ? 'OTP sent successfully' : `Static OTP generated (${generatedOtp})`,
           data: {
             user_type: userType
           }
@@ -393,7 +401,7 @@ const webLoginRegister = {
       if (!detectedPlatform) {
         const origin = req.get('origin') || '';
         const referer = req.get('referer') || '';
-        const isFromWebsite = ['upleex.com','https://upleex.com', 'vendor.upleex.com'].some(domain =>
+        const isFromWebsite = ['upleex.com', 'https://upleex.com', 'vendor.upleex.com'].some(domain =>
           url === domain || origin.includes(domain) || referer.includes(domain)
         );
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
@@ -416,7 +424,12 @@ const webLoginRegister = {
       // ===============================
 
       // Check OTP in database
-      const otpRecord = await Otp.findOne({ phone: number, otp: otp });
+      let otpRecord = await Otp.findOne({ phone: number, otp: otp });
+
+      // Special case: Allow 111111 for 8200199856 even if not exactly matched (fallback)
+      if (!otpRecord && (number === '8200199856' || (number && number.endsWith('8200199856'))) && otp === '111111') {
+        otpRecord = await Otp.findOne({ phone: number });
+      }
 
       if (!otpRecord) {
         return res.status(400).send({
@@ -427,7 +440,9 @@ const webLoginRegister = {
       }
 
       // OTP is valid, delete it so it can't be reused
-      await Otp.deleteOne({ _id: otpRecord._id });
+      if (otpRecord._id) {
+        await Otp.deleteOne({ _id: otpRecord._id });
+      }
 
       // ===============================
       // NEW USER REGISTRATION
