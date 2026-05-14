@@ -92,12 +92,14 @@ const createPurchase = {
 
     // New purchase flow — charge the vendor
     const amount = plan.amount;
+    const gstAmount = amount > 0 ? Math.round(amount * 0.18) : 0;
+    const totalAmountWithGst = amount + gstAmount;
 
     // Check wallet balance
-    const hasBalance = await walletService.hasSufficientBalance(vendor_id, amount);
+    const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
     if (!hasBalance) {
       return res.status(httpStatus.BAD_REQUEST).json({
-        message: `Insufficient wallet balance. Plan costs ₹${amount}.`
+        message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${amount} + GST: ₹${gstAmount}).`
       });
     }
 
@@ -105,11 +107,13 @@ const createPurchase = {
     try {
       await walletService.deductMoneyFromWallet(
         vendor_id,
-        amount,
-        `Service Listing Plan - ${plan.plan_name}`,
+        totalAmountWithGst,
+        `Service Listing Plan - ${plan.plan_name} (Includes 18% GST)`,
         {
           purpose: 'service_plan_purchase',
           plan_id: plan_id,
+          base_amount: amount,
+          gst_amount: gstAmount
         }
       );
     } catch (e) {
@@ -170,6 +174,8 @@ const createPurchase = {
       plan_name: plan.plan_name,
       months: plan.months,
       amount,
+      gst_amount: gstAmount,
+      total_amount: totalAmountWithGst,
       max_services: plan.max_services || 0,
       service_ids,
       start_at: start,

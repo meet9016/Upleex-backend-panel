@@ -14,6 +14,8 @@ const listingPlanPurchaseSchema = new mongoose.Schema(
     priority_purchase_id: { type: mongoose.Schema.Types.ObjectId, ref: 'PriorityPlanPurchase' },
     is_unlimited: { type: Boolean, default: false },
     is_extra_per_product: { type: Boolean, default: false },
+    gst_amount: { type: Number, default: 0 },
+    total_amount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
