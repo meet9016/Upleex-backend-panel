@@ -72,7 +72,16 @@ const getAllPriorityPlans = {
       const name = (planObj.name || '').toLowerCase();
       
       if (name === 'basic' || name === 'standard') {
-        return { ...planObj, free_listing: true };
+        return {
+          ...planObj,
+          free_listing: true,
+          is_unlimited: false,
+          is_extra_per_product: false,
+          is_monthly_extra: false,
+          is_monthly_unlimited: false,
+          is_yearly_extra: false,
+          is_yearly_unlimited: false,
+        };
       }
       
       // Calculate used slots specifically for THIS plan
@@ -80,9 +89,23 @@ const getAllPriorityPlans = {
       const usedSlotsForThisPlan = planPurchases.reduce((sum, p) =>
         sum + (p.product_ids?.length || 0) + (p.addon_product_ids?.length || 0), 0);
 
+      // Aggregate purchase flags from active purchases of this plan
+      const is_unlimited = planPurchases.some(p => p.is_unlimited);
+      const is_extra_per_product = planPurchases.some(p => p.is_extra_per_product);
+      const is_monthly_extra = planPurchases.some(p => p.is_monthly_extra);
+      const is_monthly_unlimited = planPurchases.some(p => p.is_monthly_unlimited);
+      const is_yearly_extra = planPurchases.some(p => p.is_yearly_extra);
+      const is_yearly_unlimited = planPurchases.some(p => p.is_yearly_unlimited);
+
       return {
         ...planObj,
-        free_listing: usedSlotsForThisPlan < (plan.product_slots || 0)
+        free_listing: usedSlotsForThisPlan < (plan.product_slots || 0),
+        is_unlimited,
+        is_extra_per_product,
+        is_monthly_extra,
+        is_monthly_unlimited,
+        is_yearly_extra,
+        is_yearly_unlimited,
       };
     });
 
