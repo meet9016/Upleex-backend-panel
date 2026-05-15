@@ -55,25 +55,36 @@ const getAllPriorityPlans = {
     if (status) query.status = status;
     let data = await PriorityPlan.find(query).sort({ createdAt: -1 });
 
-    // If vendor is authenticated, calculate their total priority products (rent + sell)
-    let totalVendorPriorityProducts = 0;
+    // If vendor is authenticated, fetch their active priority purchases
+    let allActivePurchases = [];
     if (req.user && (req.user.id || req.user._id)) {
       const vendor_id = req.user.id || req.user._id;
-      const allActivePurchases = await PriorityPlanPurchase.find({
+      allActivePurchases = await PriorityPlanPurchase.find({
         vendor_id,
         status: 'active',
         expire_at: { $gt: new Date() }
       });
-
-      totalVendorPriorityProducts = allActivePurchases.reduce((sum, p) =>
-        sum + (p.product_ids?.length || 0) + (p.addon_product_ids?.length || 0), 0);
     }
 
-    // For each plan, set free_listing to false if vendor has used >= product_slots
-    data = data.map(plan => ({
-      ...plan.toObject(),
-      free_listing: totalVendorPriorityProducts < (plan.product_slots || 0)
-    }));
+    // For each plan, set free_listing to true for Basic/Standard, dynamic for others based ONLY on purchases for that plan
+    data = data.map(plan => {
+      const planObj = plan.toObject();
+      const name = (planObj.name || '').toLowerCase();
+      
+      if (name === 'basic' || name === 'standard') {
+        return { ...planObj, free_listing: true };
+      }
+      
+      // Calculate used slots specifically for THIS plan
+      const planPurchases = allActivePurchases.filter(p => String(p.plan_id) === String(planObj._id));
+      const usedSlotsForThisPlan = planPurchases.reduce((sum, p) =>
+        sum + (p.product_ids?.length || 0) + (p.addon_product_ids?.length || 0), 0);
+
+      return {
+        ...planObj,
+        free_listing: usedSlotsForThisPlan < (plan.product_slots || 0)
+      };
+    });
 
     return res.status(200).json({ success: true, data });
   },
@@ -190,13 +201,19 @@ const purchasePriorityPlan = {
       } else if (is_unlimited) {
         finalAmount = unlimitedAmt || 0;
       } else {
+        // Check if plan is Basic or Standard (free refills for duration)
+        const isBasicOrStandard = (plan.name?.toLowerCase() === 'basic' || plan.name?.toLowerCase() === 'standard');
+
         // Check remaining slots across all active purchases of this plan and duration
         const totalAvailableSlots = activePurchases.reduce((acc, p) => {
           const remaining = (p.total_slots || 0) - (p.product_ids || []).length;
           return acc + Math.max(0, remaining);
         }, 0);
 
-        if (trulyNewProductIds.length <= totalAvailableSlots) {
+        if (isBasicOrStandard && activePurchases.length > 0) {
+          finalAmount = 0;
+          purchaseToUpdate = activePurchases[0];
+        } else if (trulyNewProductIds.length <= totalAvailableSlots) {
           finalAmount = 0;
           purchaseToUpdate = activePurchases.find(
             p => Math.max(0, (p.total_slots || 0) - (p.product_ids || []).length) >= trulyNewProductIds.length
@@ -318,7 +335,7 @@ const purchasePriorityPlan = {
           is_yearly_unlimited: plan_duration === "yearly" && !!is_unlimited,
           gst_amount: gstAmount,
           total_amount: totalAmountWithGst,
-          free_listing: !(totalProductsAfter >= plan.product_slots && !is_unlimited && !is_extra_per_product)
+          free_listing: (plan.name.toLowerCase() === 'basic' || plan.name.toLowerCase() === 'standard') ? true : !(totalProductsAfter >= plan.product_slots && !is_unlimited && !is_extra_per_product)
         });
 
         await Product.updateMany(
