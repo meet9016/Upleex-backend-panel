@@ -21,6 +21,9 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
     });
 
     const response = await axios.post(`${BASE_URL}/upload-file`, formData, {
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      timeout: 300000, // 5 minutes
       headers: {
         ...formData.getHeaders(),
         accept: 'application/json',
@@ -32,7 +35,12 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
     }
     throw new Error(response.data.message || 'Upload failed');
   } catch (error) {
-    throw new Error('Failed to upload file to external service');
+    console.error('External upload error:', {
+      message: error.message,
+      data: error.response?.data,
+      status: error.response?.status
+    });
+    throw new Error(error.response?.data?.message || error.message || 'Failed to upload file to external service');
   }
 };
 
@@ -52,6 +60,9 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
     });
 
     const response = await axios.put(`${BASE_URL}/update-file-by-url`, formData, {
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      timeout: 300000, // 5 minutes
       headers: {
         ...formData.getHeaders(),
         accept: 'application/json',
@@ -63,7 +74,12 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
     }
     throw new Error(response.data.message || 'Update failed');
   } catch (error) {
-    throw new Error('Failed to update file on external service');
+    console.error('External update error:', {
+      message: error.message,
+      data: error.response?.data,
+      status: error.response?.status
+    });
+    throw new Error(error.response?.data?.message || error.message || 'Failed to update file on external service');
   }
 };
 
