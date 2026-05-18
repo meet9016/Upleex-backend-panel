@@ -95,29 +95,31 @@ const createPurchase = {
     const gstAmount = amount > 0 ? Math.round(amount * 0.18) : 0;
     const totalAmountWithGst = amount + gstAmount;
 
-    // Check wallet balance
-    const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
-    if (!hasBalance) {
-      return res.status(httpStatus.BAD_REQUEST).json({
-        message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${amount} + GST: ₹${gstAmount}).`
-      });
-    }
+    // Check wallet balance and deduct (skip for demo vendor)
+    const isDemo = await walletService.isDemoVendor(vendor_id);
+    if (!isDemo) {
+      const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
+      if (!hasBalance) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          message: `Insufficient wallet balance. Total charge including 18% GST is ₹29${totalAmountWithGst} (Base: ₹${amount} + GST: ₹${gstAmount}).`
+        });
+      }
 
-    // Deduct amount
-    try {
-      await walletService.deductMoneyFromWallet(
-        vendor_id,
-        totalAmountWithGst,
-        `Service Listing Plan - ${plan.plan_name} (Includes 18% GST)`,
-        {
-          purpose: 'service_plan_purchase',
-          plan_id: plan_id,
-          base_amount: amount,
-          gst_amount: gstAmount
-        }
-      );
-    } catch (e) {
-      return res.status(httpStatus.BAD_REQUEST).json({ message: 'Wallet deduction failed' });
+      try {
+        await walletService.deductMoneyFromWallet(
+          vendor_id,
+          totalAmountWithGst,
+          `Service Listing Plan - ${plan.plan_name} (Includes 18% GST)`,
+          {
+            purpose: 'service_plan_purchase',
+            plan_id: plan_id,
+            base_amount: amount,
+            gst_amount: gstAmount
+          }
+        );
+      } catch (e) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Wallet deduction failed' });
+      }
     }
 
     const start = new Date();

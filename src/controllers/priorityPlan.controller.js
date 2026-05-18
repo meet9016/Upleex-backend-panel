@@ -269,22 +269,24 @@ const purchasePriorityPlan = {
         });
       }
 
-      // Check wallet balance
-      const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
-      if (!hasBalance) {
-        return res.status(httpStatus.BAD_REQUEST).json({
-          message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
-        });
-      }
+      // Check wallet balance (skip for demo vendor)
+      const isDemo = await walletService.isDemoVendor(vendor_id);
+      if (!isDemo) {
+        const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
+        if (!hasBalance) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
+          });
+        }
 
-      // Deduct money
-      if (totalAmountWithGst > 0) {
-        await walletService.deductMoneyFromWallet(
-          vendor_id,
-          totalAmountWithGst,
-          `Priority Plan: ${is_unlimited ? 'Unlimited Priority' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
-          { purpose: 'priority_plan_purchase', is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
-        );
+        if (totalAmountWithGst > 0) {
+          await walletService.deductMoneyFromWallet(
+            vendor_id,
+            totalAmountWithGst,
+            `Priority Plan: ${is_unlimited ? 'Unlimited Priority' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
+            { purpose: 'priority_plan_purchase', is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
+          );
+        }
       }
 
       const start = new Date();

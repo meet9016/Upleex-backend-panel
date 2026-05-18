@@ -109,28 +109,31 @@ const approveService = {
 
       // Deduct ₹29 on approval
       if (newStatus === 'approved') {
-        const hasBalance = await walletService.hasSufficientBalance(service.vendor_id, 29);
-        if (!hasBalance) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Vendor has insufficient wallet balance for Service Listing Fee (₹29).'
-          });
-        }
+        const isDemo = await walletService.isDemoVendor(service.vendor_id);
+        if (!isDemo) {
+          const hasBalance = await walletService.hasSufficientBalance(service.vendor_id, 29);
+          if (!hasBalance) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+              message: 'Vendor has insufficient wallet balance for Service Listing Fee (₹29).'
+            });
+          }
 
-        try {
-          await walletService.deductMoneyFromWallet(
-            service.vendor_id,
-            29,
-            `Listing fee for approved service: ${service.service_name}`,
-            {
-              purpose: 'service_listing_fee',
-              service_name: service.service_name,
-              service_id: service._id,
-            }
-          );
-        } catch (walletError) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Failed to process wallet payment for Service approval.'
-          });
+          try {
+            await walletService.deductMoneyFromWallet(
+              service.vendor_id,
+              29,
+              `Listing fee for approved service: ${service.service_name}`,
+              {
+                purpose: 'service_listing_fee',
+                service_name: service.service_name,
+                service_id: service._id,
+              }
+            );
+          } catch (walletError) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+              message: 'Failed to process wallet payment for Service approval.'
+            });
+          }
         }
       }
 
@@ -188,6 +191,9 @@ const bulkApproveServices = {
       // Check balance for all to-be-approved services
       const services = await Service.find({ _id: { $in: service_ids }, approval_status: { $ne: 'approved' } });
       for (const service of services) {
+        const isDemo = await walletService.isDemoVendor(service.vendor_id);
+        if (isDemo) continue;
+
         const hasBalance = await walletService.hasSufficientBalance(service.vendor_id, 29);
         if (!hasBalance) {
           return res.status(httpStatus.BAD_REQUEST).json({

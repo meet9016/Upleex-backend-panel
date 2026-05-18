@@ -1,6 +1,28 @@
 const Wallet = require('../models/wallet.model');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
+const Vendor = require('../models/vendor/vendor.model');
+
+const DEMO_VENDOR_NUMBER = '8200199856';
+
+/**
+ * Check if a vendor is the demo account (skip wallet deductions)
+ * @param {string} vendorId
+ * @returns {Promise<boolean>}
+ */
+const isDemoVendor = async (vendorId) => {
+  if (!vendorId) return false;
+  try {
+    const mongoose = require('mongoose');
+    const query = mongoose.Types.ObjectId.isValid(vendorId)
+      ? { _id: vendorId }
+      : { number: vendorId };
+    const vendor = await Vendor.findOne(query).select('number').lean();
+    return !!(vendor && vendor.number === DEMO_VENDOR_NUMBER);
+  } catch (e) {
+    return false;
+  }
+};
 
 /**
  * Create wallet for vendor - only when needed
@@ -341,4 +363,5 @@ module.exports = {
   processVendorPayment,
   processRefund,
   getWalletStatistics,
+  isDemoVendor,
 };

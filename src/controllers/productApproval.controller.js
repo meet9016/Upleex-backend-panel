@@ -120,31 +120,34 @@ const approveProduct = {
 
       // If approving a paid product, deduct money from wallet
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
-        const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
-        
-        if (!hasBalance) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Vendor has insufficient wallet balance. Cannot approve paid listing.'
-          });
-        }
-        
-        try {
-          await walletService.deductMoneyFromWallet(
-            product.vendor_id,
-            10,
-            `Base (Paid listing) fee for approved product: ${product.product_name}`,
-            {
-              purpose: 'paid_listing_fee',
-              product_name: product.product_name,
-              product_id: product._id,
-              category_id: product.category_id,
-              sub_category_id: product.sub_category_id,
-            }
-          );
-        } catch (walletError) {
-          return res.status(httpStatus.BAD_REQUEST).json({
-            message: 'Failed to process wallet payment during approval. Please try again.'
-          });
+        const isDemo = await walletService.isDemoVendor(product.vendor_id);
+        if (!isDemo) {
+          const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
+          
+          if (!hasBalance) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+              message: 'Vendor has insufficient wallet balance. Cannot approve paid listing.'
+            });
+          }
+          
+          try {
+            await walletService.deductMoneyFromWallet(
+              product.vendor_id,
+              10,
+              `Base (Paid listing) fee for approved product: ${product.product_name}`,
+              {
+                purpose: 'paid_listing_fee',
+                product_name: product.product_name,
+                product_id: product._id,
+                category_id: product.category_id,
+                sub_category_id: product.sub_category_id,
+              }
+            );
+          } catch (walletError) {
+            return res.status(httpStatus.BAD_REQUEST).json({
+              message: 'Failed to process wallet payment during approval. Please try again.'
+            });
+          }
         }
       }
       
@@ -279,6 +282,9 @@ const bulkApproveProducts = {
       // Check wallet balance for paid products and deduct money
       for (const product of products) {
         if (product.approval_status !== 'approved' && product.pricing_type === 'paid') {
+          const isDemo = await walletService.isDemoVendor(product.vendor_id);
+          if (isDemo) continue;
+
           const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
           
           if (!hasBalance) {

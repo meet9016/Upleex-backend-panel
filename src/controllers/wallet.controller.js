@@ -68,6 +68,9 @@ const getWalletBalance = catchAsync(async (req, res) => {
   });
 });
 
+// Demo account number - wallet amount will NOT be deducted for this number
+const DEMO_VENDOR_NUMBER = '8200199856';
+
 // Create Razorpay order for adding money
 const createAddMoneyOrder = catchAsync(async (req, res) => {
   if (!req.user) {
@@ -95,6 +98,46 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
 
   // Generate transaction ID
   const transactionId = generateTransactionId();
+
+  // Check if this is a demo vendor account
+  const vendor = await Vendor.findById(vendorId).select('number');
+  const isDemoAccount = vendor && vendor.number === DEMO_VENDOR_NUMBER;
+
+  if (isDemoAccount) {
+    // Demo mode: return a fake order without hitting Razorpay
+    const demoOrderId = `demo_order_${Date.now()}`;
+
+    const pendingTransaction = {
+      transaction_id: transactionId,
+      type: 'credit',
+      amount: amount,
+      description: `Add money to wallet - ₹${amount}`,
+      status: 'pending',
+      razorpay_order_id: demoOrderId,
+      metadata: {
+        purpose: 'add_money',
+        created_by: vendorId,
+        is_demo: true,
+      },
+    };
+
+    wallet.transactions.push(pendingTransaction);
+    await wallet.save();
+
+    return res.status(httpStatus.OK).send({
+      status: 200,
+      success: true,
+      message: 'Add money order created successfully',
+      data: {
+        transaction_id: transactionId,
+        razorpay_order_id: demoOrderId,
+        amount: amount,
+        currency: 'INR',
+        key: config.razorpay.keyId || process.env.RAZORPAY_KEY_ID,
+        is_demo: true,
+      },
+    });
+  }
 
   // Check if Razorpay keys are configured
   const razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
@@ -156,7 +199,7 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
 const verifyAddMoneyPayment = catchAsync(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, transaction_id } = req.body;
 
-  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !transaction_id) {
+  if (!razorpay_order_id || !transaction_id) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payment verification data');
   }
 
@@ -165,17 +208,6 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
   }
 
   const vendorId = req.user.id || req.user._id;
-
-  // Verify signature
-  const body = razorpay_order_id + '|' + razorpay_payment_id;
-  const expectedSignature = crypto
-    .createHmac('sha256', config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET)
-    .update(body.toString())
-    .digest('hex');
-
-  if (expectedSignature !== razorpay_signature) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payment signature');
-  }
 
   // Find wallet and transaction
   const wallet = await Wallet.findOne({ vendor_id: vendorId });
@@ -192,11 +224,35 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Transaction already completed');
   }
 
-  // Update transaction with payment details
+  // Check if this is a demo vendor account
+  const vendor = await Vendor.findById(vendorId).select('number');
+  const isDemoAccount = vendor && vendor.number === DEMO_VENDOR_NUMBER;
+
+  if (!isDemoAccount) {
+    // Real account: verify Razorpay signature
+    if (!razorpay_payment_id || !razorpay_signature) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payment verification data');
+    }
+
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payment signature');
+    }
+
+    transaction.razorpay_payment_id = razorpay_payment_id;
+    transaction.razorpay_signature = razorpay_signature;
+  }
+  // Demo account: skip signature verification, just complete the transaction
+
+  // Update transaction
   transaction.status = 'completed';
-  transaction.razorpay_payment_id = razorpay_payment_id;
-  transaction.razorpay_signature = razorpay_signature;
   transaction.metadata.completed_at = new Date();
+  if (isDemoAccount) transaction.metadata.is_demo = true;
 
   // Add money to wallet balance
   wallet.balance += transaction.amount;

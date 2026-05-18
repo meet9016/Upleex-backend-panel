@@ -115,16 +115,18 @@ const purchaseRentalBoostPlan = {
         throw new Error('Product not found');
       }
 
-      // 3. Deduct from Wallet
+      // 3. Deduct from Wallet (skip for demo vendor)
       const gstAmount = plan.price > 0 ? Math.round(plan.price * 0.18) : 0;
       const totalAmountWithGst = plan.price + gstAmount;
 
-      const wallet = await Wallet.findOne({ vendor_id }).session(session);
-      if (!wallet || wallet.wallet_balance < totalAmountWithGst) {
-        throw new Error(`Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${plan.price} + GST: ₹${gstAmount}).`);
+      const isDemo = await walletService.isDemoVendor(vendor_id);
+      if (!isDemo) {
+        const wallet = await Wallet.findOne({ vendor_id }).session(session);
+        if (!wallet || wallet.balance < totalAmountWithGst) {
+          throw new Error(`Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${plan.price} + GST: ₹${gstAmount}).`);
+        }
+        await walletService.deductMoneyFromWallet(vendor_id, totalAmountWithGst, `Purchase of ${plan.name} for product: ${product.product_name} (Includes 18% GST)`, { base_amount: plan.price, gst_amount: gstAmount });
       }
-
-      await walletService.deductMoneyFromWallet(vendor_id, totalAmountWithGst, `Purchase of ${plan.name} for product: ${product.product_name} (Includes 18% GST)`, { base_amount: plan.price, gst_amount: gstAmount });
 
       // 4. Update Product Boost Status
       // Fixed 30-day counting: each month = 30 days
@@ -221,17 +223,18 @@ const purchaseBulkRentalBoostPlan = {
       expiryDate.setMonth(expiryDate.getMonth() + months30);
       expiryDate.setDate(expiryDate.getDate() + remainingDays);
 
-      // 4. Check Wallet
+      // 4. Check Wallet (skip for demo vendor)
       const gstAmountTotal = totalPrice > 0 ? Math.round(totalPrice * 0.18) : 0;
       const totalAmountWithGstBulk = totalPrice + gstAmountTotal;
 
-      const wallet = await Wallet.findOne({ vendor_id }).session(session);
-      if (!wallet || wallet.wallet_balance < totalAmountWithGstBulk) {
-        throw new Error(`Insufficient wallet balance. Total required including 18% GST: ₹${totalAmountWithGstBulk} (Base: ₹${totalPrice} + GST: ₹${gstAmountTotal}) for ${allProducts.length} products`);
+      const isDemoBulk = await walletService.isDemoVendor(vendor_id);
+      if (!isDemoBulk) {
+        const wallet = await Wallet.findOne({ vendor_id }).session(session);
+        if (!wallet || wallet.balance < totalAmountWithGstBulk) {
+          throw new Error(`Insufficient wallet balance. Total required including 18% GST: ₹${totalAmountWithGstBulk} (Base: ₹${totalPrice} + GST: ₹${gstAmountTotal}) for ${allProducts.length} products`);
+        }
+        await walletService.deductMoneyFromWallet(vendor_id, totalAmountWithGstBulk, `Bulk Boost for ${allProducts.length} products using ${plan.name} (₹${plan.price} + GST per product) (Includes 18% GST)`, { base_amount: totalPrice, gst_amount: gstAmountTotal });
       }
-      
-      // Deduct Money
-      await walletService.deductMoneyFromWallet(vendor_id, totalAmountWithGstBulk, `Bulk Boost for ${allProducts.length} products using ${plan.name} (₹${plan.price} + GST per product) (Includes 18% GST)`, { base_amount: totalPrice, gst_amount: gstAmountTotal });
 
       // 5. Update All Products
       const startDate = now;

@@ -144,22 +144,24 @@ const createPurchase = {
       });
     }
 
-    // Check wallet balance
-    const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
-    if (!hasBalance) {
-      return res.status(httpStatus.BAD_REQUEST).json({
-        message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
-      });
-    }
+    // Check wallet balance and deduct (skip for demo vendor)
+    const isDemo = await walletService.isDemoVendor(vendor_id);
+    if (!isDemo) {
+      const hasBalance = await walletService.hasSufficientBalance(vendor_id, totalAmountWithGst);
+      if (!hasBalance) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          message: `Insufficient wallet balance. Total charge including 18% GST is ₹${totalAmountWithGst} (Base: ₹${finalAmount} + GST: ₹${gstAmount}). Please add money.`
+        });
+      }
 
-    // Deduct money
-    if (totalAmountWithGst > 0) {
-      await walletService.deductMoneyFromWallet(
-        vendor_id,
-        totalAmountWithGst,
-        `${plan_type} plan: ${is_unlimited ? 'Unlimited Listing' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
-        { purpose: 'plan_purchase', plan_type, is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
-      );
+      if (totalAmountWithGst > 0) {
+        await walletService.deductMoneyFromWallet(
+          vendor_id,
+          totalAmountWithGst,
+          `${plan_type} plan: ${is_unlimited ? 'Unlimited Listing' : (activePurchases.length > 0 ? 'Extra Products' : 'New Subscription')} (Includes 18% GST)`,
+          { purpose: 'plan_purchase', plan_type, is_unlimited, base_amount: finalAmount, gst_amount: gstAmount }
+        );
+      }
     }
 
     const start = start_at ? moment(start_at).toDate() : new Date();
