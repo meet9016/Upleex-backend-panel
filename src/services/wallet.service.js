@@ -3,7 +3,7 @@ const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const Vendor = require('../models/vendor/vendor.model');
 
-const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245'];
+const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245', '8200199856'];
 
 /**
  * Check if a vendor is the demo account (skip wallet deductions)

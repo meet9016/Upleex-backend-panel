@@ -69,7 +69,7 @@ const getWalletBalance = catchAsync(async (req, res) => {
 });
 
 // Demo account numbers - wallet amount will NOT be deducted for these numbers
-const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245'];
+const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245', '8200199856'];
 
 // Create Razorpay order for adding money
 const createAddMoneyOrder = catchAsync(async (req, res) => {
