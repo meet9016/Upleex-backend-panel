@@ -3,7 +3,7 @@ const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const Vendor = require('../models/vendor/vendor.model');
 
-const DEMO_VENDOR_NUMBER = '8200199856';
+const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245'];
 
 /**
  * Check if a vendor is the demo account (skip wallet deductions)
@@ -18,7 +18,7 @@ const isDemoVendor = async (vendorId) => {
       ? { _id: vendorId }
       : { number: vendorId };
     const vendor = await Vendor.findOne(query).select('number').lean();
-    return !!(vendor && vendor.number === DEMO_VENDOR_NUMBER);
+    return !!(vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number));
   } catch (e) {
     return false;
   }

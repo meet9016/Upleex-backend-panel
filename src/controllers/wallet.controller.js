@@ -68,8 +68,8 @@ const getWalletBalance = catchAsync(async (req, res) => {
   });
 });
 
-// Demo account number - wallet amount will NOT be deducted for this number
-const DEMO_VENDOR_NUMBER = '8200199856';
+// Demo account numbers - wallet amount will NOT be deducted for these numbers
+const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245'];
 
 // Create Razorpay order for adding money
 const createAddMoneyOrder = catchAsync(async (req, res) => {
@@ -101,7 +101,7 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
 
   // Check if this is a demo vendor account
   const vendor = await Vendor.findById(vendorId).select('number');
-  const isDemoAccount = vendor && vendor.number === DEMO_VENDOR_NUMBER;
+  const isDemoAccount = vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number);
 
   if (isDemoAccount) {
     // Demo mode: return a fake order without hitting Razorpay
@@ -226,7 +226,7 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
 
   // Check if this is a demo vendor account
   const vendor = await Vendor.findById(vendorId).select('number');
-  const isDemoAccount = vendor && vendor.number === DEMO_VENDOR_NUMBER;
+  const isDemoAccount = vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number);
 
   if (!isDemoAccount) {
     // Real account: verify Razorpay signature
