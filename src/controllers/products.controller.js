@@ -990,7 +990,7 @@ const getVendorProducts = {
 
     try {
       const page = parseInt(req.body.page) || 1;
-      const limit = req.body.limit ? parseInt(req.body.limit) : 10;
+      const limit = req.body.limit ? parseInt(req.body.limit) : 12;
       const skip = (page - 1) * limit;
 
       const total = await Product.countDocuments(query);
