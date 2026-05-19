@@ -998,40 +998,45 @@ const uploadStoreVideo = {
           .on('error', (err) => reject(new Error(`Compression failed: ${err.message}`)));
       });
 
-      // --- Upload Compressed Video to External S3 ---
-      const compressedBuffer = fs.readFileSync(compressedFilePath);
-      const externalUrl = await uploadToExternalService({
-        buffer: compressedBuffer,
-        originalname: fileName,
-        mimetype: 'video/mp4'
-      }, 'vendor_videos');
+      // --- Use local video url instead of external service ---
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const localVideoUrl = `${baseUrl}/uploads/vendor_videos/compressed_${fileName}`;
 
       const { old_video_url } = req.body;
 
-      // Update database with final S3 URL
+      // Update database with final local video URL
       if (old_video_url) {
         await Vendor.updateOne(
           { _id: vendor_id, store_videos: old_video_url },
-          { $set: { "store_videos.$": externalUrl } }
+          { $set: { "store_videos.$": localVideoUrl } }
         );
         // Delete old external video if it was an update
         if (old_video_url.includes('digitalks.co.in')) {
           await deleteFileFromExternalService(old_video_url);
+        } else {
+          // Delete old local file
+          try {
+            const oldParts = old_video_url.split('/');
+            const oldFileName = oldParts[oldParts.length - 1];
+            const oldPath = path.join(uploadDir, oldFileName);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          } catch (err) {
+            console.error("Failed to delete old local video:", err);
+          }
         }
       } else {
         await Vendor.findByIdAndUpdate(vendor_id, {
-          $push: { store_videos: externalUrl }
+          $push: { store_videos: localVideoUrl }
         });
       }
 
-      // Cleanup local files
+      // Cleanup original uncompressed local file, keep compressed file
       if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-      if (fs.existsSync(compressedFilePath)) fs.unlinkSync(compressedFilePath);
       
       return res.status(200).json({ 
         success: true, 
         message: old_video_url ? 'Video updated successfully' : 'Video uploaded successfully', 
-        video_url: externalUrl 
+        video_url: localVideoUrl 
       });
 
     } catch (error) {
