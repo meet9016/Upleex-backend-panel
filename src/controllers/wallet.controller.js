@@ -81,7 +81,7 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
   const vendorId = req.user.id || req.user._id;
 
   // Validate amount
-  if (!amount || amount < 50) {
+  if (!amount || amount < 1) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Minimum amount is ₹50');
   }
 

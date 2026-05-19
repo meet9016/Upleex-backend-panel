@@ -2,7 +2,7 @@ const Joi = require('joi');
 
 const createAddMoneyOrder = {
   body: Joi.object().keys({
-    amount: Joi.number().min(50).required().messages({
+    amount: Joi.number().min(1).required().messages({
       'number.min': 'Minimum amount is ₹50',
       'any.required': 'Amount is required',
     }),
