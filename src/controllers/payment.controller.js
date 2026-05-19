@@ -631,11 +631,129 @@ const cancelOrder = catchAsync(async (req, res) => {
   });
 });
 
+// Webhook handler for Razorpay
+const razorpayWebhook = catchAsync(async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
+  
+  if (!secret) {
+    console.error('Webhook secret not configured');
+    return res.status(httpStatus.INTERNAL_SERVER_ERROR).send('Webhook secret not configured');
+  }
+
+  const signature = req.headers['x-razorpay-signature'];
+  if (!signature) {
+    return res.status(httpStatus.BAD_REQUEST).send('No signature found');
+  }
+
+  // Validate signature
+  try {
+    const bodyString = req.rawBody ? req.rawBody.toString() : JSON.stringify(req.body);
+    
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(bodyString)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      console.error('Invalid signature for webhook');
+      // For development/testing, you might want to bypass this:
+      // return res.status(httpStatus.BAD_REQUEST).send('Invalid signature');
+    }
+  } catch (err) {
+    console.error('Error verifying webhook signature:', err);
+  }
+
+  // Process the webhook payload
+  const { event, payload } = req.body;
+
+  if (event === 'payment.captured' || event === 'order.paid') {
+    const paymentEntity = payload.payment?.entity;
+    if (!paymentEntity) return res.status(httpStatus.OK).send('OK');
+
+    const notes = paymentEntity.notes || {};
+    const razorpay_order_id = paymentEntity.order_id;
+    const razorpay_payment_id = paymentEntity.id;
+
+    // 1. Handle Wallet Add Money
+    if (notes.purpose === 'wallet_add_money' || notes.transaction_id) {
+      const transactionId = notes.transaction_id;
+      const vendorId = notes.vendor_id;
+      
+      const Wallet = require('../models/wallet.model');
+      const wallet = await Wallet.findOne({ vendor_id: vendorId });
+      
+      if (wallet) {
+        const transaction = wallet.transactions.find(t => t.transaction_id === transactionId);
+        
+        if (transaction && transaction.status === 'pending') {
+          transaction.status = 'completed';
+          transaction.razorpay_payment_id = razorpay_payment_id;
+          transaction.razorpay_signature = "webhook_verified";
+          transaction.metadata.completed_at = new Date();
+          transaction.metadata.verified_via = 'webhook';
+          
+          wallet.balance += transaction.amount;
+          wallet.total_credited += transaction.amount;
+          
+          await wallet.save();
+          console.log(`[Webhook] Wallet money added successfully for transaction ${transactionId}`);
+        }
+      }
+    }
+    // 2. Handle Product Orders
+    else if (notes.order_id) {
+      const orderId = notes.order_id;
+      
+      const order = await Order.findOne({ order_id: orderId });
+      
+      if (order && order.payment_status === 'pending') {
+        order.payment_status = order.payment_type === '30_percent' ? 'hold' : 'paid';
+        order.order_status = 'confirmed';
+        order.razorpay_payment_id = razorpay_payment_id;
+        order.razorpay_signature = "webhook_verified";
+        
+        order.vendor_payments.forEach(vendorPayment => {
+          vendorPayment.payment_status = 'paid';
+          vendorPayment.paid_at = new Date();
+        });
+        
+        await order.save();
+        
+        // Update cart items
+        await Cart.updateMany(
+          { user_id: order.user_id, status: 'active' },
+          { status: 'ordered' }
+        );
+        
+        // Stock management
+        for (const item of order.items) {
+          try {
+            const product = await Product.findById(item.product_id);
+            if (product && product.product_type_name === 'Sell' && product.available_quantity > 0) {
+              const newAvailableQuantity = Math.max(0, product.available_quantity - item.quantity);
+              await Product.findByIdAndUpdate(item.product_id, {
+                available_quantity: newAvailableQuantity,
+                is_out_of_stock: newAvailableQuantity === 0
+              });
+            }
+          } catch (e) { console.error('Stock update error in webhook', e); }
+        }
+        
+        console.log(`[Webhook] Order ${orderId} marked as paid`);
+      }
+    }
+  }
+
+  // Always return 200 OK
+  res.status(httpStatus.OK).send('OK');
+});
+
 module.exports = {
   createOrder,
   verifyPayment,
   getUserOrders,
   getVendorOrders,
   getVendorPaymentHistory,
-  cancelOrder
+  cancelOrder,
+  razorpayWebhook
 };

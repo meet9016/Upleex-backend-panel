@@ -118,4 +118,9 @@ router.put(
   catchAsync(paymentController.cancelOrder)
 );
 
+router.post(
+  '/webhook',
+  catchAsync(paymentController.razorpayWebhook)
+);
+
 module.exports = router;
