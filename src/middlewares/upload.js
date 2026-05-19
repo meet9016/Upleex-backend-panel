@@ -10,6 +10,7 @@ const fileFilter = (req, file, cb) => {
     "image/png",
     "image/webp",
     "image/jpg",
+    "image/svg+xml",
     "application/pdf",
     "video/mp4",
     "video/mpeg",
@@ -21,7 +22,7 @@ const fileFilter = (req, file, cb) => {
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type. Only images, PDF, and videos are allowed."), false);
+    cb(new Error("Invalid file type. Only images (JPEG, PNG, SVG, WEBP), PDF, and videos are allowed."), false);
   }
 };
 

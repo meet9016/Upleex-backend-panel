@@ -680,6 +680,20 @@ const getAllProducts = {
       }
 
       const total = await Product.countDocuments(query);
+
+      const rentQuery = { ...query };
+      delete rentQuery.product_type_name;
+      rentQuery.product_type_name = 'Rent';
+
+      const sellQuery = { ...query };
+      delete sellQuery.product_type_name;
+      sellQuery.product_type_name = 'Sell';
+
+      const [rentCount, sellCount] = await Promise.all([
+        Product.countDocuments(rentQuery),
+        Product.countDocuments(sellQuery)
+      ]);
+
       let dataQuery = Product.find(query).collation({ locale: 'en_US', numericOrdering: true }).sort(sortOptions);
 
       if (limitNum) {
@@ -874,6 +888,8 @@ const getAllProducts = {
       res.status(200).json({
         success: true,
         total,
+        rentCount: rentCount || 0,
+        sellCount: sellCount || 0,
         page: limitNum ? pageNum : 1,
         limit: limitNum || total,
         totalPages: limitNum ? Math.ceil(total / limitNum) : 1,

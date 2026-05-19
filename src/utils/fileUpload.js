@@ -38,10 +38,12 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
     console.error('External upload error:', {
       message: error.message,
       data: error.response?.data,
-      status: error.response?.status
+      status: error.response?.status,
+      fileType: file?.mimetype,
+      fileName: file?.originalname,
     });
     if (error.response?.status === 413) {
-      throw new Error('Video size is too large for the media storage service. Please upload a smaller video (maximum 25MB).');
+      throw new Error('File size is too large for the media storage service. Please upload a smaller file (max 25MB for videos, 10MB for images).');
     }
     throw new Error(error.response?.data?.message || error.message || 'Failed to upload file to external service');
   }
