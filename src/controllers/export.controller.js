@@ -765,20 +765,51 @@ const exportVendorWalletsToExcel = {
         { header: 'Total Credited (₹)', key: 'total_credited', width: 18 },
         { header: 'Total Debited (₹)', key: 'total_debited', width: 18 },
         { header: 'Status', key: 'status', width: 12 },
-        { header: 'Transaction Count', key: 'transaction_count', width: 16 },
-        { header: 'Currency', key: 'currency', width: 12 }
+        { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+        { header: 'Txn Type', key: 'txn_type', width: 12 },
+        { header: 'Txn Amount (₹)', key: 'txn_amount', width: 15 },
+        { header: 'Txn Status', key: 'txn_status', width: 12 },
+        { header: 'Txn Description', key: 'txn_description', width: 30 },
+        { header: 'Txn Date', key: 'txn_date', width: 18 }
       ];
 
-      const data = wallets.map(wallet => ({
-        vendor_name: wallet.vendor_id?.full_name || 'N/A',
-        vendor_email: wallet.vendor_id?.email || 'N/A',
-        balance: `₹${Number(wallet.balance || 0).toFixed(2)}`,
-        total_credited: `₹${Number(wallet.total_credited || 0).toFixed(2)}`,
-        total_debited: `₹${Number(wallet.total_debited || 0).toFixed(2)}`,
-        status: wallet.is_active ? 'Active' : 'Inactive',
-        transaction_count: wallet.transaction_count || 0,
-        currency: wallet.currency || 'INR'
-      }));
+      const data = [];
+      wallets.forEach(wallet => {
+        const baseData = {
+          vendor_name: wallet.vendor_id?.full_name || 'N/A',
+          vendor_email: wallet.vendor_id?.email || 'N/A',
+          balance: `₹${Number(wallet.balance || 0).toFixed(2)}`,
+          total_credited: `₹${Number(wallet.total_credited || 0).toFixed(2)}`,
+          total_debited: `₹${Number(wallet.total_debited || 0).toFixed(2)}`,
+          status: wallet.is_active ? 'Active' : 'Inactive'
+        };
+
+        if (wallet.transactions && wallet.transactions.length > 0) {
+          // Sort transactions by date descending
+          const sortedTxns = [...wallet.transactions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          sortedTxns.forEach(txn => {
+            data.push({
+              ...baseData,
+              transaction_id: txn.transaction_id || 'N/A',
+              txn_type: txn.type ? txn.type.toUpperCase() : 'N/A',
+              txn_amount: txn.amount ? `₹${Number(txn.amount).toFixed(2)}` : '₹0.00',
+              txn_status: txn.status ? txn.status.toUpperCase() : 'N/A',
+              txn_description: txn.description || 'N/A',
+              txn_date: txn.createdAt ? new Date(txn.createdAt).toLocaleString('en-IN') : 'N/A'
+            });
+          });
+        } else {
+          data.push({
+            ...baseData,
+            transaction_id: 'N/A',
+            txn_type: 'N/A',
+            txn_amount: 'N/A',
+            txn_status: 'N/A',
+            txn_description: 'N/A',
+            txn_date: 'N/A'
+          });
+        }
+      });
 
       await exportToExcel(res, data, columns, `vendor_wallets_${new Date().toISOString().split('T')[0]}.xlsx`, 'Vendor Wallets');
 
@@ -814,22 +845,50 @@ const exportVendorWalletsToPDF = {
         .populate('vendor_id', 'full_name email business_name')
         .sort({ createdAt: -1 });
 
-      const headers = ['Vendor Name', 'Email', 'Balance', 'Credited', 'Debited', 'Status', 'Count'];
-      const columnWidths = [140, 160, 100, 100, 100, 90, 80];
+      const headers = ['Vendor Name', 'Balance', 'Txn Type', 'Txn Amount', 'Txn Status', 'Txn Date'];
+      const columnWidths = [150, 80, 80, 80, 80, 90];
       const filename = `vendor_wallets_${new Date().toISOString().split('T')[0]}.pdf`;
       const title = 'Vendor Wallets Report';
 
-      const rowMapper = (wallet) => [
-        wallet.vendor_id?.full_name || 'N/A',
-        wallet.vendor_id?.email || 'N/A',
-        `${Number(wallet.balance || 0).toFixed(2)}`,
-        `${Number(wallet.total_credited || 0).toFixed(2)}`,
-        `${Number(wallet.total_debited || 0).toFixed(2)}`,
-        wallet.is_active ? 'Active' : 'Inactive',
-        wallet.transaction_count || 0
+      const data = [];
+      wallets.forEach(wallet => {
+        const vendor_name = wallet.vendor_id?.full_name || 'N/A';
+        const balance = `${Number(wallet.balance || 0).toFixed(2)}`;
+
+        if (wallet.transactions && wallet.transactions.length > 0) {
+          const sortedTxns = [...wallet.transactions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          sortedTxns.forEach(txn => {
+            data.push({
+              vendor_name,
+              balance,
+              txn_type: txn.type ? txn.type.toUpperCase() : 'N/A',
+              txn_amount: txn.amount ? `${Number(txn.amount).toFixed(2)}` : '0.00',
+              txn_status: txn.status ? txn.status.toUpperCase() : 'N/A',
+              txn_date: txn.createdAt ? new Date(txn.createdAt).toLocaleDateString('en-IN') : 'N/A'
+            });
+          });
+        } else {
+          data.push({
+            vendor_name,
+            balance,
+            txn_type: 'N/A',
+            txn_amount: 'N/A',
+            txn_status: 'N/A',
+            txn_date: 'N/A'
+          });
+        }
+      });
+
+      const rowMapper = (item) => [
+        item.vendor_name,
+        item.balance,
+        item.txn_type,
+        item.txn_amount,
+        item.txn_status,
+        item.txn_date
       ];
 
-      await exportToPDF(res, wallets, headers, columnWidths, filename, title, rowMapper);
+      await exportToPDF(res, data, headers, columnWidths, filename, title, rowMapper);
 
     } catch (error) {
       if (!res.headersSent) {
@@ -1145,6 +1204,906 @@ const exportVendorReportToPDF = {
   }
 };
 
+// ==========================================
+// PLAN PURCHASE EXPORT CONTROLLERS
+// ==========================================
+
+const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
+const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
+const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
+const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
+
+// Export Listing Plans to Excel
+const exportListingPlansToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_type, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_type) {
+        query.plan_type = plan_type;
+      }
+
+      if (amount) {
+        query.amount = Number(amount);
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ListingPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name email')
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Plan Type', key: 'plan_type', width: 20 },
+        { header: 'Months', key: 'months', width: 10 },
+        { header: 'Max Products', key: 'max_products', width: 15 },
+        { header: 'Amount (₹)', key: 'amount', width: 15 },
+        { header: 'Products', key: 'products_count', width: 12 },
+        { header: 'Start Date', key: 'start_at', width: 15 },
+        { header: 'Expire Date', key: 'expire_at', width: 15 },
+        { header: 'Created At', key: 'createdAt', width: 15 }
+      ];
+
+      const data = purchases.map(purchase => ({
+        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        plan_type: purchase.plan_type || 'N/A',
+        months: purchase.months || 0,
+        max_products: purchase.max_products || 0,
+        amount: purchase.amount ? `₹${Number(purchase.amount).toFixed(2)}` : '₹0.00',
+        products_count: purchase.product_ids?.length || 0,
+        start_at: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        expire_at: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+        createdAt: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+      }));
+
+      const filename = `listing_plans_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'Listing Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Listing Plans to PDF
+const exportListingPlansToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_type, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_type) query.plan_type = plan_type;
+      if (amount) query.amount = Number(amount);
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ListingPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name')
+        .sort({ createdAt: -1 });
+
+      const headers = ['Vendor', 'Plan', 'Months', 'Amount', 'Products', 'Start', 'Expire'];
+      const columnWidths = [120, 100, 60, 80, 60, 80, 80];
+      const filename = `listing_plans_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Listing Plan Purchases Report';
+
+      const rowMapper = (purchase) => [
+        purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        purchase.plan_type || 'N/A',
+        purchase.months || 0,
+        purchase.amount ? `${Number(purchase.amount).toFixed(2)}` : '0.00',
+        purchase.product_ids?.length || 0,
+        purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-'
+      ];
+
+      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
+// Export Priority Purchases to Excel
+const exportPriorityPurchasesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_name) {
+        query.plan_name = plan_name;
+      }
+
+      if (amount) {
+        query.amount = Number(amount);
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await PriorityPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name email')
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Plan Name', key: 'plan_name', width: 20 },
+        { header: 'Amount (₹)', key: 'amount', width: 15 },
+        { header: 'Total Slots', key: 'total_slots', width: 15 },
+        { header: 'Duration', key: 'plan_duration', width: 12 },
+        { header: 'Products', key: 'products_count', width: 12 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Start Date', key: 'start_at', width: 15 },
+        { header: 'Expire Date', key: 'expire_at', width: 15 },
+        { header: 'Created At', key: 'createdAt', width: 15 }
+      ];
+
+      const data = purchases.map(purchase => ({
+        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        plan_name: purchase.plan_name || 'N/A',
+        amount: purchase.amount ? `₹${Number(purchase.amount).toFixed(2)}` : '₹0.00',
+        total_slots: purchase.total_slots || 0,
+        plan_duration: purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
+        products_count: purchase.product_ids?.length || 0,
+        status: purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
+        start_at: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        expire_at: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+        createdAt: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+      }));
+
+      const filename = `priority_purchases_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'Priority Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Priority Purchases to PDF
+const exportPriorityPurchasesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_name) query.plan_name = plan_name;
+      if (amount) query.amount = Number(amount);
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await PriorityPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name')
+        .sort({ createdAt: -1 });
+
+      const headers = ['Vendor', 'Plan', 'Amount', 'Slots', 'Duration', 'Status', 'Start', 'Expire'];
+      const columnWidths = [120, 100, 80, 60, 80, 70, 80, 80];
+      const filename = `priority_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Priority Plan Purchases Report';
+
+      const rowMapper = (purchase) => [
+        purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        purchase.plan_name || 'N/A',
+        purchase.amount ? `${Number(purchase.amount).toFixed(2)}` : '0.00',
+        purchase.total_slots || 0,
+        purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
+        purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
+        purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-'
+      ];
+
+      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
+// Export Service Priority Purchases to Excel
+const exportServicePriorityPurchasesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_name) {
+        query.plan_name = plan_name;
+      }
+
+      if (amount) {
+        query.amount = Number(amount);
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ServicePriorityPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name email')
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Plan Name', key: 'plan_name', width: 20 },
+        { header: 'Months', key: 'months', width: 10 },
+        { header: 'Amount (₹)', key: 'amount', width: 15 },
+        { header: 'Services', key: 'services_count', width: 12 },
+        { header: 'Start Date', key: 'start_at', width: 15 },
+        { header: 'Expire Date', key: 'expire_at', width: 15 },
+        { header: 'Created At', key: 'createdAt', width: 15 }
+      ];
+
+      const data = purchases.map(purchase => ({
+        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        plan_name: purchase.plan_name || 'N/A',
+        months: purchase.months || 0,
+        amount: purchase.amount ? `₹${Number(purchase.amount).toFixed(2)}` : '₹0.00',
+        services_count: purchase.service_ids?.length || 0,
+        start_at: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        expire_at: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+        createdAt: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+      }));
+
+      const filename = `service_priority_purchases_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'Service Priority Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Service Priority Purchases to PDF
+const exportServicePriorityPurchasesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_name) query.plan_name = plan_name;
+      if (amount) query.amount = Number(amount);
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ServicePriorityPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name')
+        .sort({ createdAt: -1 });
+
+      const headers = ['Vendor', 'Plan', 'Months', 'Amount', 'Services', 'Start', 'Expire'];
+      const columnWidths = [120, 100, 60, 80, 70, 80, 80];
+      const filename = `service_priority_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Service Priority Plan Purchases Report';
+
+      const rowMapper = (purchase) => [
+        purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        purchase.plan_name || 'N/A',
+        purchase.months || 0,
+        purchase.amount ? `${Number(purchase.amount).toFixed(2)}` : '0.00',
+        purchase.service_ids?.length || 0,
+        purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-'
+      ];
+
+      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
+// Export Rental Boost Purchases to Excel
+const exportRentalBoostPurchasesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, price, start_month, expiry_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        query.$or = [
+          { vendor_name: searchRegex },
+          { product_name: searchRegex },
+          { plan_name: searchRegex }
+        ];
+      }
+
+      if (plan_name) {
+        query.plan_name = plan_name;
+      }
+
+      if (price) {
+        query.price = Number(price);
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_date = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expiry_month) {
+        const year = parseInt(expiry_month.split('-')[0]);
+        const month = parseInt(expiry_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expiry_date = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await RentalBoostPlanPurchase.find(query)
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Product Name', key: 'product_name', width: 25 },
+        { header: 'Plan Name', key: 'plan_name', width: 20 },
+        { header: 'Price (₹)', key: 'price', width: 15 },
+        { header: 'Days', key: 'days', width: 10 },
+        { header: 'Payment Status', key: 'payment_status', width: 15 },
+        { header: 'Start Date', key: 'start_date', width: 15 },
+        { header: 'Expiry Date', key: 'expiry_date', width: 15 },
+        { header: 'Created At', key: 'createdAt', width: 15 }
+      ];
+
+      const data = purchases.map(purchase => ({
+        vendor_name: purchase.vendor_name || 'N/A',
+        product_name: purchase.product_name || 'N/A',
+        plan_name: purchase.plan_name || 'N/A',
+        price: purchase.price ? `₹${Number(purchase.price).toFixed(2)}` : '₹0.00',
+        days: purchase.days || 0,
+        payment_status: purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
+        start_date: purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
+        expiry_date: purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-',
+        createdAt: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+      }));
+
+      const filename = `rental_boost_purchases_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'Rental Boost Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Rental Boost Purchases to PDF
+const exportRentalBoostPurchasesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_name, price, start_month, expiry_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        query.$or = [
+          { vendor_name: searchRegex },
+          { product_name: searchRegex },
+          { plan_name: searchRegex }
+        ];
+      }
+
+      if (plan_name) query.plan_name = plan_name;
+      if (price) query.price = Number(price);
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_date = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expiry_month) {
+        const year = parseInt(expiry_month.split('-')[0]);
+        const month = parseInt(expiry_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expiry_date = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await RentalBoostPlanPurchase.find(query)
+        .sort({ createdAt: -1 });
+
+      const headers = ['Vendor', 'Product', 'Plan', 'Price', 'Days', 'Status', 'Start', 'Expiry'];
+      const columnWidths = [100, 150, 100, 80, 60, 80, 80, 80];
+      const filename = `rental_boost_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Rental Boost Plan Purchases Report';
+
+      const rowMapper = (purchase) => [
+        purchase.vendor_name || 'N/A',
+        purchase.product_name || 'N/A',
+        purchase.plan_name || 'N/A',
+        purchase.price ? `${Number(purchase.price).toFixed(2)}` : '0.00',
+        purchase.days || 0,
+        purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
+        purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
+        purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-'
+      ];
+
+      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
+// Export All Plan Purchases Combined to Excel
+const exportAllPlanPurchasesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, start_month, expire_month } = req.query;
+
+      // Fetch all three types of purchases
+      const listingQuery = {};
+      const priorityQuery = {};
+      const rentalQuery = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          listingQuery.vendor_id = { $in: vendorIds };
+          priorityQuery.vendor_id = { $in: vendorIds };
+          rentalQuery.$or = [
+            { vendor_name: searchRegex },
+            { product_name: searchRegex }
+          ];
+        }
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        listingQuery.start_at = { $gte: startDate, $lte: endDate };
+        priorityQuery.start_at = { $gte: startDate, $lte: endDate };
+        rentalQuery.start_date = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        listingQuery.expire_at = { $gte: startDate, $lte: endDate };
+        priorityQuery.expire_at = { $gte: startDate, $lte: endDate };
+        rentalQuery.expiry_date = { $gte: startDate, $lte: endDate };
+      }
+
+      const [listingPurchases, priorityPurchases, rentalPurchases] = await Promise.all([
+        ListingPlanPurchase.find(listingQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 }),
+        PriorityPlanPurchase.find(priorityQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 }),
+        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 })
+      ]);
+
+      // Combine all data
+      const combinedData = [];
+
+      // Add Listing Plan Purchases
+      listingPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Listing Plan',
+          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+          plan_name: purchase.plan_type || 'N/A',
+          amount: purchase.amount || 0,
+          duration: `${purchase.months || 0} months`,
+          products_services: purchase.max_products || 0,
+          status: 'Active',
+          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+          created_at: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+        });
+      });
+
+      // Add Priority Plan Purchases
+      priorityPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Priority Plan',
+          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+          plan_name: purchase.plan_name || 'N/A',
+          amount: purchase.amount || 0,
+          duration: purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
+          products_services: purchase.total_slots || 0,
+          status: purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
+          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+          created_at: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+        });
+      });
+
+      // Add Rental Boost Purchases
+      rentalPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Rental Boost',
+          vendor_name: purchase.vendor_name || 'N/A',
+          plan_name: purchase.plan_name || 'N/A',
+          amount: purchase.price || 0,
+          duration: `${purchase.days || 0} days`,
+          products_services: purchase.product_name || 'N/A',
+          status: purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
+          start_date: purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-',
+          created_at: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+        });
+      });
+
+      const columns = [
+        { header: 'Plan Type', key: 'plan_type', width: 15 },
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Plan Name', key: 'plan_name', width: 20 },
+        { header: 'Amount (₹)', key: 'amount', width: 15 },
+        { header: 'Duration', key: 'duration', width: 15 },
+        { header: 'Products/Services', key: 'products_services', width: 25 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Start Date', key: 'start_date', width: 15 },
+        { header: 'Expire Date', key: 'expire_date', width: 15 },
+        { header: 'Created At', key: 'created_at', width: 15 }
+      ];
+
+      const data = combinedData.map(item => ({
+        ...item,
+        amount: item.amount ? `₹${Number(item.amount).toFixed(2)}` : '₹0.00'
+      }));
+
+      const filename = `all_plan_purchases_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'All Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export All Plan Purchases Combined to PDF
+const exportAllPlanPurchasesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, start_month, expire_month } = req.query;
+
+      // Fetch all three types of purchases
+      const listingQuery = {};
+      const priorityQuery = {};
+      const rentalQuery = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          listingQuery.vendor_id = { $in: vendorIds };
+          priorityQuery.vendor_id = { $in: vendorIds };
+          rentalQuery.$or = [
+            { vendor_name: searchRegex },
+            { product_name: searchRegex }
+          ];
+        }
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        listingQuery.start_at = { $gte: startDate, $lte: endDate };
+        priorityQuery.start_at = { $gte: startDate, $lte: endDate };
+        rentalQuery.start_date = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        listingQuery.expire_at = { $gte: startDate, $lte: endDate };
+        priorityQuery.expire_at = { $gte: startDate, $lte: endDate };
+        rentalQuery.expiry_date = { $gte: startDate, $lte: endDate };
+      }
+
+      const [listingPurchases, priorityPurchases, rentalPurchases] = await Promise.all([
+        ListingPlanPurchase.find(listingQuery).populate('vendor_id', 'full_name business_name').sort({ createdAt: -1 }),
+        PriorityPlanPurchase.find(priorityQuery).populate('vendor_id', 'full_name business_name').sort({ createdAt: -1 }),
+        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 })
+      ]);
+
+      // Combine all data
+      const combinedData = [];
+
+      // Add Listing Plan Purchases
+      listingPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Listing Plan',
+          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+          plan_name: purchase.plan_type || 'N/A',
+          amount: purchase.amount || 0,
+          duration: `${purchase.months || 0} months`,
+          products_services: purchase.max_products || 0,
+          status: 'Active',
+          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+          createdAt: purchase.createdAt
+        });
+      });
+
+      // Add Priority Plan Purchases
+      priorityPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Priority Plan',
+          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+          plan_name: purchase.plan_name || 'N/A',
+          amount: purchase.amount || 0,
+          duration: purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
+          products_services: purchase.total_slots || 0,
+          status: purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
+          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+          createdAt: purchase.createdAt
+        });
+      });
+
+      // Add Rental Boost Purchases
+      rentalPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'Rental Boost',
+          vendor_name: purchase.vendor_name || 'N/A',
+          plan_name: purchase.plan_name || 'N/A',
+          amount: purchase.price || 0,
+          duration: `${purchase.days || 0} days`,
+          products_services: purchase.product_name || 'N/A',
+          status: purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
+          start_date: purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
+          expire_date: purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-',
+          createdAt: purchase.createdAt
+        });
+      });
+
+      // Sort by createdAt descending
+      combinedData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      const headers = ['Plan Type', 'Vendor', 'Plan', 'Amount', 'Duration', 'Products/Services', 'Status', 'Start', 'Expire'];
+      const columnWidths = [80, 120, 100, 80, 80, 150, 70, 80, 80];
+      const filename = `all_plan_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'All Plan Purchases Report';
+
+      const rowMapper = (item) => [
+        item.plan_type,
+        item.vendor_name,
+        item.plan_name,
+        item.amount ? `${Number(item.amount).toFixed(2)}` : '0.00',
+        item.duration,
+        item.products_services,
+        item.status,
+        item.start_date,
+        item.expire_date
+      ];
+
+      await exportToPDF(res, combinedData, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
 module.exports = {
   exportProductsToExcel,
   exportProductsToPDF,
@@ -1163,5 +2122,15 @@ module.exports = {
   exportVendorWalletsToExcel,
   exportVendorWalletsToPDF,
   exportVendorReportToExcel,
-  exportVendorReportToPDF
+  exportVendorReportToPDF,
+  exportListingPlansToExcel,
+  exportListingPlansToPDF,
+  exportPriorityPurchasesToExcel,
+  exportPriorityPurchasesToPDF,
+  exportServicePriorityPurchasesToExcel,
+  exportServicePriorityPurchasesToPDF,
+  exportRentalBoostPurchasesToExcel,
+  exportRentalBoostPurchasesToPDF,
+  exportAllPlanPurchasesToExcel,
+  exportAllPlanPurchasesToPDF
 };

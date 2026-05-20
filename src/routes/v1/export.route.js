@@ -18,7 +18,17 @@ const {
   exportVendorWalletsToExcel,
   exportVendorWalletsToPDF,
   exportVendorReportToExcel,
-  exportVendorReportToPDF
+  exportVendorReportToPDF,
+  exportListingPlansToExcel,
+  exportListingPlansToPDF,
+  exportPriorityPurchasesToExcel,
+  exportPriorityPurchasesToPDF,
+  exportServicePriorityPurchasesToExcel,
+  exportServicePriorityPurchasesToPDF,
+  exportRentalBoostPurchasesToExcel,
+  exportRentalBoostPurchasesToPDF,
+  exportAllPlanPurchasesToExcel,
+  exportAllPlanPurchasesToPDF
 } = require('../../controllers/export.controller');
 
 const router = express.Router();
@@ -56,5 +66,25 @@ router.get('/vendors/pdf', auth(), exportVendorsToPDF.handler);
 // Vendor Report export routes
 router.get('/vendor-report/excel', auth('admin'), exportVendorReportToExcel.handler);
 router.get('/vendor-report/pdf', auth('admin'), exportVendorReportToPDF.handler);
+
+// All Plan Purchases Combined export routes
+router.get('/all-plan-purchases/excel', auth('admin'), exportAllPlanPurchasesToExcel.handler);
+router.get('/all-plan-purchases/pdf', auth('admin'), exportAllPlanPurchasesToPDF.handler);
+
+// Listing Plans export routes
+router.get('/listing-plans/excel', auth('admin'), exportListingPlansToExcel.handler);
+router.get('/listing-plans/pdf', auth('admin'), exportListingPlansToPDF.handler);
+
+// Priority Purchases export routes
+router.get('/priority-purchases/excel', auth('admin'), exportPriorityPurchasesToExcel.handler);
+router.get('/priority-purchases/pdf', auth('admin'), exportPriorityPurchasesToPDF.handler);
+
+// Service Priority Purchases export routes
+router.get('/service-priority-purchases/excel', auth('admin'), exportServicePriorityPurchasesToExcel.handler);
+router.get('/service-priority-purchases/pdf', auth('admin'), exportServicePriorityPurchasesToPDF.handler);
+
+// Rental Boost Purchases export routes
+router.get('/rental-boost-purchases/excel', auth('admin'), exportRentalBoostPurchasesToExcel.handler);
+router.get('/rental-boost-purchases/pdf', auth('admin'), exportRentalBoostPurchasesToPDF.handler);
 
 module.exports = router;
