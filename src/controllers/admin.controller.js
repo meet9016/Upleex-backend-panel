@@ -49,11 +49,11 @@ const login = {
     const { email, password } = req.body;
     const admin = await Admin.findOne({ email });
     if (!admin) {
-      return res.status(httpStatus.UNAUTHORIZED).json({ status: 401, message: 'Invalid credentials' });
+      return res.status(httpStatus.BAD_REQUEST).json({ status: 400, message: 'Invalid credentials' });
     }
     const ok = await admin.isPasswordMatch(password);
     if (!ok) {
-      return res.status(httpStatus.UNAUTHORIZED).json({ status: 401, message: 'Invalid credentials' });
+      return res.status(httpStatus.BAD_REQUEST).json({ status: 400, message: 'Invalid credentials' });
     }
     const token = await generateAuthTokens(admin, 'admin');
     return res.status(httpStatus.OK).json({
