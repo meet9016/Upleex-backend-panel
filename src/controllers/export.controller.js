@@ -520,7 +520,7 @@ const exportWalletTransactionsToPDF = {
         new Date(t.createdAt).toLocaleDateString('en-IN')
       ];
 
-      await exportToPDF(res, transactions, headers, columnWidths, filename, title, rowMapper);
+      await exportToPDF(res, transactions, headers, columnWidths, filename, title, rowMapper, { align: 'left' });
 
     } catch (error) {
       if (!res.headersSent) {

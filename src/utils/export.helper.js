@@ -150,7 +150,15 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       doc.rect(30, yPosition, tableWidth, 30).fill(brandColor);
       doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
       headers.forEach((h, i) => {
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'left' });
+        let align = 'left';
+        if (options.align) {
+          align = options.align;
+        } else if (options.alignments && options.alignments[i]) {
+          align = options.alignments[i];
+        } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('amount')) {
+          align = 'right';
+        }
+        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align });
         xPosition += columnWidths[i];
       });
 
@@ -167,7 +175,15 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           doc.rect(xPosition, yPosition, tableWidth, 30).fill(brandColor);
           doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
           headers.forEach((h, i) => {
-            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align: 'left' });
+            let align = 'left';
+            if (options.align) {
+              align = options.align;
+            } else if (options.alignments && options.alignments[i]) {
+              align = options.alignments[i];
+            } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('amount')) {
+              align = 'right';
+            }
+            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align });
             xPosition += columnWidths[i];
           });
           yPosition += 30;
@@ -190,7 +206,14 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
 
         doc.fillColor('#333333');
         rowData.forEach((val, i) => {
-          const align = (headers[i] && (headers[i].toLowerCase().includes('price') || headers[i].toLowerCase().includes('amount'))) ? 'right' : 'left';
+          let align = 'left';
+          if (options.align) {
+            align = options.align;
+          } else if (options.alignments && options.alignments[i]) {
+            align = options.alignments[i];
+          } else if (headers[i] && (headers[i].toLowerCase().includes('price') || headers[i].toLowerCase().includes('amount'))) {
+            align = 'right';
+          }
           doc.text(String(val || ''), xPos + 5, yPosition + 9, { width: columnWidths[i] - 10, align });
           xPos += columnWidths[i];
         });
