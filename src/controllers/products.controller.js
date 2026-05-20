@@ -798,12 +798,15 @@ const getAllProducts = {
           ...p.toObject(),
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-          vendor_name: p.vendor_name || v.vendor_name || '',
-          business_name: v.business_name || '',
-          vendor_city_id: v.city_id || '',
-          vendor_city_name: v.city_name || '',
-          vendor_address: v.vendor_address || '',
-          vendor_mobile: v.vendor_mobile || '',
+          vendor: {
+            vendor_id: p.vendor_id,
+            vendor_name: p.vendor_name || v.vendor_name || '',
+            business_name: v.business_name || '',
+            vendor_city_id: v.city_id || '',
+            vendor_city_name: v.city_name || '',
+            vendor_address: v.vendor_address || '',
+            vendor_mobile: v.vendor_mobile || ''
+          },
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       }));
@@ -1071,17 +1074,10 @@ const getVendorProducts = {
       }
 
       const normalized = data.map((p) => {
-        const v = vendorMap[String(p.vendor_id)] || {};
         return {
           ...p.toObject(),
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-          vendor_name: p.vendor_name || v.vendor_name || '',
-          business_name: v.business_name || '',
-          vendor_city_id: v.city_id || '',
-          vendor_city_name: v.city_name || '',
-          vendor_address: v.vendor_address || '',
-          vendor_mobile: v.vendor_mobile || '',
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -1139,13 +1135,22 @@ const getVendorProducts = {
         data: normalized,
       };
 
-      // If specific vendor is queried, fetch their videos
+      // If specific vendor is queried, fetch vendor details and videos
       if (vendor_id) {
         const Vendor = require('../models/vendor/vendor.model');
         const v = await Vendor.findById(vendor_id).select('store_videos');
-        if (v && v.store_videos) {
-          responseObj.vendor_videos = v.store_videos;
-        }
+        const vendorDetails = vendorMap[vendor_id] || {};
+        
+        responseObj.vendor = {
+          vendor_id: vendor_id,
+          vendor_name: vendorDetails.vendor_name || '',
+          business_name: vendorDetails.business_name || '',
+          vendor_city_id: vendorDetails.city_id || '',
+          vendor_city_name: vendorDetails.city_name || '',
+          vendor_address: vendorDetails.vendor_address || '',
+          vendor_mobile: vendorDetails.vendor_mobile || '',
+          vendor_videos: v?.store_videos || []
+        };
       }
 
       res.status(200).json(responseObj);
@@ -1204,16 +1209,16 @@ const getProductById = {
           const contact = vendorKyc.ContactDetails || {};
           const identity = vendorKyc.Identity || {};
           const productObj = product.toObject();
-          productObj.vendor_address = contact.address || '';
-          productObj.vendor_city_id = contact.city_id || '';
-          productObj.vendor_city_name = contact.city_name || '';
-         productObj.vendor_name = contact.full_name || '';
-          productObj.business_name = identity.business_name || '';
+          productObj.vendor = {
+            vendor_id: product.vendor_id,
+            vendor_address: contact.address || '',
+            vendor_city_id: contact.city_id || '',
+            vendor_city_name: contact.city_name || '',
+            vendor_name: contact.full_name || '',
+            business_name: identity.business_name || '',
+            vendor_mobile: hasActivePriorityPlan ? contact.mobile || '' : ''
+          };
           productObj.is_wishlist = is_wishlist;
-          // Add vendor mobile if they have active priority plan
-          if (hasActivePriorityPlan) {
-            productObj.vendor_mobile = contact.mobile || '';
-          }
           return res.status(200).json({ status: 200, data: productObj });
         }
       }
