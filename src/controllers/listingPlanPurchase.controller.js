@@ -310,13 +310,14 @@ const getAllPurchases = {
         const vid = (k?.ContactDetails?.vendor_id || '').toString();
         const business = k?.Identity?.business_name || '';
         const full = k?.ContactDetails?.full_name || '';
-        vendorMap[vid] = business || full || '';
+        vendorMap[vid] = { vendor_name: full || '', business_name: business || '' };
       });
     }
 
     let enriched = allData.map((d) => {
       const obj = d.toObject ? d.toObject() : d;
-      return { ...obj, vendor_name: vendorMap[String(d.vendor_id)] || '' };
+      const vendorData = vendorMap[String(d.vendor_id)] || { vendor_name: '', business_name: '' };
+      return { ...obj, vendor_name: vendorData.vendor_name, business_name: vendorData.business_name };
     });
 
     if (filter_rent_sell) {

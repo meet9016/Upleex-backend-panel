@@ -74,6 +74,8 @@ router.get('/all-plan-purchases/pdf', auth('admin'), exportAllPlanPurchasesToPDF
 // Listing Plans export routes
 router.get('/listing-plans/excel', auth('admin'), exportListingPlansToExcel.handler);
 router.get('/listing-plans/pdf', auth('admin'), exportListingPlansToPDF.handler);
+router.get('/listing-purchases/excel', auth('admin'), exportListingPlansToExcel.handler);
+router.get('/listing-purchases/pdf', auth('admin'), exportListingPlansToPDF.handler);
 
 // Priority Purchases export routes
 router.get('/priority-purchases/excel', auth('admin'), exportPriorityPurchasesToExcel.handler);

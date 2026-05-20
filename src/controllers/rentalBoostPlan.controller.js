@@ -333,7 +333,7 @@ const getAllRentalBoostPurchases = {
           const vid = (k?.ContactDetails?.vendor_id || '').toString();
           const business = k?.Identity?.business_name || '';
           const full = k?.ContactDetails?.full_name || '';
-          vendorMap[vid] = business || full || '';
+          vendorMap[vid] = { vendor_name: full || '', business_name: business || '' };
         });
       }
 
@@ -341,9 +341,11 @@ const getAllRentalBoostPurchases = {
         const obj = d.toObject ? d.toObject() : d;
         const plan = obj.rental_boost_plan_id;
         const resolvedPlanName = obj.plan_name || (plan?.name ? `${plan.name}` : '') || (obj.days ? `${obj.days}-Day Boost` : 'Rental Boost');
+        const vendorData = vendorMap[String(d.vendor_id)] || { vendor_name: '', business_name: '' };
         return {
           ...obj,
-          vendor_name: vendorMap[String(d.vendor_id)] || 'Unknown Vendor',
+          vendor_name: vendorData.vendor_name,
+          business_name: vendorData.business_name,
           plan_name: resolvedPlanName,
           amount: obj.price, // booster uses 'price', map to 'amount' for frontend consistency
         };
