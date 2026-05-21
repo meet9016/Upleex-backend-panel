@@ -243,7 +243,15 @@ const releasePayment = {
 const getPaymentStats = {
   handler: catchAsync(async (req, res) => {
     const { vendor_id, type } = req.query;
-    const filter = vendor_id ? { vendor_id } : {};
+    const filter = {};
+    
+    // If vendor is accessing their own stats, use req.user.id
+    // If admin is accessing, use vendor_id from query
+    if (req.user && req.user.id) {
+      filter.vendor_id = req.user.id;
+    } else if (vendor_id) {
+      filter.vendor_id = vendor_id;
+    }
 
     if (type === 'sell') {
       filter.order_id = { $exists: true, $ne: null };
