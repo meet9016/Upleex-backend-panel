@@ -2039,78 +2039,67 @@ const exportAllPlanPurchasesToPDF = {
         RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 })
       ]);
 
-      // Combine all data
+      // Combine all data in format expected by exportToTreePDF
       const combinedData = [];
 
       // Add Listing Plan Purchases
       listingPurchases.forEach(purchase => {
         combinedData.push({
+          vendor_id: purchase.vendor_id,
+          vendor_name: purchase.vendor_id?.full_name || 'N/A',
+          business_name: purchase.vendor_id?.business_name || '',
           plan_type: 'Listing Plan',
-          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
-          plan_name: purchase.plan_type || 'N/A',
+          plan_name: purchase.plan_type || 'Listing Plan',
+          months: purchase.months || 0,
+          max_products: purchase.max_products || 0,
           amount: purchase.amount || 0,
-          duration: `${purchase.months || 0} months`,
-          products_services: purchase.max_products || 0,
-          status: 'Active',
-          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
-          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
-          createdAt: purchase.createdAt
+          product_ids: purchase.product_ids || [],
+          start_at: purchase.start_at,
+          expire_at: purchase.expire_at
         });
       });
 
       // Add Priority Plan Purchases
       priorityPurchases.forEach(purchase => {
         combinedData.push({
+          vendor_id: purchase.vendor_id,
+          vendor_name: purchase.vendor_id?.full_name || 'N/A',
+          business_name: purchase.vendor_id?.business_name || '',
           plan_type: 'Priority Plan',
-          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
-          plan_name: purchase.plan_name || 'N/A',
+          plan_name: purchase.plan_name || 'Priority Plan',
+          months: purchase.plan_duration === 'yearly' ? 12 : 1,
+          max_products: purchase.total_slots || 0,
           amount: purchase.amount || 0,
-          duration: purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
-          products_services: purchase.total_slots || 0,
-          status: purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
-          start_date: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
-          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
-          createdAt: purchase.createdAt
+          product_ids: [],
+          start_at: purchase.start_at,
+          expire_at: purchase.expire_at
         });
       });
 
       // Add Rental Boost Purchases
       rentalPurchases.forEach(purchase => {
         combinedData.push({
-          plan_type: 'Rental Boost',
+          vendor_id: purchase.vendor_id || purchase._id,
           vendor_name: purchase.vendor_name || 'N/A',
-          plan_name: purchase.plan_name || 'N/A',
+          business_name: '',
+          plan_type: 'Rental Boost',
+          plan_name: purchase.plan_name || 'Rental Boost',
+          days: purchase.days || 0,
+          max_products: 1,
           amount: purchase.price || 0,
-          duration: `${purchase.days || 0} days`,
-          products_services: purchase.product_name || 'N/A',
-          status: purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
-          start_date: purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
-          expire_date: purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-',
-          createdAt: purchase.createdAt
+          product_ids: [],
+          start_date: purchase.start_date,
+          expiry_date: purchase.expiry_date
         });
       });
 
-      // Sort by createdAt descending
-      combinedData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Sort by vendor name
+      combinedData.sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
 
-      const headers = ['Plan Type', 'Vendor', 'Plan', 'Amount', 'Duration', 'Products/Services', 'Status', 'Start', 'Expire'];
-      const columnWidths = [80, 120, 100, 80, 80, 150, 70, 80, 80];
       const filename = `all_plan_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
       const title = 'All Plan Purchases Report';
 
-      const rowMapper = (item) => [
-        item.plan_type,
-        item.vendor_name,
-        item.plan_name,
-        item.amount ? `${Number(item.amount).toFixed(2)}` : '0.00',
-        item.duration,
-        item.products_services,
-        item.status,
-        item.start_date,
-        item.expire_date
-      ];
-
-      await exportToPDF(res, combinedData, headers, columnWidths, filename, title, rowMapper);
+      await exportToTreePDF(res, combinedData, filename, title);
 
     } catch (error) {
       if (!res.headersSent) {
