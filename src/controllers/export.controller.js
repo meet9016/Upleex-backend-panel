@@ -126,23 +126,44 @@ const exportProductsToPDF = {
 
       const products = await Product.find(query).sort({ createdAt: -1 });
 
-      const headers = ['Product Name', 'Category', 'Type', 'Price', 'Status', 'Vendor'];
-      const columnWidths = [150, 100, 60, 80, 60, 85];
+      const headers = ['Product Name', 'Category', 'Vendor', 'Type', 'Price', 'Status'];
+      const columnWidths = [130, 130, 100, 50, 70, 55];
       const title = user && user.userType === 'vendor' ? 'My Products Report' : 'Products Report';
       const filename = user && user.userType === 'vendor'
         ? `my_products_${new Date().toISOString().split('T')[0]}.pdf`
         : `products_${new Date().toISOString().split('T')[0]}.pdf`;
 
       const rowMapper = (product) => [
-            product.product_name || '',
-            product.category_name || '',
-            product.product_type_name || '',
-            product.price ? `${Number(product.price).toFixed(2)}` : '0.00',
-            product.status || '',
-            product.vendor_name || 'N/A'
-          ];
+        product.product_name || '',
+        product.category_name || '',
+        product.vendor_name || 'N/A',
+         product.product_type_name
+          ? product.product_type_name.charAt(0).toUpperCase() + product.product_type_name.slice(1).toLowerCase()
+          : '',
+        product.price ? `${Number(product.price).toFixed(2)}` : '0.00',
+        product.status
+          ?product.status.charAt(0).toUpperCase() +product.status.slice(1).toLowerCase()
+          : '',
+      ];
 
-      await exportToPDF(res, products, headers, columnWidths, filename, title, rowMapper);
+      // Column indexes: 0=Product Name, 1=Category, 2=Type, 3=Price, 4=Status, 5=Vendor
+      const productCellColorMapper = (colIndex, value) => {
+        if (colIndex === 3) {
+          // Type column: Rent = blue, Sell = orange
+          const v = value.toLowerCase();
+          if (v === 'rent') return '#1565C0';
+          if (v === 'sell') return '#E65100';
+        }
+        if (colIndex === 5) {
+          // Status column: active = green, inactive = red
+          const v = value.toLowerCase();
+          if (v === 'active') return '#2E7D32';
+          if (v === 'inactive') return '#C62828';
+        }
+        return null;
+      };
+
+      await exportToPDF(res, products, headers, columnWidths, filename, title, rowMapper, { cellColorMapper: productCellColorMapper });
 
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -507,20 +528,39 @@ const exportWalletTransactionsToPDF = {
 
       transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      const headers = ['Description', 'Type', 'Amount', 'Status', 'Date'];
-      const columnWidths = [195, 60, 80, 80, 100];
+      const headers = ['Date', 'Amount', 'Description', 'Type', 'Status',];
+      const columnWidths = [ 70, 70, 220, 80, 100];
       const filename = `wallet_transactions_${Date.now()}.pdf`;
       const title = 'Wallet Transactions Report';
 
       const rowMapper = (t) => [
-        t.description || '',
-        t.type?.toUpperCase() || '',
+        new Date(t.createdAt).toLocaleDateString('en-IN'),
         `${Number(t.amount).toFixed(2)}`,
-        t.status?.toUpperCase() || '',
-        new Date(t.createdAt).toLocaleDateString('en-IN')
+        t.description || '',
+        t.type
+          ? t.type.charAt(0).toUpperCase() + t.type.slice(1).toLowerCase()
+          : '',
+        t.status ? t.status.charAt(0).toUpperCase() + t.status.slice(1).toLowerCase()
+          : '',
       ];
 
-      await exportToPDF(res, transactions, headers, columnWidths, filename, title, rowMapper, { align: 'left' });
+      const productCellColorMapper = (colIndex, value) => {
+
+        if (colIndex === 3) {
+          // Type column: Credit = green, Debit = red
+          if (value === 'Credit') return '#2E7D32';
+          if (value === 'Debit') return '#E65100';
+        }
+        if (colIndex === 4) {
+          // Status column: Completed = green, Pending = yellow
+          if (value === 'Completed') return '#2E7D32';
+          if (value === 'Pending') return '#e4af25';
+        }
+        return null;
+      };
+
+      await exportToPDF(res, transactions, headers, columnWidths, filename, title, rowMapper, { cellColorMapper: productCellColorMapper });
+
 
     } catch (error) {
       if (!res.headersSent) {

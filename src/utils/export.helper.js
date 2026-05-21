@@ -204,7 +204,6 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
         doc.moveTo(30, yPosition + 28).lineTo(30 + tableWidth, yPosition + 28).strokeColor('#EEEEEE').lineWidth(1).stroke();
         doc.restore();
 
-        doc.fillColor('#333333');
         rowData.forEach((val, i) => {
           let align = 'left';
           if (options.align) {
@@ -214,9 +213,13 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           } else if (headers[i] && (headers[i].toLowerCase().includes('price') || headers[i].toLowerCase().includes('amount'))) {
             align = 'right';
           }
+          // Per-cell color via optional cellColorMapper(colIndex, value)
+          const cellColor = options.cellColorMapper ? options.cellColorMapper(i, String(val || '')) : null;
+          doc.fillColor(cellColor || '#333333');
           doc.text(String(val || ''), xPos + 5, yPosition + 9, { width: columnWidths[i] - 10, align });
           xPos += columnWidths[i];
         });
+        doc.fillColor('#333333');
 
         yPosition += 28;
       });
