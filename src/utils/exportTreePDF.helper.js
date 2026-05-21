@@ -193,11 +193,18 @@ const exportToTreePDF = (res, data, filename, title) => {
           doc.text(planInitial, col1X + 40, yPosition + planRowHeight/2 - 3, { width: 10, align: 'center' });
           doc.restore();
 
-          // Plan details
+          // Plan details - show both type and name
           doc.fillColor('#374151').fontSize(10).font('Helvetica');
           
-          const planName = item.plan_type || item.plan_name || 'Unknown Plan';
-          doc.text(planName, col1X + 62, yPosition + 10);
+          let planDisplay = '';
+          if (item.plan_type && item.plan_name && item.plan_type !== item.plan_name) {
+            planDisplay = `${item.plan_type} - ${item.plan_name}`;
+          } else if (item.plan_type) {
+            planDisplay = item.plan_type;
+          } else {
+            planDisplay = item.plan_name || 'Unknown Plan';
+          }
+          doc.text(planDisplay, col1X + 62, yPosition + 10);
           
           doc.fillColor('#9CA3AF').fontSize(8).font('Helvetica');
           doc.text('Plan Details', col1X + 62, yPosition + 20);
