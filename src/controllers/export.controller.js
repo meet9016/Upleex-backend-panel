@@ -7,7 +7,7 @@ const Wallet = require('../models/wallet.model');
 const Service = require('../models/service.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const Vendor = require('../models/vendor/vendor.model');
-const { exportToExcel, exportToPDF } = require('../utils/export.helper');
+const { exportToExcel, exportToPDF, exportToTreePDF } = require('../utils/export.helper');
 const mongoose = require('mongoose');
 
 // Export Products to Excel
@@ -1266,6 +1266,7 @@ const exportListingPlansToExcel = {
 
       const columns = [
         { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Business Name', key: 'business_name', width: 20 },
         { header: 'Plan Type', key: 'plan_type', width: 20 },
         { header: 'Months', key: 'months', width: 10 },
         { header: 'Max Products', key: 'max_products', width: 15 },
@@ -1277,7 +1278,8 @@ const exportListingPlansToExcel = {
       ];
 
       const data = purchases.map(purchase => ({
-        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        vendor_name: purchase.vendor_id?.full_name || 'N/A',
+        business_name: purchase.vendor_id?.business_name || 'N/A',
         plan_type: purchase.plan_type || 'N/A',
         months: purchase.months || 0,
         max_products: purchase.max_products || 0,
@@ -1343,22 +1345,10 @@ const exportListingPlansToPDF = {
         .populate('vendor_id', 'full_name business_name')
         .sort({ createdAt: -1 });
 
-      const headers = ['Vendor', 'Plan', 'Months', 'Amount', 'Products', 'Start', 'Expire'];
-      const columnWidths = [120, 100, 60, 80, 60, 80, 80];
       const filename = `listing_plans_${new Date().toISOString().split('T')[0]}.pdf`;
       const title = 'Listing Plan Purchases Report';
 
-      const rowMapper = (purchase) => [
-        purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
-        purchase.plan_type || 'N/A',
-        purchase.months || 0,
-        purchase.amount ? `${Number(purchase.amount).toFixed(2)}` : '0.00',
-        purchase.product_ids?.length || 0,
-        purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
-        purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-'
-      ];
-
-      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+      await exportToTreePDF(res, purchases, filename, title);
 
     } catch (error) {
       if (!res.headersSent) {
@@ -1423,6 +1413,7 @@ const exportPriorityPurchasesToExcel = {
 
       const columns = [
         { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Business Name', key: 'business_name', width: 20 },
         { header: 'Plan Name', key: 'plan_name', width: 20 },
         { header: 'Amount (₹)', key: 'amount', width: 15 },
         { header: 'Total Slots', key: 'total_slots', width: 15 },
@@ -1435,7 +1426,8 @@ const exportPriorityPurchasesToExcel = {
       ];
 
       const data = purchases.map(purchase => ({
-        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+        vendor_name: purchase.vendor_id?.full_name || 'N/A',
+        business_name: purchase.vendor_id?.business_name || 'N/A',
         plan_name: purchase.plan_name || 'N/A',
         amount: purchase.amount ? `₹${Number(purchase.amount).toFixed(2)}` : '₹0.00',
         total_slots: purchase.total_slots || 0,
@@ -1502,23 +1494,10 @@ const exportPriorityPurchasesToPDF = {
         .populate('vendor_id', 'full_name business_name')
         .sort({ createdAt: -1 });
 
-      const headers = ['Vendor', 'Plan', 'Amount', 'Slots', 'Duration', 'Status', 'Start', 'Expire'];
-      const columnWidths = [120, 100, 80, 60, 80, 70, 80, 80];
       const filename = `priority_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
       const title = 'Priority Plan Purchases Report';
 
-      const rowMapper = (purchase) => [
-        purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
-        purchase.plan_name || 'N/A',
-        purchase.amount ? `${Number(purchase.amount).toFixed(2)}` : '0.00',
-        purchase.total_slots || 0,
-        purchase.plan_duration ? purchase.plan_duration.charAt(0).toUpperCase() + purchase.plan_duration.slice(1) : 'Monthly',
-        purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
-        purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
-        purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-'
-      ];
-
-      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+      await exportToTreePDF(res, purchases, filename, title);
 
     } catch (error) {
       if (!res.headersSent) {
@@ -1695,11 +1674,23 @@ const exportRentalBoostPurchasesToExcel = {
 
       if (q) {
         const searchRegex = new RegExp(q.trim(), 'i');
-        query.$or = [
-          { vendor_name: searchRegex },
-          { product_name: searchRegex },
-          { plan_name: searchRegex }
-        ];
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        } else {
+          // Fallback: search in product and plan name if no vendor match
+          query.$or = [
+            { product_name: searchRegex },
+            { plan_name: searchRegex }
+          ];
+        }
       }
 
       if (plan_name) {
@@ -1727,10 +1718,12 @@ const exportRentalBoostPurchasesToExcel = {
       }
 
       const purchases = await RentalBoostPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name')
         .sort({ createdAt: -1 });
 
       const columns = [
         { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Business Name', key: 'business_name', width: 20 },
         { header: 'Product Name', key: 'product_name', width: 25 },
         { header: 'Plan Name', key: 'plan_name', width: 20 },
         { header: 'Price (₹)', key: 'price', width: 15 },
@@ -1742,7 +1735,8 @@ const exportRentalBoostPurchasesToExcel = {
       ];
 
       const data = purchases.map(purchase => ({
-        vendor_name: purchase.vendor_name || 'N/A',
+        vendor_name: purchase.vendor_id?.full_name || purchase.vendor_name || 'N/A',
+        business_name: purchase.vendor_id?.business_name || 'N/A',
         product_name: purchase.product_name || 'N/A',
         plan_name: purchase.plan_name || 'N/A',
         price: purchase.price ? `₹${Number(purchase.price).toFixed(2)}` : '₹0.00',
@@ -1772,11 +1766,23 @@ const exportRentalBoostPurchasesToPDF = {
 
       if (q) {
         const searchRegex = new RegExp(q.trim(), 'i');
-        query.$or = [
-          { vendor_name: searchRegex },
-          { product_name: searchRegex },
-          { plan_name: searchRegex }
-        ];
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        } else {
+          // Fallback: search in product and plan name if no vendor match
+          query.$or = [
+            { product_name: searchRegex },
+            { plan_name: searchRegex }
+          ];
+        }
       }
 
       if (plan_name) query.plan_name = plan_name;
@@ -1801,23 +1807,35 @@ const exportRentalBoostPurchasesToPDF = {
       const purchases = await RentalBoostPlanPurchase.find(query)
         .sort({ createdAt: -1 });
 
-      const headers = ['Vendor', 'Product', 'Plan', 'Price', 'Days', 'Status', 'Start', 'Expiry'];
-      const columnWidths = [100, 150, 100, 80, 60, 80, 80, 80];
+      const vendorIds = [...new Set(purchases.map((d) => d.vendor_id).filter(Boolean))];
+      let vendorMap = {};
+      if (vendorIds.length) {
+        const kycs = await VendorKyc.find(
+          { 'ContactDetails.vendor_id': { $in: vendorIds } },
+          { 'ContactDetails.vendor_id': 1, 'ContactDetails.full_name': 1, 'Identity.business_name': 1 }
+        ).lean();
+        kycs.forEach((k) => {
+          const vid = (k?.ContactDetails?.vendor_id || '').toString();
+          const business = k?.Identity?.business_name || '';
+          const full = k?.ContactDetails?.full_name || '';
+          vendorMap[vid] = { vendor_name: full || '', business_name: business || '' };
+        });
+      }
+
+      const enriched = purchases.map((d) => {
+        const obj = d.toObject ? d.toObject() : d;
+        const vendorData = vendorMap[String(d.vendor_id)] || { vendor_name: '', business_name: '' };
+        return {
+          ...obj,
+          vendor_name: vendorData.vendor_name,
+          business_name: vendorData.business_name,
+        };
+      });
+
       const filename = `rental_boost_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
       const title = 'Rental Boost Plan Purchases Report';
 
-      const rowMapper = (purchase) => [
-        purchase.vendor_name || 'N/A',
-        purchase.product_name || 'N/A',
-        purchase.plan_name || 'N/A',
-        purchase.price ? `${Number(purchase.price).toFixed(2)}` : '0.00',
-        purchase.days || 0,
-        purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
-        purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
-        purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-'
-      ];
-
-      await exportToPDF(res, purchases, headers, columnWidths, filename, title, rowMapper);
+      await exportToTreePDF(res, enriched, filename, title);
 
     } catch (error) {
       if (!res.headersSent) {

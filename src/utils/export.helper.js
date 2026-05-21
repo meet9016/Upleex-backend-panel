@@ -228,7 +228,10 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
   });
 };
 
+const { exportToTreePDF } = require('./exportTreePDF.helper');
+
 module.exports = {
   exportToExcel,
-  exportToPDF
+  exportToPDF,
+  exportToTreePDF
 };
