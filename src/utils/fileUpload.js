@@ -12,6 +12,20 @@ const BASE_URL = 'https://service.digitalks.co.in';
  */
 const uploadToExternalService = async (file, folderName = 'sample') => {
   try {
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB
+
+    const isVideo = file.mimetype.startsWith('video/');
+    const isImage = file.mimetype.startsWith('image/');
+
+    if (isVideo && file.size > MAX_VIDEO_SIZE) {
+      throw new Error('File size is too large. Please upload a smaller video (max 25MB).');
+    }
+
+    if (isImage && file.size > MAX_IMAGE_SIZE) {
+      throw new Error('File size is too large. Please upload a smaller image (max 10MB).');
+    }
+
     const formData = new FormData();
     formData.append('project', PROJECT_NAME);
     formData.append('folder_structure', folderName);

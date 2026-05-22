@@ -964,84 +964,35 @@ const uploadStoreVideo = {
       if (!req.file) {
         return res.status(400).json({ message: 'No video file uploaded' });
       }
-      
-      const fs = require('fs');
-      const path = require('path');
-      const ffmpeg = require('fluent-ffmpeg');
-      const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-      ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-
-      const ext = path.extname(req.file.originalname) || '.mp4';
-      const fileName = `video_${vendor_id}_${Date.now()}${ext}`;
-      const uploadDir = path.join(process.cwd(), 'uploads', 'vendor_videos');
-      
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      
-      const localFilePath = path.join(uploadDir, fileName);
-      const compressedFilePath = path.join(uploadDir, `compressed_${fileName}`);
-      
-      // Save original file to disk first for ffmpeg to process
-      fs.writeFileSync(localFilePath, req.file.buffer);
-
-      // --- Process Video: Compression ---
-      await new Promise((resolve, reject) => {
-        ffmpeg(localFilePath)
-          .outputOptions([
-            '-vcodec libx264',
-            '-crf 28',
-            '-preset veryfast',
-          ])
-          .save(compressedFilePath)
-          .on('end', resolve)
-          .on('error', (err) => reject(new Error(`Compression failed: ${err.message}`)));
-      });
-
-      // --- Use local video url instead of external service ---
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const localVideoUrl = `${baseUrl}/uploads/vendor_videos/compressed_${fileName}`;
 
       const { old_video_url } = req.body;
 
-      // Update database with final local video URL
+      // Upload video to external service
+      const videoUrl = await uploadToExternalService(req.file, 'vendor_videos');
+
+      // Update database with the external video URL
       if (old_video_url) {
         await Vendor.updateOne(
           { _id: vendor_id, store_videos: old_video_url },
-          { $set: { "store_videos.$": localVideoUrl } }
+          { $set: { "store_videos.$": videoUrl } }
         );
-        // Delete old external video if it was an update
-        if (old_video_url.includes('digitalks.co.in')) {
-          await deleteFileFromExternalService(old_video_url);
-        } else {
-          // Delete old local file
-          try {
-            const oldParts = old_video_url.split('/');
-            const oldFileName = oldParts[oldParts.length - 1];
-            const oldPath = path.join(uploadDir, oldFileName);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-          } catch (err) {
-            console.error("Failed to delete old local video:", err);
-          }
-        }
+        // Delete old video if it was an update
+        await deleteFileFromExternalService(old_video_url);
       } else {
         await Vendor.findByIdAndUpdate(vendor_id, {
-          $push: { store_videos: localVideoUrl }
+          $push: { store_videos: videoUrl }
         });
       }
 
-      // Cleanup original uncompressed local file, keep compressed file
-      if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-      
-      return res.status(200).json({ 
-        success: true, 
-        message: old_video_url ? 'Video updated successfully' : 'Video uploaded successfully', 
-        video_url: localVideoUrl 
+      return res.status(200).json({
+        success: true,
+        message: old_video_url ? 'Video updated successfully' : 'Video uploaded successfully',
+        video_url: videoUrl
       });
 
     } catch (error) {
-      console.error("Video processing error:", error);
-      res.status(500).json({ message: error.message || 'Internal Server Error during video processing' });
+      console.error("Video upload error:", error);
+      res.status(500).json({ message: error.message || 'Internal Server Error during video upload' });
     }
   }
 };
@@ -1070,25 +1021,23 @@ const deleteStoreVideo = {
         $pull: { store_videos: video_url }
       });
 
-      // Attempt to delete from external service if it's an external URL
-      if (video_url.includes('digitalks.co.in')) {
-        await deleteFileFromExternalService(video_url);
-      } else {
-        // Fallback for old local files
-        try {
-          const fs = require('fs');
-          const path = require('path');
-          const urlParts = video_url.split('/');
-          const fileName = urlParts[urlParts.length - 1];
-          if (fileName) {
-            const filePath = path.join(process.cwd(), 'uploads', 'vendor_videos', fileName);
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
+      // Delete from external service
+      await deleteFileFromExternalService(video_url);
+
+      // Also clean up old local file if it exists
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const urlParts = video_url.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        if (fileName) {
+          const filePath = path.join(process.cwd(), 'uploads', 'vendor_videos', fileName);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
           }
-        } catch (err) {
-          console.error("Failed to delete local video file:", err);
         }
+      } catch (err) {
+        console.error("Failed to delete local video file:", err);
       }
 
       return res.status(200).json({ success: true, message: 'Video deleted successfully' });
@@ -1097,6 +1046,7 @@ const deleteStoreVideo = {
     }
   }
 };
+
 
 module.exports = {
   saveKyc,
