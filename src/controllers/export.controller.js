@@ -7,7 +7,7 @@ const Wallet = require('../models/wallet.model');
 const Service = require('../models/service.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
 const Vendor = require('../models/vendor/vendor.model');
-const { exportToExcel, exportToPDF, exportToTreePDF } = require('../utils/export.helper');
+const { exportToExcel, exportToPDF, exportToTreePDF, exportOrdersToTreePDF, exportQuotesToTreePDF } = require('../utils/export.helper');
 const mongoose = require('mongoose');
 
 // Export Products to Excel
@@ -253,22 +253,11 @@ const exportQuotesToPDF = {
         query.$or = [{ note: searchRegex }, { status: searchRegex }];
       }
 
-      const quotes = await GetQuote.find(query).populate('product_id').sort({ createdAt: -1 });
-
-      const headers = ['Quote ID', 'Product', 'Qty', 'Price', 'Status'];
-      const columnWidths = [100, 200, 60, 100, 100];
+      const quotes = await GetQuote.find(query).populate('product_id').populate('user_id', 'name email').sort({ createdAt: -1 });
       const filename = `quotes_${Date.now()}.pdf`;
       const title = 'Quotes Report';
 
-      const rowMapper = (quote) => [
-          quote._id.toString().slice(-8),
-          quote.product_id?.product_name || '',
-          quote.qty || '1',
-          quote.calculated_price ? `${Number(quote.calculated_price).toFixed(2)}` : '0.00',
-          quote.status || ''
-        ];
-
-      await exportToPDF(res, quotes, headers, columnWidths, filename, title, rowMapper);
+      await exportQuotesToTreePDF(res, quotes, filename, title);
 
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -389,24 +378,10 @@ const exportOrdersToPDF = {
       }
 
       const orders = await Order.find(query).populate('user_id', 'name email').sort({ createdAt: -1 });
-
-      const headers = ['Order ID', 'Customer', 'Amount', 'Status', 'Date'];
-      const columnWidths = [100, 150, 80, 100, 100];
       const filename = `orders_${Date.now()}.pdf`;
       const title = 'Orders Report';
 
-      const rowMapper = (order) => {
-        const vendorTotal = order.items.filter(i => i.vendor_id === vendorId).reduce((sum, i) => sum + i.final_amount, 0);
-        return [
-          `#${order.order_id}`,
-          order.user_id?.name || 'N/A',
-          `${Number(vendorTotal).toFixed(2)}`,
-          order.vendor_status || 'pending',
-          new Date(order.createdAt).toLocaleDateString()
-        ];
-      };
-
-      await exportToPDF(res, orders, headers, columnWidths, filename, title, rowMapper);
+      await exportOrdersToTreePDF(res, orders, filename, title);
 
     } catch (error) {
       if (!res.headersSent) {

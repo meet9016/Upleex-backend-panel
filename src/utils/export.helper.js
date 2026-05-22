@@ -100,109 +100,89 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       const doc = new PDFDocument({ 
         margin: 30, 
         size: options.size || 'A4',
-        layout: options.layout || 'portrait'
+        layout: options.layout || 'landscape'
       });
+      
       const brandColor = '#4A90E2';
+      const vendorColor = '#1E3A5F';
+      const borderColor = '#E5E7EB';
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
+      const pageWidth = doc.page.width - 60;
 
-      // Error handling for the stream
-      doc.on('error', (err) => {
-        reject(err);
-      });
+      // Calculate proportional column widths based on page width
+      const totalOriginalWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+      const adjustedColumnWidths = columnWidths.map(w => (w / totalOriginalWidth) * pageWidth);
 
-      res.on('error', (err) => {
-        reject(err);
-      });
-
-      // Resolve when the response has finished writing
-      res.on('finish', () => {
-        resolve();
-      });
+      // Error handling
+      doc.on('error', (err) => reject(err));
+      res.on('error', (err) => reject(err));
+      res.on('finish', () => resolve());
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
       doc.pipe(res);
 
-      // Header Section
-      doc.rect(0, 0, doc.page.width, 8).fill(brandColor);
+      // Function to draw header
+      const drawHeader = () => {
+        doc.rect(0, 0, doc.page.width, 8).fill(brandColor);
 
-      if (fs.existsSync(logoPath)) {
-        try {
-          doc.image(logoPath, 30, 20, { width: 100 });
-        } catch (imgErr) {
-          doc.fillColor(brandColor).fontSize(24).font('Helvetica-Bold').text('UPLEEX', 30, 25);
+        if (fs.existsSync(logoPath)) {
+          try {
+            doc.image(logoPath, 30, 20, { width: 80 });
+          } catch (imgErr) {
+            doc.fillColor(brandColor).fontSize(20).font('Helvetica-Bold').text('UPLEEX', 30, 25);
+          }
+        } else {
+          doc.fillColor(brandColor).fontSize(20).font('Helvetica-Bold').text('UPLEEX', 30, 25);
         }
-      } else {
-        doc.fillColor(brandColor).fontSize(24).font('Helvetica-Bold').text('UPLEEX', 30, 25);
-      }
 
-      doc.fillColor('#333333').fontSize(20).font('Helvetica-Bold').text(title, 30, 25, { align: 'right' });
-      doc.fillColor('#666666').fontSize(10).font('Helvetica').text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 30, 55, { align: 'right' });
+        doc.fillColor('#333333').fontSize(18).font('Helvetica-Bold').text(title, 30, 25, { align: 'right' });
+        doc.fillColor('#666666').fontSize(10).font('Helvetica').text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 30, 55, { align: 'right' });
 
-      // Divider Line
-      doc.moveTo(30, 85).lineTo(doc.page.width - 30, 85).strokeColor('#E5E7EB').lineWidth(1).stroke();
+        // Divider
+        doc.moveTo(30, 85).lineTo(doc.page.width - 30, 85).strokeColor(borderColor).lineWidth(1).stroke();
 
-      let yPosition = 110;
-      let xPosition = 30;
-      const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+        // Table Header
+        const tableY = 110;
+        doc.rect(30, tableY, pageWidth, 35).fill('#E3F2FD');
+        doc.fillColor(vendorColor).fontSize(10).font('Helvetica-Bold');
+        
+        let xPosition = 30;
+        headers.forEach((h, i) => {
+          let align = 'left';
+          if (options.align) {
+            align = options.align;
+          } else if (options.alignments && options.alignments[i]) {
+            align = options.alignments[i];
+          } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('amount')) {
+            align = 'right';
+          }
+          doc.text(h, xPosition + 10, tableY + 12, { width: adjustedColumnWidths[i] - 20, align });
+          xPosition += adjustedColumnWidths[i];
+        });
 
-      // Draw Table Header
-      doc.rect(30, yPosition, tableWidth, 30).fill(brandColor);
-      doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-      headers.forEach((h, i) => {
-        let align = 'left';
-        if (options.align) {
-          align = options.align;
-        } else if (options.alignments && options.alignments[i]) {
-          align = options.alignments[i];
-        } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('amount')) {
-          align = 'right';
-        }
-        doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align });
-        xPosition += columnWidths[i];
-      });
+        return tableY + 35;
+      };
 
-      yPosition += 30;
-      doc.fillColor('#333333').fontSize(9).font('Helvetica');
+      let yPosition = drawHeader();
+      const rowHeight = 30;
 
       data.forEach((item, index) => {
-        if (yPosition > 750) {
+        // Check page break
+        if (yPosition + rowHeight > 520) {
           doc.addPage();
-          doc.rect(0, 0, doc.page.width, 8).fill(brandColor);
-          yPosition = 40;
-
-          xPosition = 30;
-          doc.rect(xPosition, yPosition, tableWidth, 30).fill(brandColor);
-          doc.fillColor('white').fontSize(10).font('Helvetica-Bold');
-          headers.forEach((h, i) => {
-            let align = 'left';
-            if (options.align) {
-              align = options.align;
-            } else if (options.alignments && options.alignments[i]) {
-              align = options.alignments[i];
-            } else if (h.toLowerCase().includes('price') || h.toLowerCase().includes('amount')) {
-              align = 'right';
-            }
-            doc.text(h, xPosition + 5, yPosition + 10, { width: columnWidths[i] - 10, align });
-            xPosition += columnWidths[i];
-          });
-          yPosition += 30;
-          doc.fillColor('#333333').fontSize(9).font('Helvetica');
+          yPosition = drawHeader();
         }
-
+        
+        // Alternate row background
         if (index % 2 === 0) {
           doc.save();
-          doc.rect(30, yPosition, tableWidth, 28).fill('#F8F9FA');
+          doc.rect(30, yPosition, pageWidth, rowHeight).fill('#FAFBFC');
           doc.restore();
         }
 
         const rowData = rowMapper(item);
         let xPos = 30;
-
-        // Draw row bottom border
-        doc.save();
-        doc.moveTo(30, yPosition + 28).lineTo(30 + tableWidth, yPosition + 28).strokeColor('#EEEEEE').lineWidth(1).stroke();
-        doc.restore();
 
         rowData.forEach((val, i) => {
           let align = 'left';
@@ -213,15 +193,19 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           } else if (headers[i] && (headers[i].toLowerCase().includes('price') || headers[i].toLowerCase().includes('amount'))) {
             align = 'right';
           }
-          // Per-cell color via optional cellColorMapper(colIndex, value)
           const cellColor = options.cellColorMapper ? options.cellColorMapper(i, String(val || '')) : null;
-          doc.fillColor(cellColor || '#333333');
-          doc.text(String(val || ''), xPos + 5, yPosition + 9, { width: columnWidths[i] - 10, align });
-          xPos += columnWidths[i];
+          doc.fillColor(cellColor || '#374151').fontSize(9).font('Helvetica');
+          doc.text(String(val || ''), xPos + 10, yPosition + 11, { width: adjustedColumnWidths[i] - 20, align });
+          xPos += adjustedColumnWidths[i];
         });
-        doc.fillColor('#333333');
+        doc.fillColor('#374151');
 
-        yPosition += 28;
+        // Bottom border
+        doc.save();
+        doc.moveTo(30, yPosition + rowHeight).lineTo(30 + pageWidth, yPosition + rowHeight).strokeColor(borderColor).lineWidth(0.5).stroke();
+        doc.restore();
+
+        yPosition += rowHeight;
       });
 
       doc.end();
@@ -231,10 +215,12 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
   });
 };
 
-const { exportToTreePDF } = require('./exportTreePDF.helper');
+const { exportToTreePDF, exportOrdersToTreePDF, exportQuotesToTreePDF } = require('./exportTreePDF.helper');
 
 module.exports = {
   exportToExcel,
   exportToPDF,
-  exportToTreePDF
+  exportToTreePDF,
+  exportOrdersToTreePDF,
+  exportQuotesToTreePDF
 };

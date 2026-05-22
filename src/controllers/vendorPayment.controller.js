@@ -223,7 +223,7 @@ const releasePayment = {
         payment.vendor_id,
         'Payment Released! 💰',
         `Your payment of ₹${payment.vendor_amount} for ${productType} "<b>${productName}</b>" has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
-        'order_request',
+        'payment_update',
         { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
       );
     } catch (notifErr) {
@@ -329,7 +329,7 @@ const releaseOrderPayment = {
         payment.vendor_id,
         'Payment Released! 💰',
         `Your payment of ₹${payment.vendor_amount} has been released. Period: ${fmt(deliveredAt)} to ${fmt(releaseDate)}.`,
-        'order_request',
+        'payment_update',
         { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
       );
     } catch (notifErr) {
