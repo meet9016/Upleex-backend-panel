@@ -7,7 +7,7 @@ const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
 const { sendProductApprovalEmail } = require('../services/email.service');
 
-// Get all vendors with pending product count
+// Get all vendors with pending product count and products
 const getAllVendors = {
   handler: async (req, res) => {
     try {
@@ -16,58 +16,155 @@ const getAllVendors = {
       const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
       const skip = (pageNum - 1) * limitNum;
 
-      // Only fetch vendors who can sell/rent products (vendor_type: 'vendor' or 'both')
-      const kycQuery = { 
-        $or: [
-          { vendor_type: { $regex: /vendor|both/i } },
-          { vendor_type: { $exists: false } },
-          { vendor_type: null }
-        ]
-      };
+      // Step 1: Get ALL products (both rent and sell)
+      const allProducts = await Product.find({}).sort({ createdAt: -1 });
 
-      const total = await VendorKyc.countDocuments(kycQuery);
+      // Step 2: Calculate overall counts for rent and sell
+      const overallRentCount = allProducts.filter(p => p.product_type_name === 'Rent').length;
+      const overallSellCount = allProducts.filter(p => p.product_type_name === 'Sell').length;
 
-      const vendors = await VendorKyc.find(kycQuery)
-        .sort({ updatedAt: -1 })
-        .skip(skip)
-        .limit(limitNum);
+      // Step 3: Filter products for the active tab
+      const filteredProducts = allProducts.filter(p => {
+        if (filter_rent_sell === '1') return p.product_type_name === 'Rent';
+        if (filter_rent_sell === '2') return p.product_type_name === 'Sell';
+        return true;
+      });
 
-      const vendorsWithCount = await Promise.all(
-        vendors.map(async (vendor) => {
-          const vendorId = vendor.ContactDetails?.vendor_id || '';
-          const query = { vendor_id: vendorId, approval_status: 'pending' };
-          if (filter_rent_sell === '1') query.product_type_name = 'Rent';
-          else if (filter_rent_sell === '2') query.product_type_name = 'Sell';
-          const pendingCount = await Product.countDocuments(query);
+      // Step 4: Group products (filtered and all) by vendor_id
+      const filteredProductsByVendor = {};
+      const allProductsByVendor = {};
+      
+      allProducts.forEach(product => {
+        const vid = product.vendor_id;
+        if (!allProductsByVendor[vid]) allProductsByVendor[vid] = [];
+        allProductsByVendor[vid].push(product);
+      });
+      
+      filteredProducts.forEach(product => {
+        const vid = product.vendor_id;
+        if (!filteredProductsByVendor[vid]) filteredProductsByVendor[vid] = [];
+        filteredProductsByVendor[vid].push(product);
+      });
 
-          // Fetch latest active listing plan to get billing flags
-          const activePlan = await ListingPlanPurchase.findOne({
-            vendor_id: vendorId,
-            expire_at: { $gt: new Date() }
-          }).sort({ createdAt: -1 });
+      // Step 5: Get unique vendor IDs from filtered products
+      const vendorIdsFromProducts = Object.keys(filteredProductsByVendor);
 
-          return {
-            _id: vendor._id,
-            vendor_id: vendorId,
-            full_name: vendor.ContactDetails?.full_name || '',
-            business_name: vendor.Identity?.business_name || '',
-            email: vendor.ContactDetails?.email || '',
-            number: vendor.ContactDetails?.mobile || '',
-            pendingCount,
-            is_unlimited: activePlan?.is_unlimited || false,
-            is_extra_per_product: activePlan?.is_extra_per_product || false,
-          };
+      // Step 6: Get vendor info from VendorKyc and Vendor
+      const [vendorKycs, vendorsFromModel] = await Promise.all([
+        VendorKyc.find({
+          $or: [
+            { 'ContactDetails.vendor_id': { $in: vendorIdsFromProducts } },
+            { vendor_id: { $in: vendorIdsFromProducts } }
+          ]
+        }),
+        Vendor.find({
+          $or: [
+            { _id: { $in: vendorIdsFromProducts } },
+            { vendor_id: { $in: vendorIdsFromProducts } }
+          ]
         })
-      );
+      ]);
+
+      // Step 7: Create vendor info map
+      const vendorInfoMap = {};
+      
+      // Add from VendorKyc
+      vendorKycs.forEach(v => {
+        const vid = v.ContactDetails?.vendor_id || v.vendor_id;
+        if (vid) {
+          vendorInfoMap[vid] = {
+            _id: v._id,
+            vendor_id: vid,
+            full_name: v.ContactDetails?.full_name || '',
+            business_name: v.Identity?.business_name || '',
+            email: v.ContactDetails?.email || '',
+            number: v.ContactDetails?.mobile || ''
+          };
+        }
+      });
+
+      // Add from Vendor (overrides VendorKyc if exists)
+      vendorsFromModel.forEach(v => {
+        const vid = String(v._id) || v.vendor_id;
+        if (vid) {
+          vendorInfoMap[vid] = {
+            _id: v._id,
+            vendor_id: vid,
+            full_name: v.full_name || '',
+            business_name: v.business_name || '',
+            email: v.email || '',
+            number: v.mobile || ''
+          };
+        }
+      });
+
+      // Step 8: Build vendor list with products and placeholder vendors if needed
+      const vendorList = [];
+      vendorIdsFromProducts.forEach(vid => {
+        const vendorInfo = vendorInfoMap[vid] || {
+          _id: vid,
+          vendor_id: vid,
+          full_name: 'Unknown Vendor',
+          business_name: 'Unknown Business',
+          email: '',
+          number: ''
+        };
+
+        // Products for the active tab
+        const products = filteredProductsByVendor[vid] || [];
+        // All products for this vendor (for counts)
+        const vendorAllProducts = allProductsByVendor[vid] || [];
+        
+        // Counts for active tab
+        const pending = products.filter(p => p.approval_status === 'pending').length;
+        const approved = products.filter(p => p.approval_status === 'approved').length;
+        const rejected = products.filter(p => p.approval_status === 'rejected').length;
+
+        // Vendor's total rent & sell counts
+        const vendorRentCount = vendorAllProducts.filter(p => p.product_type_name === 'Rent').length;
+        const vendorSellCount = vendorAllProducts.filter(p => p.product_type_name === 'Sell').length;
+
+        vendorList.push({
+          ...vendorInfo,
+          pendingCount: pending,
+          is_unlimited: false,
+          is_extra_per_product: false,
+          products,
+          counts: { pending, approved, rejected },
+          vendorRentCount,
+          vendorSellCount
+        });
+      });
+
+      // Step 9: Apply pagination to vendor list
+      const total = vendorList.length;
+      const paginatedVendors = vendorList.slice(skip, skip + limitNum);
+
+      // Step 10: Calculate total products for debug
+      const totalProducts = paginatedVendors.reduce((sum, v) => sum + (v.products || []).length, 0);
 
       res.status(200).json({
         status: 200,
-        data: vendorsWithCount,
+        data: paginatedVendors,
         total,
         page: pageNum,
-        totalPages: Math.ceil(total / limitNum)
+        totalPages: Math.ceil(total / limitNum),
+        overallCounts: {
+          rent: overallRentCount,
+          sell: overallSellCount
+        },
+        debug: {
+          filter_rent_sell,
+          overallRentCount,
+          overallSellCount,
+          totalProductsInDB: allProducts.length,
+          totalProductsReturned: totalProducts,
+          totalVendors: total,
+          vendorsReturned: paginatedVendors.length
+        }
       });
     } catch (error) {
+      console.error('❌ [getAllVendors] Error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
@@ -78,7 +175,16 @@ const getVendorProducts = {
   handler: async (req, res) => {
     try {
       const { vendorId } = req.params;
-      const products = await Product.find({ vendor_id: vendorId }).sort({ createdAt: -1 });
+      const { filter_rent_sell } = req.query;
+      
+      const query = { vendor_id: vendorId };
+      if (filter_rent_sell === '1') {
+        query.product_type_name = 'Rent';
+      } else if (filter_rent_sell === '2') {
+        query.product_type_name = 'Sell';
+      }
+      
+      const products = await Product.find(query).sort({ createdAt: -1 });
       const pending = products.filter(p => p.approval_status === 'pending').length;
       const approved = products.filter(p => p.approval_status === 'approved').length;
       const rejected = products.filter(p => p.approval_status === 'rejected').length;

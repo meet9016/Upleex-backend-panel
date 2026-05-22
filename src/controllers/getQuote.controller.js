@@ -1473,7 +1473,7 @@ const verifyQuotePayment = {
           await sendAdminNotification(
             'Quote Payment Received! 💰',
             `Payment of ₹${existingQuote.calculated_price} received for quote from <b>${userName}</b>.`,
-            'payment',
+            'quote_request',
             { quoteId: String(existingQuote._id), amount: existingQuote.calculated_price }
           );
 
@@ -1483,7 +1483,7 @@ const verifyQuotePayment = {
               vendorId,
               'Quote Payment Received! 💰',
               `Payment of ₹${existingQuote.calculated_price} received for quote product: "${productName}" from ${userName}.`,
-              'payment_received',
+              'quote_request',
               { quoteId: String(existingQuote._id), amount: String(existingQuote.calculated_price) }
             );
           }

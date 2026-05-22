@@ -306,7 +306,7 @@ const verifyPayment = catchAsync(async (req, res) => {
     await sendAdminNotification(
       'New Order Payment Received! 💰',
       `Order #${order.order_id} payment of ₹${order.total_amount} received from ${order.user_name || 'User'}.`,
-      'payment',
+      'order_request',    
       { orderId: String(order._id), orderNumber: order.order_id, amount: order.total_amount }
     );
 
@@ -331,7 +331,7 @@ const verifyPayment = catchAsync(async (req, res) => {
         vendorId,
         'Order Payment Received! \ud83d\udcb0',
         `Payment of \u20b9${vendorAmount} received for order #${order.order_id}. Products: ${names}`,
-        'payment_received',
+        'order_request',
         { orderId: String(order._id), orderNumber: order.order_id, amount: String(vendorAmount) }
       );
     }
