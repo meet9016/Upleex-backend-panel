@@ -123,7 +123,10 @@ const createService = {
 const getAllServices = {
   handler: async (req, res) => {
     try {
-      const { search, category_id, status, sortBy, order, city } = req.query;
+      const { search, category_id, status, sortBy, order, city, page, limit } = req.query;
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 12));
+      const skip = (pageNum - 1) * limitNum;
       const query = {};
 
       // First, update expired priority plans
@@ -232,7 +235,10 @@ const getAllServices = {
         sort = { is_priority: -1, [sortBy]: order === 'desc' ? -1 : 1, createdAt: -1 };
       }
 
-      const services = await Service.find(query).sort(sort);
+      const [total, services] = await Promise.all([
+        Service.countDocuments(query),
+        Service.find(query).sort(sort).skip(skip).limit(limitNum),
+      ]);
 
       // Enrich with vendor KYC details
       const vendorIds = [...new Set(services.map((s) => s.vendor_id).filter((id) => !!id))];
@@ -272,6 +278,12 @@ const getAllServices = {
       return res.status(200).json({
         success: true,
         data: normalized,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+        },
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
