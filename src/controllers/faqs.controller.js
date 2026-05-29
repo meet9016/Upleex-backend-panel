@@ -56,7 +56,7 @@ const getAllFaqs = {
         };
       }
       
-      const faqs = await FAQ.find(query).sort({ createdAt: -1 });
+      const faqs = await FAQ.find(query).sort({ createdAt: 1 });
 
       res.status(httpStatus.OK).json({
         success: true,

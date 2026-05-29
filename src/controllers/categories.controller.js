@@ -9,11 +9,138 @@ const {
   deleteFileFromExternalService,
 } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
+
+const parseLegacyBulletLine = (line) => {
+  let content = String(line || '').trim().replace(/^[●•\-*]\s+/, '');
+  const boldMatch = content.match(/^\*\*([^*]+)\*\*:?\s*(.*)$/s);
+  if (boldMatch) {
+    return {
+      label: boldMatch[1].trim(),
+      text: boldMatch[2].trim(),
+    };
+  }
+  const colonIndex = content.indexOf(':');
+  if (colonIndex > 0) {
+    return {
+      label: content.slice(0, colonIndex).replace(/\*\*/g, '').trim(),
+      text: content.slice(colonIndex + 1).trim(),
+    };
+  }
+  return { label: '', text: content };
+};
+
+const normalizeSeoSection = (section) => {
+  const heading = String(section?.heading || section?.h2 || '').trim();
+  const heading_level = section?.heading_level === 'h3' ? 'h3' : 'h2';
+
+  let bullets = [];
+  if (Array.isArray(section?.bullets)) {
+    bullets = section.bullets
+      .map((bullet) => {
+        const label = String(bullet?.label || '').trim();
+        const text = String(bullet?.text || '').trim();
+        const plain = Boolean(bullet?.plain) || (!label && Boolean(text));
+        return {
+          label: plain ? '' : label,
+          text,
+          plain,
+        };
+      })
+      .filter((bullet) => bullet.label || bullet.text);
+  }
+
+  if (!bullets.length && Array.isArray(section?.paragraphs)) {
+    bullets = section.paragraphs
+      .map((paragraph) => {
+        const parsed = parseLegacyBulletLine(paragraph);
+        const plain = !parsed.label && Boolean(parsed.text);
+        return { ...parsed, plain };
+      })
+      .filter((bullet) => bullet.label || bullet.text);
+  }
+
+  return { heading, heading_level, bullets };
+};
+
+const normalizeIntroParagraphs = (parsed) => {
+  if (Array.isArray(parsed?.intro_paragraphs) && parsed.intro_paragraphs.length > 0) {
+    return parsed.intro_paragraphs.map((p) => String(p || '').trim()).filter(Boolean);
+  }
+  const legacyIntro = String(parsed?.intro_text || '').trim();
+  return legacyIntro ? [legacyIntro] : [];
+};
+
+const parseSeoContentInput = (raw) => {
+  if (!raw) {
+    return {
+      hero_title: '',
+      hero_text: '',
+      intro_heading: '',
+      intro_paragraphs: [],
+      sections: [],
+      main_text: '',
+      sub_text: '',
+    };
+  }
+
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      parsed = {};
+    }
+  }
+
+  const sections = Array.isArray(parsed.sections)
+    ? parsed.sections.map((section) => normalizeSeoSection(section))
+    : [];
+
+  return {
+    hero_title: String(parsed.hero_title || '').trim(),
+    hero_text: String(parsed.hero_text || '').trim(),
+    intro_heading: String(parsed.intro_heading || '').trim(),
+    intro_paragraphs: normalizeIntroParagraphs(parsed),
+    sections,
+    main_text: String(parsed.main_text || '').trim(),
+    sub_text: String(parsed.sub_text || '').trim(),
+  };
+};
+
+const formatSeoContentResponse = (seo) => {
+  if (!seo) {
+    return {
+      hero_title: '',
+      hero_text: '',
+      intro_heading: '',
+      intro_paragraphs: [],
+      sections: [],
+      main_text: '',
+      sub_text: '',
+    };
+  }
+
+  const source = seo.toObject ? seo.toObject() : seo;
+
+  return {
+    hero_title: source.hero_title || '',
+    hero_text: source.hero_text || '',
+    intro_heading: source.intro_heading || '',
+    intro_paragraphs: normalizeIntroParagraphs(source),
+    sections: Array.isArray(source.sections)
+      ? source.sections.map((section) => normalizeSeoSection(section))
+      : [],
+    main_text: source.main_text || '',
+    sub_text: source.sub_text || '',
+  };
+};
+
 const createCategory = {
   validation: {
     body: Joi.object().keys({
       categories_name: Joi.string().trim().required(),
       image: Joi.string().allow(),
+      seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
     }),
   },
   handler: async (req, res) => {
@@ -33,9 +160,12 @@ const createCategory = {
         imageUrl = await uploadToExternalService(req.file, 'categories_image');
       }
 
+      const seoContent = parseSeoContentInput(req.body.seo_content);
+
       const category = await Category.create({
-        ...req.body,
+        categories_name: categories_name.trim(),
         image: imageUrl,
+        seo_content: seoContent,
       });
 
       return res.status(201).json({
@@ -139,6 +269,7 @@ const getAllCategories = {
                   created_at: sub.createdAt,
                   updated_at: sub.updatedAt,
                 })),
+                seo_content: formatSeoContentResponse(cat.seo_content),
               };
             }
           }
@@ -163,6 +294,7 @@ const getAllCategories = {
               created_at: sub.createdAt,
               updated_at: sub.updatedAt,
             })),
+            seo_content: formatSeoContentResponse(cat.seo_content),
           };
         })
       );
@@ -220,6 +352,7 @@ const getCategoryById = {
           created_at: sub.createdAt,
           updated_at: sub.updatedAt,
         })),
+        seo_content: formatSeoContentResponse(category.seo_content),
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -233,6 +366,7 @@ const updateCategory = {
       .keys({
         categories_name: Joi.string().trim().required(),
         image: Joi.string().allow(),
+        seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
       })
       .prefs({ convert: true }),
   },
@@ -270,9 +404,13 @@ const updateCategory = {
     }
 
     const updateData = {
-      ...req.body,
+      categories_name: req.body.categories_name?.trim() || categoryExist.categories_name,
       image: imageUrl,
     };
+
+    if (req.body.seo_content !== undefined) {
+      updateData.seo_content = parseSeoContentInput(req.body.seo_content);
+    }
 
     const category = await Category.findByIdAndUpdate(_id, updateData, {
       new: true,
