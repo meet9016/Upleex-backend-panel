@@ -17,7 +17,10 @@ const fileFilter = (req, file, cb) => {
     "video/ogg",
     "video/webm",
     "video/quicktime",
-    "video/x-msvideo"
+    "video/x-msvideo",
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel"
   ];
   if (allowed.includes(file.mimetype)) {
     cb(null, true);

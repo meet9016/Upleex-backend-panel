@@ -5,6 +5,7 @@ const auth = require('../../middlewares/auth');
 const adminController = require('../../controllers/admin.controller');
 const walletController = require('../../controllers/wallet.controller');
 const dashboardStatsController = require('../../controllers/dashboardStats.controller');
+const upload = require('../../middlewares/upload');
 
 const router = express.Router();
 
@@ -44,6 +45,19 @@ router.get(
   '/my-permissions',
   auth(),
   catchAsync(adminController.getMyPermissions.handler)
+);
+
+router.post(
+  '/metadata/upload-csv',
+  auth(),
+  upload.single('file'),
+  catchAsync(adminController.uploadMetadataCsv.handler)
+);
+
+router.get(
+  '/metadata/json',
+  auth(),
+  catchAsync(adminController.getMetadataJson.handler)
 );
 
 // Vendor Wallets

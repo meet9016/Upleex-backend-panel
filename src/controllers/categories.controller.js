@@ -70,9 +70,27 @@ const normalizeIntroParagraphs = (parsed) => {
   return legacyIntro ? [legacyIntro] : [];
 };
 
+const normalizeSeoFaqs = (parsed) => {
+  if (!Array.isArray(parsed?.faqs)) return [];
+  return parsed.faqs
+    .map((faq) => ({
+      question: String(faq?.question || '').trim(),
+      answer: String(faq?.answer || '').trim(),
+    }))
+    .filter((faq) => faq.question || faq.answer);
+};
+
 const parseSeoContentInput = (raw) => {
   if (!raw) {
     return {
+      meta_title: '',
+      meta_description: '',
+      core_keyword: '',
+      secondary_keywords: '',
+      image_alt: '',
+      image_title: '',
+      anchor_tags: [],
+      faqs: [],
       hero_title: '',
       hero_text: '',
       intro_heading: '',
@@ -97,6 +115,16 @@ const parseSeoContentInput = (raw) => {
     : [];
 
   return {
+    meta_title: String(parsed.meta_title || '').trim(),
+    meta_description: String(parsed.meta_description || '').trim(),
+    core_keyword: String(parsed.core_keyword || '').trim(),
+    secondary_keywords: String(parsed.secondary_keywords || '').trim(),
+    image_alt: String(parsed.image_alt || '').trim(),
+    image_title: String(parsed.image_title || '').trim(),
+    anchor_tags: Array.isArray(parsed.anchor_tags)
+      ? parsed.anchor_tags.map((tag) => String(tag || '').trim()).filter(Boolean)
+      : [],
+    faqs: normalizeSeoFaqs(parsed),
     hero_title: String(parsed.hero_title || '').trim(),
     hero_text: String(parsed.hero_text || '').trim(),
     intro_heading: String(parsed.intro_heading || '').trim(),
@@ -110,6 +138,14 @@ const parseSeoContentInput = (raw) => {
 const formatSeoContentResponse = (seo) => {
   if (!seo) {
     return {
+      meta_title: '',
+      meta_description: '',
+      core_keyword: '',
+      secondary_keywords: '',
+      image_alt: '',
+      image_title: '',
+      anchor_tags: [],
+      faqs: [],
       hero_title: '',
       hero_text: '',
       intro_heading: '',
@@ -123,6 +159,14 @@ const formatSeoContentResponse = (seo) => {
   const source = seo.toObject ? seo.toObject() : seo;
 
   return {
+    meta_title: source.meta_title || '',
+    meta_description: source.meta_description || '',
+    core_keyword: source.core_keyword || '',
+    secondary_keywords: source.secondary_keywords || '',
+    image_alt: source.image_alt || '',
+    image_title: source.image_title || '',
+    anchor_tags: Array.isArray(source.anchor_tags) ? source.anchor_tags : [],
+    faqs: normalizeSeoFaqs(source),
     hero_title: source.hero_title || '',
     hero_text: source.hero_text || '',
     intro_heading: source.intro_heading || '',

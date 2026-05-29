@@ -16,6 +16,11 @@ const seoSectionSchema = {
   paragraphs: [{ type: String }],
 };
 
+const seoFaqSchema = {
+  question: { type: String, default: '' },
+  answer: { type: String, default: '' },
+};
+
 const categorySchema = mongoose.Schema(
   {
     categories_name: {
@@ -27,6 +32,14 @@ const categorySchema = mongoose.Schema(
       type: String,
     },
     seo_content: {
+      meta_title: { type: String, default: '' },
+      meta_description: { type: String, default: '' },
+      core_keyword: { type: String, default: '' },
+      secondary_keywords: { type: String, default: '' },
+      image_alt: { type: String, default: '' },
+      image_title: { type: String, default: '' },
+      anchor_tags: [{ type: String }],
+      faqs: [seoFaqSchema],
       hero_title: { type: String, default: '' },
       hero_text: { type: String, default: '' },
       intro_heading: { type: String, default: '' },

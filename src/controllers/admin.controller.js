@@ -1,7 +1,16 @@
 const httpStatus = require('http-status');
 const Joi = require('joi');
 const Admin = require('../models/admin.model');
+const { Category, SubCategory } = require('../models');
 const { generateAuthTokens } = require('../services/tokenService');
+const {
+  normalizeSeoLookupKey,
+  csvTextToMetadataJson,
+  saveMetadataJson,
+  readMetadataJson,
+  toSeoContent,
+  METADATA_JSON_PATH,
+} = require('../utils/metadataCsv');
 
 const register = {
   validation: {
@@ -128,6 +137,7 @@ const getAvailablePages = {
         {name: 'contact-us', displayName: 'Contact Us' },
         {name: 'vendor-wallets', displayName: 'Vendor Wallets' },
         {name: 'vendor-payments', displayName: 'Vendor Payments' },
+        {name: 'metadata', displayName: 'Metadata' },
       ];
       return res.status(httpStatus.OK).json({
         status: 200,
@@ -139,6 +149,140 @@ const getAvailablePages = {
         status: 500,
         success: false,
         message: 'Failed to get available pages'
+      });
+    }
+  },
+};
+
+const uploadMetadataCsv = {
+  handler: async (req, res) => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          status: 400,
+          success: false,
+          message: 'CSV file is required',
+        });
+      }
+
+      const csvText = req.file.buffer.toString('utf8');
+      const metadataJson = csvTextToMetadataJson(csvText, req.file.originalname || 'upload.csv');
+      const jsonPath = saveMetadataJson(metadataJson);
+
+      if (!metadataJson.entries.length) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          status: 400,
+          success: false,
+          message: 'CSV is empty or invalid',
+        });
+      }
+
+      const categories = await Category.find({}, '_id categories_name');
+      const subCategories = await SubCategory.find({}, '_id name categoryId');
+
+      const categoryMap = new Map(
+        categories.map((item) => [normalizeSeoLookupKey(item.categories_name), item])
+      );
+      const subCategoryMap = new Map(
+        subCategories.map((item) => [normalizeSeoLookupKey(item.name), item])
+      );
+
+      const stats = {
+        totalRows: metadataJson.entries.length,
+        updatedCategories: 0,
+        updatedSubCategories: 0,
+        skippedRows: 0,
+        jsonPath,
+        jsonFile: 'category-seo-metadata.json',
+      };
+      const unmatched = [];
+
+      for (const entry of metadataJson.entries) {
+        const categoryName = entry.category || '';
+        const subCategoryName = entry.sub_category || '';
+        const seoContent = toSeoContent(entry);
+
+        const normalizedSub = normalizeSeoLookupKey(subCategoryName);
+        const normalizedCategory = normalizeSeoLookupKey(categoryName);
+
+        if (normalizedSub && subCategoryMap.has(normalizedSub)) {
+          const subCategory = subCategoryMap.get(normalizedSub);
+          await SubCategory.updateOne(
+            { _id: subCategory._id },
+            { $set: { seo_content: seoContent } }
+          );
+          stats.updatedSubCategories += 1;
+          continue;
+        }
+
+        if (!subCategoryName && normalizedCategory && categoryMap.has(normalizedCategory)) {
+          const category = categoryMap.get(normalizedCategory);
+          await Category.updateOne(
+            { _id: category._id },
+            { $set: { seo_content: seoContent } }
+          );
+          stats.updatedCategories += 1;
+          continue;
+        }
+
+        stats.skippedRows += 1;
+        if (unmatched.length < 50) {
+          unmatched.push({
+            category: categoryName,
+            subCategory: subCategoryName,
+            coreKeyword: entry.core_keyword || '',
+          });
+        }
+      }
+
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        message: 'Metadata CSV converted to JSON and applied successfully',
+        data: {
+          ...stats,
+          unmatched,
+          generatedAt: metadataJson.generated_at,
+        },
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 500,
+        success: false,
+        message: 'Failed to process metadata CSV',
+        error: error.message,
+      });
+    }
+  },
+};
+
+const getMetadataJson = {
+  handler: async (req, res) => {
+    try {
+      const json = readMetadataJson();
+      if (!json) {
+        return res.status(httpStatus.NOT_FOUND).json({
+          status: 404,
+          success: false,
+          message: 'Metadata JSON not found. Upload CSV first.',
+        });
+      }
+
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        data: {
+          path: METADATA_JSON_PATH,
+          file: 'category-seo-metadata.json',
+          ...json,
+        },
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 500,
+        success: false,
+        message: 'Failed to read metadata JSON',
+        error: error.message,
       });
     }
   },
@@ -215,5 +359,7 @@ module.exports = {
   getAvailablePages,
   getAllAdmins,
   getMyPermissions,
+  uploadMetadataCsv,
+  getMetadataJson,
 };
 
