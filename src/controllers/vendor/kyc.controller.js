@@ -6,6 +6,7 @@ const Vendor = require('../../models/vendor/vendor.model');
 const { AccountType } = require('../../models');
 const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExternalService } = require('../../utils/fileUpload');
 const { createKycNotification, sendKycIncompleteEmail } = require('../../services/kycEmail.service');
+const mongoose = require('mongoose');
 
 const saveKyc = {
   handler: async (req, res) => {
@@ -51,7 +52,7 @@ const saveKyc = {
       const handleFileDeletions = (docObj) => {
         const fileFields = [
           'pancard_front_image',
-          'aadharcard_front_image', 
+          'aadharcard_front_image',
           'aadharcard_back_image',
           'gst_certificate_image',
           'vendor_image',
@@ -59,7 +60,7 @@ const saveKyc = {
           'qr_code_image',
           'cheque_image'
         ];
-        
+
         fileFields.forEach(field => {
           // Check for empty string (indicating deletion)
           if (body[field] === '') {
@@ -70,7 +71,7 @@ const saveKyc = {
             docObj[field] = null;
           }
         });
-        
+
         return docObj;
       };
 
@@ -81,7 +82,7 @@ const saveKyc = {
           docObj = Array.isArray(body.Documents) ? body.Documents[0] || {} : (typeof body.Documents === 'string' ? JSON.parse(body.Documents) : body.Documents || {});
           if (Array.isArray(docObj)) docObj = docObj[0] || {};
         }
-        
+
         docObj = handleFileDeletions(docObj);
         body.Documents = [docObj];
       }
@@ -186,7 +187,7 @@ const saveKyc = {
           doc.ContactDetails = { ...doc.ContactDetails.toObject(), ...contact };
           if (vendor_id) {
             doc.ContactDetails.vendor_id = vendor_id;
-            
+
             // Sync contact details back to Vendor record if provided
             const vendorUpdate = {};
             if (contact.full_name) vendorUpdate.full_name = contact.full_name;
@@ -205,14 +206,14 @@ const saveKyc = {
           // Merge documents but handle null values properly (for deletions)
           const currentDocs = doc.Documents.toObject();
           const mergedDocs = { ...currentDocs, ...documents };
-          
+
           // Remove null values (deleted files) from the final object
           Object.keys(mergedDocs).forEach(key => {
             if (mergedDocs[key] === null) {
               delete mergedDocs[key];
             }
           });
-          
+
           doc.Documents = mergedDocs;
         }
 
@@ -257,7 +258,7 @@ const saveKyc = {
           const v = await Vendor.findById(vendor_id);
           if (v) {
             if (v.vendor_type) vendor_type = v.vendor_type;
-            
+
             // Sync contact details back to Vendor record if provided
             if (initialContact.full_name) v.full_name = initialContact.full_name;
             if (initialContact.email) v.email = initialContact.email;
@@ -419,8 +420,9 @@ const listKyc = {
 
       const ids = [...new Set(docs.map(d => (d.toJSON().Bank?.account_type || '')).filter(Boolean))];
       let atMap = {};
-      if (ids.length) {
-        const ats = await AccountType.find({ _id: { $in: ids } });
+      const validIds = ids.filter(id => mongoose.Types.ObjectId.isValid(id));
+      if (validIds.length > 0) {
+        const ats = await AccountType.find({ _id: { $in: validIds } });
         ats.forEach(a => { atMap[String(a._id)] = a.type_name; });
       }
       const dataArr = docs.map((d) => {
@@ -915,7 +917,7 @@ const getApprovedLogos = {
   handler: async (req, res) => {
     try {
       const approvedVendors = await VendorKyc.find(
-        { 
+        {
           status: 'approved',
           'Documents.business_logo_image': { $ne: '', $exists: true }
         },
