@@ -128,13 +128,14 @@ const purchaseGeneralPlan = {
   validation: {
     body: Joi.object().keys({
       plan_id: Joi.string().required(),
-      product_ids: Joi.array().items(Joi.string()).min(1).required(),
+      product_ids: Joi.array().items(Joi.string()).optional().default([]),
       is_refill: Joi.boolean().default(false),
       purchase_id: Joi.string().allow('', null),
     }),
   },
   handler: async (req, res) => {
-    const { plan_id, product_ids, is_refill, purchase_id } = req.body;
+    const { plan_id, is_refill, purchase_id } = req.body;
+    let product_ids = req.body.product_ids || [];
     const vendor_id = req.user._id;
 
     if (!mongoose.Types.ObjectId.isValid(plan_id)) {

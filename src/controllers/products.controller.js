@@ -237,7 +237,28 @@ const createProduct = {
       // ───────────────────────────────────────────────
       //     Free limit check → ફક્ત free products માટે
       // ───────────────────────────────────────────────
-      if (pricingType === 'free') {
+      // ───────────────────────────────────────────────
+      //     Check if vendor has General Plan quota
+      // ───────────────────────────────────────────────
+      const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+      const activePlans = await GeneralPlanPurchase.find({
+        vendor_id: data.vendor_id,
+        status: 'active',
+        expire_at: { $gt: new Date() }
+      });
+      
+      let hasGeneralPlanQuota = false;
+      for (const p of activePlans) {
+        if ((p.product_ids || []).length < p.max_products) {
+          hasGeneralPlanQuota = true;
+          break;
+        }
+      }
+
+      if (pricingType === 'free' && hasGeneralPlanQuota) {
+        // Automatically upgrade to paid so it consumes the quota upon approval
+        data.pricing_type = 'paid';
+      } else if (pricingType === 'free') {
         let limit = 1;
         // Robust KYC lookup checking both possible vendor_id locations
         const kyc = await VendorKyc.findOne({ 
