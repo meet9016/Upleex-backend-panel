@@ -11,7 +11,7 @@ const { sendProductApprovalEmail } = require('../services/email.service');
 const getAllVendors = {
   handler: async (req, res) => {
     try {
-      const { page, limit, filter_rent_sell } = req.query;
+      const { page, limit, filter_rent_sell, search } = req.query;
       const pageNum = Math.max(parseInt(page) || 1, 1);
       const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
       const skip = (pageNum - 1) * limitNum;
@@ -99,7 +99,7 @@ const getAllVendors = {
       });
 
       // Step 8: Build vendor list with products and placeholder vendors if needed
-      const vendorList = [];
+      let vendorList = [];
       vendorIdsFromProducts.forEach(vid => {
         const vendorInfo = vendorInfoMap[vid] || {
           _id: vid,
@@ -135,6 +135,13 @@ const getAllVendors = {
           vendorSellCount
         });
       });
+
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        vendorList = vendorList.filter(v => 
+          searchRegex.test(v.full_name) || searchRegex.test(v.business_name)
+        );
+      }
 
       // Step 9: Apply pagination to vendor list
       const total = vendorList.length;

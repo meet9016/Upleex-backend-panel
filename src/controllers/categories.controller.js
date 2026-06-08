@@ -312,6 +312,7 @@ const getAllCategories = {
                   image: sub.image || '',
                   created_at: sub.createdAt,
                   updated_at: sub.updatedAt,
+                  seo_content: formatSeoContentResponse(sub.seo_content),
                 })),
                 seo_content: formatSeoContentResponse(cat.seo_content),
               };
@@ -337,6 +338,7 @@ const getAllCategories = {
               image: sub.image || '',
               created_at: sub.createdAt,
               updated_at: sub.updatedAt,
+              seo_content: formatSeoContentResponse(sub.seo_content),
             })),
             seo_content: formatSeoContentResponse(cat.seo_content),
           };
@@ -395,6 +397,7 @@ const getCategoryById = {
           image: sub.image || '',
           created_at: sub.createdAt,
           updated_at: sub.updatedAt,
+          seo_content: formatSeoContentResponse(sub.seo_content),
         })),
         seo_content: formatSeoContentResponse(category.seo_content),
       });

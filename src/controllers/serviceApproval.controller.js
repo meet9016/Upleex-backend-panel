@@ -9,7 +9,7 @@ const walletService = require('../services/wallet.service');
 const getAllVendors = {
   handler: async (req, res) => {
     try {
-      const { page, limit } = req.query;
+      const { page, limit, search } = req.query;
       const pageNum = Math.max(parseInt(page) || 1, 1);
       const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
       const skip = (pageNum - 1) * limitNum;
@@ -21,13 +21,19 @@ const getAllVendors = {
       ).lean();
       const eligibleVendorIds = eligibleVendors.map(v => String(v._id));
 
-      const total = await VendorKyc.countDocuments({
-        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
-      });
+      let query = { 'ContactDetails.vendor_id': { $in: eligibleVendorIds } };
 
-      const vendors = await VendorKyc.find({
-        'ContactDetails.vendor_id': { $in: eligibleVendorIds }
-      }).skip(skip).limit(limitNum);
+      if (search && search.trim() !== '') {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { 'ContactDetails.full_name': searchRegex },
+          { 'Identity.business_name': searchRegex }
+        ];
+      }
+
+      const total = await VendorKyc.countDocuments(query);
+
+      const vendors = await VendorKyc.find(query).skip(skip).limit(limitNum);
 
       const vendorsWithCount = await Promise.all(
         vendors.map(async (vendor) => {
