@@ -224,35 +224,58 @@ const approveProduct = {
         return res.status(400).json({ message: 'Product is already approved' });
       }
 
-      // If approving a paid product, deduct money from wallet
+      let usedGeneralPlan = false;
+      // If approving a paid product, check general plan quota, otherwise deduct money from wallet
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
         const isDemo = await walletService.isDemoVendor(product.vendor_id);
         if (!isDemo) {
-          const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
+          const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+          const activePlans = await GeneralPlanPurchase.find({
+            vendor_id: product.vendor_id,
+            status: 'active',
+            expire_at: { $gt: new Date() }
+          });
           
-          if (!hasBalance) {
-            return res.status(httpStatus.BAD_REQUEST).json({
-              message: 'Vendor has insufficient wallet balance. Cannot approve paid listing.'
-            });
+          let planToUse = null;
+          for (const p of activePlans) {
+            if ((p.product_ids || []).length < p.max_products) {
+              planToUse = p;
+              break;
+            }
           }
-          
-          try {
-            await walletService.deductMoneyFromWallet(
-              product.vendor_id,
-              10,
-              `Base (Paid listing) fee for approved product: ${product.product_name}`,
-              {
-                purpose: 'paid_listing_fee',
-                product_name: product.product_name,
-                product_id: product._id,
-                category_id: product.category_id,
-                sub_category_id: product.sub_category_id,
-              }
-            );
-          } catch (walletError) {
-            return res.status(httpStatus.BAD_REQUEST).json({
-              message: 'Failed to process wallet payment during approval. Please try again.'
-            });
+
+          if (planToUse) {
+            if (!planToUse.product_ids) planToUse.product_ids = [];
+            planToUse.product_ids.push(product._id);
+            await planToUse.save();
+            usedGeneralPlan = true;
+          } else {
+            const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
+            
+            if (!hasBalance) {
+              return res.status(httpStatus.BAD_REQUEST).json({
+                message: 'Vendor has insufficient wallet balance. Cannot approve paid listing.'
+              });
+            }
+            
+            try {
+              await walletService.deductMoneyFromWallet(
+                product.vendor_id,
+                10,
+                `Base (Paid listing) fee for approved product: ${product.product_name}`,
+                {
+                  purpose: 'paid_listing_fee',
+                  product_name: product.product_name,
+                  product_id: product._id,
+                  category_id: product.category_id,
+                  sub_category_id: product.sub_category_id,
+                }
+              );
+            } catch (walletError) {
+              return res.status(httpStatus.BAD_REQUEST).json({
+                message: 'Failed to process wallet payment during approval. Please try again.'
+              });
+            }
           }
         }
       }
@@ -353,9 +376,14 @@ const approveProduct = {
         console.error('Vendor notification error:', notifErr);
       }
 
-      const message = newStatus === 'approved' && product.pricing_type === 'paid'
-        ? 'Product approved successfully. ₹10 deducted from vendor wallet.'
-        : `Product ${newStatus} successfully`;
+      let message = `Product ${newStatus} successfully`;
+      if (newStatus === 'approved' && product.pricing_type === 'paid') {
+         if (usedGeneralPlan) {
+            message = 'Product approved successfully. Slot used from General Plan.';
+         } else {
+            message = 'Product approved successfully. ₹10 deducted from vendor wallet.';
+         }
+      }
 
       res.status(200).json({
         status: 200,
@@ -385,37 +413,64 @@ const bulkApproveProducts = {
       // Get all products to be approved
       const products = await Product.find({ _id: { $in: product_ids } });
       
-      // Check wallet balance for paid products and deduct money
+      // Check wallet balance for paid products and deduct money or use quota
+      let totalDeductionsCount = 0;
+      let totalUsedQuotaCount = 0;
+      const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+
       for (const product of products) {
         if (product.approval_status !== 'approved' && product.pricing_type === 'paid') {
           const isDemo = await walletService.isDemoVendor(product.vendor_id);
           if (isDemo) continue;
 
-          const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
+          // Check for available quota
+          const activePlans = await GeneralPlanPurchase.find({
+            vendor_id: product.vendor_id,
+            status: 'active',
+            expire_at: { $gt: new Date() }
+          });
           
-          if (!hasBalance) {
-            return res.status(httpStatus.BAD_REQUEST).json({
-              message: `Vendor ${product.vendor_name || product.vendor_id} has insufficient wallet balance for product: ${product.product_name}`
-            });
+          let planToUse = null;
+          for (const p of activePlans) {
+            if ((p.product_ids || []).length < p.max_products) {
+              planToUse = p;
+              break;
+            }
           }
-          
-          try {
-            await walletService.deductMoneyFromWallet(
-              product.vendor_id,
-              10,
-              `Base (Paid listing) fee for approved product: ${product.product_name}`,
-              {
-                purpose: 'paid_listing_fee',
-                product_name: product.product_name,
-                product_id: product._id,
-                category_id: product.category_id,
-                sub_category_id: product.sub_category_id,
-              }
-            );
-          } catch (walletError) {
-            return res.status(httpStatus.BAD_REQUEST).json({
-              message: `Failed to process wallet payment for product: ${product.product_name}. Please try again.`
-            });
+
+          if (planToUse) {
+            if (!planToUse.product_ids) planToUse.product_ids = [];
+            planToUse.product_ids.push(product._id);
+            await planToUse.save();
+            totalUsedQuotaCount++;
+          } else {
+            const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
+            
+            if (!hasBalance) {
+              return res.status(httpStatus.BAD_REQUEST).json({
+                message: `Vendor ${product.vendor_name || product.vendor_id} has insufficient wallet balance for product: ${product.product_name}`
+              });
+            }
+            
+            try {
+              await walletService.deductMoneyFromWallet(
+                product.vendor_id,
+                10,
+                `Base (Paid listing) fee for approved product: ${product.product_name}`,
+                {
+                  purpose: 'paid_listing_fee',
+                  product_name: product.product_name,
+                  product_id: product._id,
+                  category_id: product.category_id,
+                  sub_category_id: product.sub_category_id,
+                }
+              );
+              totalDeductionsCount++;
+            } catch (walletError) {
+              return res.status(httpStatus.BAD_REQUEST).json({
+                message: `Failed to process wallet payment for product: ${product.product_name}. Please try again.`
+              });
+            }
           }
         }
       }
@@ -512,9 +567,10 @@ const bulkApproveProducts = {
       }
 
       const paidProductsCount = products.filter(p => p.pricing_type === 'paid').length;
-      const message = paidProductsCount > 0 
-        ? `${product_ids.length} products approved successfully. ₹${paidProductsCount * 10} total deducted from vendor wallets.`
-        : `${product_ids.length} products approved successfully`;
+      let message = `${product_ids.length} products approved successfully`;
+      if (paidProductsCount > 0) {
+        message += `. ₹${totalDeductionsCount * 10} total deducted from vendor wallets. ${totalUsedQuotaCount} slots used from general plans.`;
+      }
 
       res.status(200).json({
         status: 200,
