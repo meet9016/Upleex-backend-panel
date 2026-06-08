@@ -40,6 +40,7 @@ const invoiceRoute = require('./invoice.route');
 const notificationRoute = require('./notification.route');
 const vendorReportRoute = require('./vendorReport.route');
 const appVersionRoute = require('./appVersion.route');
+const generalPlanRoute = require('./generalPlan.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -207,6 +208,10 @@ const defaultRoutes = [
   {
     path: '/app-version',
     route: appVersionRoute,
+  },
+  {
+    path: '/general-plans',
+    route: generalPlanRoute,
   },
 ];
 
