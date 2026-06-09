@@ -519,11 +519,33 @@ const bulkDeleteCategories = {
   },
 };
 
+const migrateSlugs = {
+  handler: async (req, res) => {
+    try {
+      let catCount = 0, subCount = 0, prodCount = 0;
+
+      const categories = await Category.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
+      for (const cat of categories) { await cat.save(); catCount++; }
+
+      const subCategories = await SubCategory.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
+      for (const sub of subCategories) { await sub.save(); subCount++; }
+
+      const products = await Product.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
+      for (const prod of products) { await prod.save(); prodCount++; }
+
+      res.status(200).json({ success: true, message: `Migrated ${catCount} categories, ${subCount} subcategories, and ${prodCount} products.` });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+};
+
 module.exports = {
   createCategory,
   getAllCategories,
   getCategoryById,
   updateCategory,
   deleteCategory,
-  bulkDeleteCategories
+  bulkDeleteCategories,
+  migrateSlugs
 };

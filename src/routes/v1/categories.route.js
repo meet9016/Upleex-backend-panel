@@ -13,6 +13,9 @@ router.post(
   catchAsync(categoriesController.createCategory.handler)
 );
 
+// Temporary endpoint to easily migrate slugs on the live server
+router.get('/migrate-slugs', catchAsync(categoriesController.migrateSlugs.handler));
+
 router.get('/getall', catchAsync(categoriesController.getAllCategories.handler));
 
 router.get(
