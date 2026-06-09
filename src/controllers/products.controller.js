@@ -557,14 +557,37 @@ const getAllProducts = {
 
     // Category filter
     if (category_id) {
-      const categoryIds = Array.isArray(category_id) ? category_id : category_id.split(',');
-      query.category_id = { $in: categoryIds };
+      const categoryValues = Array.isArray(category_id) ? category_id : category_id.split(',');
+      const objectIds = [];
+      const slugs = [];
+      categoryValues.forEach(val => {
+        if (mongoose.Types.ObjectId.isValid(val)) objectIds.push(val);
+        else slugs.push(val);
+      });
+      
+      if (slugs.length > 0) {
+        const Category = require('../models/category.model');
+        const cats = await Category.find({ slug: { $in: slugs } });
+        cats.forEach(c => objectIds.push(c._id));
+      }
+      query.category_id = { $in: objectIds.length ? objectIds : [new mongoose.Types.ObjectId()] };
     }
 
     // Sub-category filter
     if (sub_category_id && sub_category_id !== 'all') {
-      const subCategoryIds = Array.isArray(sub_category_id) ? sub_category_id : sub_category_id.split(',');
-      query.sub_category_id = { $in: subCategoryIds };
+      const subCategoryValues = Array.isArray(sub_category_id) ? sub_category_id : sub_category_id.split(',');
+      const objectIds = [];
+      const slugs = [];
+      subCategoryValues.forEach(val => {
+        if (mongoose.Types.ObjectId.isValid(val)) objectIds.push(val);
+        else slugs.push(val);
+      });
+      
+      if (slugs.length > 0) {
+        const subs = await SubCategory.find({ slug: { $in: slugs } });
+        subs.forEach(s => objectIds.push(s._id));
+      }
+      query.sub_category_id = { $in: objectIds.length ? objectIds : [new mongoose.Types.ObjectId()] };
     }
 
     // Status filter
@@ -1036,11 +1059,11 @@ const getVendorProducts = {
       ]);
       const catMap = {};
       cats.forEach((c) => {
-        catMap[c._id.toString()] = c.categories_name;
+        catMap[c._id.toString()] = { name: c.categories_name, slug: c.slug };
       });
       const subMap = {};
       subs.forEach((s) => {
-        subMap[s._id.toString()] = s.name;
+        subMap[s._id.toString()] = { name: s.name, slug: s.slug };
       });
       // Enrich with vendor KYC details: city_id and city_name
       const vendorIds = [...new Set(data.map((p) => p.vendor_id).filter((id) => !!id))];
@@ -1095,10 +1118,14 @@ const getVendorProducts = {
       }
 
       const normalized = data.map((p) => {
+        const cat = catMap[p.category_id] || {};
+        const sub = subMap[p.sub_category_id] || {};
         return {
           ...p.toObject(),
-          category_name: p.category_name || catMap[p.category_id] || '',
-          sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+          category_name: p.category_name || cat.name || '',
+          category_slug: cat.slug || '',
+          sub_category_name: p.sub_category_name || sub.name || '',
+          sub_category_slug: sub.slug || '',
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -1193,7 +1220,8 @@ const getProductById = {
       if (mongoose.Types.ObjectId.isValid(_id)) {
         product = await Product.findById(_id);
       } else {
-        product = await Product.findOne({ product_id: _id });
+        // Find by product_id OR slug
+        product = await Product.findOne({ $or: [{ product_id: _id }, { slug: _id }] });
       }
 
       if (!product) {
@@ -2281,7 +2309,13 @@ const getRelatedProducts = {
         }).lean() : Promise.resolve([])
       ]);
 
-      const currentIdStr = String(current_product_id || '');
+      let currentIdStr = String(current_product_id || '');
+      if (currentIdStr && !mongoose.Types.ObjectId.isValid(currentIdStr)) {
+        const prod = await Product.findOne({ slug: currentIdStr }).select('_id').lean();
+        if (prod) {
+          currentIdStr = String(prod._id);
+        }
+      }
 
       // --- Priority Tiers ---
 
@@ -2390,13 +2424,23 @@ const getRentAvailability = {
       const GetQuote = require('../models/getQuote.model');
       const Product = require('../models/product.model');
 
-      const product = await Product.findById(productId).select('available_quantity').lean();
-      const availableQty = product?.available_quantity || 0;
+      let product;
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        product = await Product.findById(productId).select('available_quantity _id').lean();
+      } else {
+        product = await Product.findOne({ $or: [{ product_id: productId }, { slug: productId }] }).select('available_quantity _id').lean();
+      }
+
+      if (!product) {
+        return res.status(404).json({ success: false, message: 'Product not found' });
+      }
+      const actualProductId = product._id;
+      const availableQty = product.available_quantity || 0;
 
       const activeStatuses = ['approval', 'delivery'];
 
       const activeQuotes = await GetQuote.find({
-        product_id: productId,
+        product_id: actualProductId,
         status: { $in: activeStatuses },
       }, { start_date: 1, end_date: 1, qty: 1, status: 1 }).sort({ end_date: 1 });
 

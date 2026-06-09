@@ -186,6 +186,13 @@ const productSchema = new mongoose.Schema(
       type: Date,
       index: true,
     },
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -194,8 +201,19 @@ const productSchema = new mongoose.Schema(
 
 productSchema.plugin(toJSON);
 
-// Pre-save hook to convert empty strings to null for ObjectId fields
-productSchema.pre('save', function(next) {
+// Helper to generate a URL-friendly slug
+const generateSlug = (text) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')      
+    .replace(/[^\w\-]+/g, '')   
+    .replace(/\-\-+/g, '-');    
+};
+
+// Pre-save hook to convert empty strings to null for ObjectId fields and generate slug
+productSchema.pre('save', async function(next) {
   if (this.product_listing_type_id === '') {
     this.product_listing_type_id = null;
   }
@@ -208,6 +226,26 @@ productSchema.pre('save', function(next) {
   if (this.product_type_id === '') {
     this.product_type_id = null;
   }
+
+  // Generate unique slug
+  if (this.isModified('product_name') || !this.slug) {
+    let baseSlug = generateSlug(this.product_name);
+    let uniqueSlug = baseSlug;
+    let counter = 1;
+
+    //use constructor to access the model
+    const ProductModel = this.constructor;
+    while (true) {
+      const existingProduct = await ProductModel.findOne({ slug: uniqueSlug });
+      if (!existingProduct || existingProduct._id.equals(this._id)) {
+        break;
+      }
+      uniqueSlug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    this.slug = uniqueSlug;
+  }
+
   next();
 });
 

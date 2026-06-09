@@ -54,6 +54,13 @@ const subCategorySchema = mongoose.Schema(
       main_text: { type: String, default: '' },
       sub_text: { type: String, default: '' },
     },
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -61,6 +68,39 @@ const subCategorySchema = mongoose.Schema(
 );
 
 subCategorySchema.plugin(toJSON);
+
+// Helper to generate a URL-friendly slug
+const generateSlug = (text) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')       
+    .replace(/[^\w\-]+/g, '')  
+    .replace(/\-\-+/g, '-');    
+};
+
+// Pre-save hook to generate slug
+subCategorySchema.pre('save', async function(next) {
+  // Generate unique slug
+  if (this.isModified('name') || !this.slug) {
+    let baseSlug = generateSlug(this.name);
+    let uniqueSlug = baseSlug;
+    let counter = 1;
+
+    const SubCategoryModel = this.constructor;
+    while (true) {
+      const existingSubCategory = await SubCategoryModel.findOne({ slug: uniqueSlug });
+      if (!existingSubCategory || existingSubCategory._id.equals(this._id)) {
+        break;
+      }
+      uniqueSlug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    this.slug = uniqueSlug;
+  }
+  next();
+});
 
 const SubCategory = mongoose.model('SubCategory', subCategorySchema);
 

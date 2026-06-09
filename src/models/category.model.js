@@ -49,6 +49,13 @@ const categorySchema = mongoose.Schema(
       main_text: { type: String, default: '' },
       sub_text: { type: String, default: '' },
     },
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -56,6 +63,39 @@ const categorySchema = mongoose.Schema(
 );
 
 categorySchema.plugin(toJSON);
+
+// Helper to generate a URL-friendly slug
+const generateSlug = (text) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')     
+    .replace(/[^\w\-]+/g, '') 
+    .replace(/\-\-+/g, '-'); 
+};
+
+// Pre-save hook to generate slug
+categorySchema.pre('save', async function(next) {
+  // Generate unique slug
+  if (this.isModified('categories_name') || !this.slug) {
+    let baseSlug = generateSlug(this.categories_name);
+    let uniqueSlug = baseSlug;
+    let counter = 1;
+
+    const CategoryModel = this.constructor;
+    while (true) {
+      const existingCategory = await CategoryModel.findOne({ slug: uniqueSlug });
+      if (!existingCategory || existingCategory._id.equals(this._id)) {
+        break;
+      }
+      uniqueSlug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    this.slug = uniqueSlug;
+  }
+  next();
+});
 
 const Category = mongoose.model('Category', categorySchema);
 

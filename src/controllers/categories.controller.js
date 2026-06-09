@@ -302,6 +302,7 @@ const getAllCategories = {
               return {
                 categories_id: String(catId),
                 categories_name: cat.categories_name || cat.name || '',
+                slug: cat.slug || '',
                 image: cat.image || '',
                 product_count: '0',
                 created_at: cat.createdAt,
@@ -309,6 +310,7 @@ const getAllCategories = {
                 subcategories: subcategories.map((sub) => ({
                   subcategory_id: String(sub.id || sub._id),
                   subcategory_name: sub.name || sub.subcategory_name || '',
+                  slug: sub.slug || '',
                   image: sub.image || '',
                   created_at: sub.createdAt,
                   updated_at: sub.updatedAt,
@@ -328,6 +330,7 @@ const getAllCategories = {
           return {
             categories_id: String(catId),
             categories_name: cat.categories_name || cat.name || '',
+            slug: cat.slug || '',
             image: cat.image || '',
             product_count: String(productCount),
             created_at: cat.createdAt,
@@ -335,6 +338,7 @@ const getAllCategories = {
             subcategories: subcategories.map((sub) => ({
               subcategory_id: String(sub.id || sub._id),
               subcategory_name: sub.name || sub.subcategory_name || '',
+              slug: sub.slug || '',
               image: sub.image || '',
               created_at: sub.createdAt,
               updated_at: sub.updatedAt,
@@ -387,6 +391,7 @@ const getCategoryById = {
       res.status(200).json({
         categories_id: String(catId),
         categories_name: category.categories_name || category.name || '',
+        slug: category.slug || '',
         image: category.image || '',
         product_count: String(productCount),
         created_at: category.createdAt,
@@ -394,6 +399,7 @@ const getCategoryById = {
         subcategories: subcategories.map((sub) => ({
           subcategory_id: String(sub.id || sub._id),
           subcategory_name: sub.name || sub.subcategory_name || '',
+          slug: sub.slug || '',
           image: sub.image || '',
           created_at: sub.createdAt,
           updated_at: sub.updatedAt,

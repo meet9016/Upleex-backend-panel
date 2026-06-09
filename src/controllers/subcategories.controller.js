@@ -252,7 +252,16 @@ const getAllSubCategories = {
     const query = {};
 
     if (categoryId) {
-      query.categoryId = categoryId;
+      if (mongoose.Types.ObjectId.isValid(categoryId)) {
+        query.categoryId = categoryId;
+      } else {
+        const cat = await Category.findOne({ slug: categoryId });
+        if (cat) {
+          query.categoryId = cat._id;
+        } else {
+          query.categoryId = new mongoose.Types.ObjectId(); // dummy id to return empty
+        }
+      }
     }
 
     const originalJson = res.json.bind(res);
