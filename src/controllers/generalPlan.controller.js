@@ -178,8 +178,7 @@ const purchaseGeneralPlan = {
       return res.status(httpStatus.BAD_REQUEST).json({ message: `Cannot select more than ${plan.max_products} products for this plan.` });
     }
 
-    const gstAmount = plan.amount * 0.18;
-    const totalPayable = plan.amount + gstAmount;
+    const totalPayable = plan.amount;
 
     // Check wallet balance
     const Wallet = require('../models/wallet.model');
