@@ -19,6 +19,10 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   startKycReminderCron();
   // // Initialize service expiry cron job
   // handleServiceExpiry();
+
+  // Automatically migrate missing slugs in the background
+  const migrateSlugsInBackground = require('./utils/slugMigration');
+  migrateSlugsInBackground();
   
   const serverInstance = http.createServer(app);
   socketService.init(serverInstance);
