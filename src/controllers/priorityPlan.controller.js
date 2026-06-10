@@ -7,7 +7,9 @@ const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const Product = require('../models/product.model');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
+const emailService = require('../services/email.service');
 const createPriorityPlan = {
   validation: {
     body: Joi.object().keys({
@@ -324,6 +326,21 @@ const purchasePriorityPlan = {
 
         const updatedBalance = await walletService.getWalletBalance(vendor_id);
 
+        try {
+          const vendor = await Vendor.findById(vendor_id);
+          if (vendor && vendor.email) {
+            await emailService.sendPurchaseConfirmationEmail(
+              vendor.email,
+              vendor.full_name || vendor.business_name || 'Vendor',
+              `Priority Plan - ${plan.name} (${plan_duration.charAt(0).toUpperCase() + plan_duration.slice(1)})`,
+              'Plan Subscription Update',
+              purchaseToUpdate._id.toString()
+            );
+          }
+        } catch (err) {
+          console.error('Email send failed:', err);
+        }
+
         return res.status(200).json({
           success: true,
           message: 'Plan updated successfully',
@@ -369,6 +386,21 @@ const purchasePriorityPlan = {
         );
 
         const updatedBalance = await walletService.getWalletBalance(vendor_id);
+
+        try {
+          const vendor = await Vendor.findById(vendor_id);
+          if (vendor && vendor.email) {
+            await emailService.sendPurchaseConfirmationEmail(
+              vendor.email,
+              vendor.full_name || vendor.business_name || 'Vendor',
+              `Priority Plan - ${plan.name} (${plan_duration.charAt(0).toUpperCase() + plan_duration.slice(1)})`,
+              'Plan Subscription',
+              purchase._id.toString()
+            );
+          }
+        } catch (err) {
+          console.error('Email send failed:', err);
+        }
 
         return res.status(201).json({
           success: true,

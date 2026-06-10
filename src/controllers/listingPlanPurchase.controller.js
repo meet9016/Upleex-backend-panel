@@ -5,7 +5,9 @@ const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
 const { Product } = require('../models');
 const VendorKyc = require('../models/vendor/vendorKyc.model');
+const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
+const emailService = require('../services/email.service');
 const moment = require('moment');
 
 const fallbackPlanOptions = [
@@ -192,6 +194,21 @@ const createPurchase = {
       // Get updated wallet balance
       const updatedBalance = await walletService.getWalletBalance(vendor_id);
 
+      try {
+        const vendor = await Vendor.findById(vendor_id);
+        if (vendor && vendor.email) {
+          await emailService.sendPurchaseConfirmationEmail(
+            vendor.email,
+            vendor.full_name || vendor.business_name || 'Vendor',
+            `${String(plan_type).toUpperCase()} Listing Plan`,
+            'Plan Subscription Update',
+            purchaseToUpdate._id.toString()
+          );
+        }
+      } catch (err) {
+        console.error('Email send failed:', err);
+      }
+
       return res.status(200).json({ 
         success: true, 
         message: 'Plan updated successfully', 
@@ -223,6 +240,21 @@ const createPurchase = {
 
       // Get updated wallet balance
       const updatedBalance = await walletService.getWalletBalance(vendor_id);
+
+      try {
+        const vendor = await Vendor.findById(vendor_id);
+        if (vendor && vendor.email) {
+          await emailService.sendPurchaseConfirmationEmail(
+            vendor.email,
+            vendor.full_name || vendor.business_name || 'Vendor',
+            `${String(plan_type).toUpperCase()} Listing Plan`,
+            'Plan Subscription',
+            purchase._id.toString()
+          );
+        }
+      } catch (err) {
+        console.error('Email send failed:', err);
+      }
 
       return res.status(201).json({ 
         success: true, 
