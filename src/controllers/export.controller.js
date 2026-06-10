@@ -9,6 +9,11 @@ const VendorKyc = require('../models/vendor/vendorKyc.model');
 const Vendor = require('../models/vendor/vendor.model');
 const { exportToExcel, exportToPDF, exportToTreePDF, exportOrdersToTreePDF, exportQuotesToTreePDF } = require('../utils/export.helper');
 const mongoose = require('mongoose');
+const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
+const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
+const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
+const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
+const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
 
 // Export Products to Excel
 const exportProductsToExcel = {
@@ -1223,10 +1228,7 @@ const exportVendorReportToPDF = {
 // PLAN PURCHASE EXPORT CONTROLLERS
 // ==========================================
 
-const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
-const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
-const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
-const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
+
 
 // Export Listing Plans to Excel
 const exportListingPlansToExcel = {
@@ -1913,10 +1915,18 @@ const exportAllPlanPurchasesToExcel = {
         rentalQuery.expiry_date = { $gte: startDate, $lte: endDate };
       }
 
-      const [listingPurchases, priorityPurchases, rentalPurchases] = await Promise.all([
+      const generalQuery = {};
+      Object.assign(generalQuery, listingQuery);
+      if (generalQuery.start_at) {
+        generalQuery.created_at = generalQuery.start_at;
+        delete generalQuery.start_at;
+      }
+
+      const [listingPurchases, priorityPurchases, rentalPurchases, generalPurchases] = await Promise.all([
         ListingPlanPurchase.find(listingQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 }),
         PriorityPlanPurchase.find(priorityQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 }),
-        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 })
+        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 }),
+        GeneralPlanPurchase.find(generalQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 })
       ]);
 
       // Combine all data
@@ -1966,6 +1976,22 @@ const exportAllPlanPurchasesToExcel = {
           status: purchase.payment_status ? purchase.payment_status.charAt(0).toUpperCase() + purchase.payment_status.slice(1) : 'Pending',
           start_date: purchase.start_date ? new Date(purchase.start_date).toLocaleDateString('en-GB') : '-',
           expire_date: purchase.expiry_date ? new Date(purchase.expiry_date).toLocaleDateString('en-GB') : '-',
+          created_at: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+        });
+      });
+
+      // Add General Plan Purchases
+      generalPurchases.forEach(purchase => {
+        combinedData.push({
+          plan_type: 'General Plan',
+          vendor_name: purchase.vendor_id?.full_name || purchase.vendor_id?.business_name || 'N/A',
+          plan_name: purchase.plan_type || 'N/A',
+          amount: purchase.amount || 0,
+          duration: '30 days',
+          products_services: purchase.max_products || 0,
+          status: purchase.status ? purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1) : 'Active',
+          start_date: purchase.created_at ? new Date(purchase.created_at).toLocaleDateString('en-GB') : (purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'),
+          expire_date: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
           created_at: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
         });
       });
@@ -2048,10 +2074,18 @@ const exportAllPlanPurchasesToPDF = {
         rentalQuery.expiry_date = { $gte: startDate, $lte: endDate };
       }
 
-      const [listingPurchases, priorityPurchases, rentalPurchases] = await Promise.all([
+      const generalQuery = {};
+      Object.assign(generalQuery, listingQuery);
+      if (generalQuery.start_at) {
+        generalQuery.created_at = generalQuery.start_at;
+        delete generalQuery.start_at;
+      }
+
+      const [listingPurchases, priorityPurchases, rentalPurchases, generalPurchases] = await Promise.all([
         ListingPlanPurchase.find(listingQuery).populate('vendor_id', 'full_name business_name').sort({ createdAt: -1 }),
         PriorityPlanPurchase.find(priorityQuery).populate('vendor_id', 'full_name business_name').sort({ createdAt: -1 }),
-        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 })
+        RentalBoostPlanPurchase.find(rentalQuery).sort({ createdAt: -1 }),
+        GeneralPlanPurchase.find(generalQuery).populate('vendor_id', 'full_name business_name email').sort({ createdAt: -1 })
       ]);
 
       // Combine all data in format expected by exportToTreePDF
@@ -2105,6 +2139,23 @@ const exportAllPlanPurchasesToPDF = {
           product_ids: [],
           start_date: purchase.start_date,
           expiry_date: purchase.expiry_date
+        });
+      });
+
+      // Add General Plan Purchases
+      generalPurchases.forEach(purchase => {
+        combinedData.push({
+          vendor_id: purchase.vendor_id,
+          vendor_name: purchase.vendor_id?.full_name || 'N/A',
+          business_name: purchase.vendor_id?.business_name || '',
+          plan_type: 'General Plan',
+          plan_name: purchase.plan_type || 'General Plan',
+          months: 1,
+          max_products: purchase.max_products || 0,
+          amount: purchase.amount || 0,
+          product_ids: purchase.product_ids || [],
+          start_at: purchase.created_at || purchase.createdAt,
+          expire_at: purchase.expire_at
         });
       });
 

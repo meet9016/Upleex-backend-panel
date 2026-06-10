@@ -71,6 +71,11 @@ router.get('/vendor-report/pdf', auth('admin'), exportVendorReportToPDF.handler)
 router.get('/all-plan-purchases/excel', auth('admin'), exportAllPlanPurchasesToExcel.handler);
 router.get('/all-plan-purchases/pdf', auth('admin'), exportAllPlanPurchasesToPDF.handler);
 
+// Vendor Plans Report export
+const vendorPlansReportController = require('../../controllers/vendorPlansReport.controller');
+router.get('/vendor-plans-report/excel', auth('admin'), vendorPlansReportController.exportVendorPlansReportExcel);
+router.get('/vendor-plans-report/pdf', auth('admin'), vendorPlansReportController.exportVendorPlansReportPDF);
+
 // Listing Plans export routes
 router.get('/listing-plans/excel', auth('admin'), exportListingPlansToExcel.handler);
 router.get('/listing-plans/pdf', auth('admin'), exportListingPlansToPDF.handler);

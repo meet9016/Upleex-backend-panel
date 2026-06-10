@@ -22,6 +22,13 @@ router.get(
 );
 
 router.get(
+  '/getall-purchases',
+  auth('admin'),
+  validate(generalPlanController.getAllPurchases.validation),
+  catchAsync(generalPlanController.getAllPurchases.handler)
+);
+
+router.get(
   '/getById/:_id',
   catchAsync(generalPlanController.getPlanById.handler)
 );

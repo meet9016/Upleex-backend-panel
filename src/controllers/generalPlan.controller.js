@@ -232,6 +232,98 @@ const getVendorPurchases = {
   },
 };
 
+const getAllPurchases = {
+  validation: {
+    query: Joi.object().keys({
+      q: Joi.string().allow(''),
+      plan_type: Joi.string().allow(''),
+      amount: Joi.number(),
+      start_month: Joi.string().allow(''),
+      expire_month: Joi.string().allow(''),
+      page: Joi.number().integer().min(1),
+      limit: Joi.number().integer().min(1).max(200).allow('all'),
+    }),
+  },
+  handler: async (req, res) => {
+    const { q, plan_type, amount, start_month, expire_month } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = req.query.limit === 'all' ? null : (parseInt(req.query.limit) || 50);
+    const skip = (page - 1) * (limit || 50);
+
+    const query = {};
+
+    if (q) {
+      const searchRegex = new RegExp(String(q).trim(), 'i');
+      const Vendor = require('../models/vendor/vendor.model');
+      const vendors = await Vendor.find({
+        $or: [
+          { full_name: searchRegex },
+          { business_name: searchRegex },
+          { email: searchRegex }
+        ]
+      }).select('_id');
+      const vendorIds = vendors.map(v => v._id);
+      if (vendorIds.length > 0) {
+        query.vendor_id = { $in: vendorIds };
+      } else {
+        query.plan_type = searchRegex;
+      }
+    }
+
+    if (plan_type) query.plan_type = plan_type;
+    if (amount) query.amount = Number(amount);
+
+    if (start_month) {
+      const year = parseInt(start_month.split('-')[0]);
+      const month = parseInt(start_month.split('-')[1]) - 1;
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      query.created_at = { $gte: startDate, $lte: endDate };
+    }
+
+    if (expire_month) {
+      const year = parseInt(expire_month.split('-')[0]);
+      const month = parseInt(expire_month.split('-')[1]) - 1;
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      query.expire_at = { $gte: startDate, $lte: endDate };
+    }
+
+    const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+    const total = await GeneralPlanPurchase.countDocuments(query);
+    let qObj = GeneralPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email phone').sort({ createdAt: -1 });
+    if (limit) {
+      qObj = qObj.skip(skip).limit(limit);
+    }
+    const data = await qObj;
+
+    const formattedData = data.map(purchase => ({
+      _id: purchase._id,
+      vendor_id: purchase.vendor_id?._id,
+      vendor_name: purchase.vendor_id?.full_name || 'N/A',
+      vendor_phone: purchase.vendor_id?.phone || '',
+      business_name: purchase.vendor_id?.business_name || '',
+      plan_type: purchase.plan_type,
+      months: 1,
+      max_products: purchase.max_products,
+      amount: purchase.amount,
+      product_ids: purchase.product_ids || [],
+      start_at: purchase.created_at || purchase.createdAt,
+      expire_at: purchase.expire_at,
+      createdAt: purchase.createdAt
+    }));
+
+    return res.status(200).json({
+      success: true,
+      total,
+      page: limit ? page : 1,
+      limit: limit || total,
+      totalPages: limit ? Math.ceil(total / limit) : 1,
+      data: formattedData,
+    });
+  },
+};
+
 module.exports = {
   createPlan,
   getAllPlans,
@@ -240,4 +332,5 @@ module.exports = {
   deletePlan,
   purchaseGeneralPlan,
   getVendorPurchases,
+  getAllPurchases,
 };
