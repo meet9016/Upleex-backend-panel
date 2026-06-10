@@ -138,6 +138,7 @@ const getAvailablePages = {
         {name: 'vendor-wallets', displayName: 'Vendor Wallets' },
         {name: 'vendor-payments', displayName: 'Vendor Payments' },
         {name: 'metadata', displayName: 'Metadata' },
+        {name: 'dynamic-component', displayName: 'Dynamic Component' },
       ];
       return res.status(httpStatus.OK).json({
         status: 200,
