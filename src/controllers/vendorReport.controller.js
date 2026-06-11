@@ -66,9 +66,10 @@ const getVendorReport = catchAsync(async (req, res) => {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
       case 'custom':
-        if (start_date && end_date) {
-          startDate = new Date(start_date);
-          dateFilter = { $gte: startDate, $lte: new Date(end_date + 'T23:59:59.999Z') };
+        if (start_date || end_date) {
+          startDate = start_date ? new Date(start_date) : new Date(0);
+          const endDate = end_date ? new Date(end_date + 'T23:59:59.999Z') : new Date();
+          dateFilter = { $gte: startDate, $lte: endDate };
         }
         break;
     }
