@@ -433,127 +433,78 @@ const exportVendorPlansReportExcel = catchAsync(async (req, res) => {
 });
 
 const exportVendorPlansReportPDF = catchAsync(async (req, res) => {
-  const { date_range, start_date, end_date, search } = req.query;
+  const data = await getVendorPlansReportData(req);
 
-  // Build query
-  const query = {};
+  const headers = [
+    'Invoice No', 'Date', 'Type', 'Description', 'Deducted From', 'Vendor Name', 
+    'Vendor Type', 'GST Number', 'Rate', 'Taxable', 'GST%', 'Total'
+  ];
 
-  if (date_range && date_range !== 'all') {
-    const now = new Date();
-    let startDate;
-
-    switch (date_range) {
-      case 'today': startDate = new Date(now.setHours(0, 0, 0, 0)); break;
-      case 'week': startDate = new Date(); startDate.setDate(now.getDate() - 7); break;
-      case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-      case '3months': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break;
-      case '6months': startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1); break;
-      case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-      case 'custom':
-        if (start_date || end_date) {
-          startDate = start_date ? new Date(start_date) : new Date(0);
-          const endDate = end_date ? new Date(end_date + 'T23:59:59.999Z') : new Date();
-          query.createdAt = { $gte: startDate, $lte: endDate };
-        }
-        break;
-    }
-    if (startDate && date_range !== 'custom') {
-      query.createdAt = { $gte: startDate, $lte: new Date() };
-    }
-  }
-
-  const [listingPurchases, priorityPurchases, rentalPurchases, generalPurchases] = await Promise.all([
-    ListingPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    PriorityPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    RentalBoostPlanPurchase.find(query).sort({ createdAt: -1 }),
-    GeneralPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 })
-  ]);
-
-  const treeData = [];
-
-  listingPurchases.forEach(purchase => {
-    treeData.push({
-      vendor_id: purchase.vendor_id,
-      vendor_name: purchase.vendor_id?.full_name || 'N/A',
-      business_name: purchase.vendor_id?.business_name || '',
-      plan_type: 'Listing Plan',
-      plan_name: purchase.plan_type || 'Listing Plan',
-      months: purchase.months || 0,
-      max_products: purchase.max_products || 0,
-      amount: purchase.amount || 0,
-      product_ids: purchase.product_ids || [],
-      start_at: purchase.start_at,
-      expire_at: purchase.expire_at
-    });
-  });
-
-  priorityPurchases.forEach(purchase => {
-    treeData.push({
-      vendor_id: purchase.vendor_id,
-      vendor_name: purchase.vendor_id?.full_name || 'N/A',
-      business_name: purchase.vendor_id?.business_name || '',
-      plan_type: 'Priority Plan',
-      plan_name: purchase.plan_name || 'Priority Plan',
-      months: purchase.plan_duration === 'yearly' ? 12 : 1,
-      max_products: purchase.total_slots || 0,
-      amount: purchase.amount || 0,
-      product_ids: [],
-      start_at: purchase.start_at,
-      expire_at: purchase.expire_at
-    });
-  });
-
-  rentalPurchases.forEach(purchase => {
-    treeData.push({
-      vendor_id: purchase.vendor_id || purchase._id,
-      vendor_name: purchase.vendor_name || 'N/A',
-      business_name: '',
-      plan_type: 'Rental Boost',
-      plan_name: purchase.plan_name || 'Rental Boost',
-      days: purchase.days || 0,
-      max_products: 1,
-      amount: purchase.price || 0,
-      product_ids: [],
-      start_date: purchase.start_date || purchase.createdAt,
-      expiry_date: purchase.expiry_date
-    });
-  });
-
-  generalPurchases.forEach(purchase => {
-    treeData.push({
-      vendor_id: purchase.vendor_id,
-      vendor_name: purchase.vendor_id?.full_name || 'N/A',
-      business_name: purchase.vendor_id?.business_name || '',
-      plan_type: 'General Plan',
-      plan_name: purchase.plan_type || 'General Plan',
-      months: 1,
-      max_products: purchase.max_products || 0,
-      amount: purchase.amount || 0,
-      product_ids: purchase.product_ids || [],
-      start_at: purchase.created_at || purchase.createdAt,
-      expire_at: purchase.expire_at
-    });
-  });
-
-  if (search) {
-    const searchRegex = new RegExp(search.trim(), 'i');
-    const filteredTreeData = treeData.filter(item => 
-      searchRegex.test(item.vendor_name) || 
-      searchRegex.test(item.business_name) || 
-      searchRegex.test(item.plan_name) ||
-      searchRegex.test(item.plan_type)
-    );
-    treeData.length = 0;
-    treeData.push(...filteredTreeData);
-  }
-
-  treeData.sort((a, b) => (a.vendor_name || '').localeCompare(b.vendor_name || ''));
+  // Adjust widths proportionally (total around 600-700)
+  const columnWidths = [
+    65, // Invoice No
+    50, // Date
+    60, // Type
+    80, // Description
+    60, // Deducted From
+    80, // Vendor Name
+    50, // Vendor Type
+    60, // GST Number
+    40, // Rate
+    50, // Taxable
+    35, // GST%
+    50  // Total
+  ];
 
   const filename = `vendor_plans_report_${new Date().toISOString().split('T')[0]}.pdf`;
   const title = 'Vendor Plans Report';
 
-  const { exportToTreePDF } = require('../utils/exportTreePDF.helper');
-  await exportToTreePDF(res, treeData, filename, title);
+  let totalRate = 0;
+  let totalTaxable = 0;
+  let totalAmount = 0;
+
+  data.forEach(item => {
+    totalRate += Number(item.rate || 0);
+    totalTaxable += Number(item.taxable_amount || 0);
+    totalAmount += Number(item.total_amount || 0);
+  });
+
+  data.push({
+    isTotalRow: true,
+    gst_number: 'TOTAL:',
+    rate: totalRate,
+    taxable_amount: totalTaxable,
+    total_amount: totalAmount
+  });
+
+  const rowMapper = (item) => {
+    if (item.isTotalRow) {
+      return [
+        '', '', '', '', '', '', '', 'TOTAL:',
+        Number(item.rate).toFixed(2),
+        Number(item.taxable_amount).toFixed(2),
+        '',
+        Number(item.total_amount).toFixed(2)
+      ];
+    }
+    return [
+      item.invoice_no || '-',
+      item.date || '-',
+      item.transaction_type || '-',
+      item.description || '-',
+      item.deducted_from || '-',
+      item.vendor_name || '-',
+      item.vendor_type ? (item.vendor_type.charAt(0).toUpperCase() + item.vendor_type.slice(1)) : '-',
+      item.gst_number || '-',
+      Number(item.rate || 0).toFixed(2),
+      Number(item.taxable_amount || 0).toFixed(2),
+      item.gst_percent || '0%',
+      Number(item.total_amount || 0).toFixed(2)
+    ];
+  };
+
+  const { exportToPDF } = require('../utils/export.helper');
+  await exportToPDF(res, data, headers, columnWidths, filename, title, rowMapper, { size: 'A4', layout: 'landscape' });
 });
 
 module.exports = {
