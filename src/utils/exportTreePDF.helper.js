@@ -84,6 +84,7 @@ const exportToTreePDF = (res, data, filename, title) => {
       const borderColor = '#E5E7EB';
       
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
+      const watermarkPath = path.join(process.cwd(), 'public', 'images', 'logo', 'favicon.png');
       const pageWidth = doc.page.width - 60;
       
       // --- Column Positions ---
@@ -256,16 +257,16 @@ const exportToTreePDF = (res, data, filename, title) => {
       });
 
       // Add watermark to all pages
-      if (fs.existsSync(logoPath)) {
+      if (fs.existsSync(watermarkPath)) {
         const range = doc.bufferedPageRange();
         for (let i = range.start, end = range.start + range.count; i < end; i++) {
           doc.switchToPage(i);
           doc.save();
           doc.opacity(0.1);
-          const imgWidth = 400;
+          const imgWidth = 50;
           const x = (doc.page.width - imgWidth) / 2;
-          const y = (doc.page.height - imgWidth/2) / 2;
-          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          const y = (doc.page.height - imgWidth) / 2;
+          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
           doc.restore();
         }
       }
@@ -342,6 +343,7 @@ const exportOrdersToTreePDF = (res, data, filename, title) => {
       const borderColor = '#E5E7EB';
       
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
+      const watermarkPath = path.join(process.cwd(), 'public', 'images', 'logo', 'favicon.png');
       const pageWidth = doc.page.width - 60;
       
       // --- Column Positions ---
@@ -500,16 +502,16 @@ const exportOrdersToTreePDF = (res, data, filename, title) => {
       });
 
       // Add watermark to all pages
-      if (fs.existsSync(logoPath)) {
+      if (fs.existsSync(watermarkPath)) {
         const range = doc.bufferedPageRange();
         for (let i = range.start, end = range.start + range.count; i < end; i++) {
           doc.switchToPage(i);
           doc.save();
           doc.opacity(0.1);
-          const imgWidth = 400;
+          const imgWidth = 150;
           const x = (doc.page.width - imgWidth) / 2;
-          const y = (doc.page.height - imgWidth/2) / 2;
-          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          const y = (doc.page.height - imgWidth) / 2;
+          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
           doc.restore();
         }
       }
@@ -586,6 +588,7 @@ const exportQuotesToTreePDF = (res, data, filename, title) => {
       const borderColor = '#E5E7EB';
       
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
+      const watermarkPath = path.join(process.cwd(), 'public', 'images', 'logo', 'favicon.png');
       const pageWidth = doc.page.width - 60;
       
       // --- Column Positions ---
@@ -740,16 +743,16 @@ const exportQuotesToTreePDF = (res, data, filename, title) => {
       });
 
       // Add watermark to all pages
-      if (fs.existsSync(logoPath)) {
+      if (fs.existsSync(watermarkPath)) {
         const range = doc.bufferedPageRange();
         for (let i = range.start, end = range.start + range.count; i < end; i++) {
           doc.switchToPage(i);
           doc.save();
           doc.opacity(0.1);
-          const imgWidth = 400;
+          const imgWidth = 150;
           const x = (doc.page.width - imgWidth) / 2;
-          const y = (doc.page.height - imgWidth/2) / 2;
-          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          const y = (doc.page.height - imgWidth) / 2;
+          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
           doc.restore();
         }
       }

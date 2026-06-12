@@ -108,6 +108,7 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       const vendorColor = '#1E3A5F';
       const borderColor = '#E5E7EB';
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo', 'logo.png');
+      const watermarkPath = path.join(process.cwd(), 'public', 'images', 'logo', 'favicon.png');
       const pageWidth = doc.page.width - 60;
 
       // Calculate proportional column widths based on page width
@@ -211,16 +212,16 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       });
 
       // Add watermark to all pages
-      if (fs.existsSync(logoPath)) {
+      if (fs.existsSync(watermarkPath)) {
         const range = doc.bufferedPageRange();
         for (let i = range.start, end = range.start + range.count; i < end; i++) {
           doc.switchToPage(i);
           doc.save();
           doc.opacity(0.1);
-          const imgWidth = 400;
+          const imgWidth = 50;
           const x = (doc.page.width - imgWidth) / 2;
-          const y = (doc.page.height - imgWidth/2) / 2;
-          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          const y = (doc.page.height - imgWidth) / 2;
+          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
           doc.restore();
         }
       }
