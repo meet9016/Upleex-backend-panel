@@ -260,6 +260,13 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
 
   await wallet.save();
 
+  try {
+    const { logActivity } = require('../utils/activityLogger');
+    if (req.user && req.user.userType === 'vendor') {
+      await logActivity(req, req.user._id, 'CREATE', 'Wallet', `Vendor added ₹${transaction.amount} to wallet`, { transaction_id: transaction.transaction_id }, 'vendor');
+    }
+  } catch (e) {}
+
   res.status(httpStatus.OK).send({
     status: 200,
     success: true,

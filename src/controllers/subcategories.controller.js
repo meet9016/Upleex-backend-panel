@@ -225,6 +225,13 @@ const createSubCategory = {
         seo_content: seoContent,
       });
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin') {
+          await logActivity(req, req.user._id, 'CREATE', 'Categories', `Admin created subcategory: ${subCategory.name}`, { subcategory_id: subCategory._id }, 'admin');
+        }
+      } catch (e) {}
+
       return res.status(201).json({
         success: true,
         message: 'Subcategory created successfully!',
@@ -404,6 +411,13 @@ const updateSubCategory = {
         }
       );
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin' && subCategory) {
+          await logActivity(req, req.user._id, 'UPDATE', 'Categories', `Admin updated subcategory: ${subCategory.name}`, { subcategory_id: subCategory._id }, 'admin');
+        }
+      } catch (e) {}
+
       if (!subCategory) {
         return res
           .status(httpStatus.NOT_FOUND)
@@ -447,6 +461,13 @@ const deleteSubCategory = {
     }
 
     await SubCategory.findByIdAndDelete(_id);
+
+    try {
+      const { logActivity } = require('../utils/activityLogger');
+      if (req.user && req.user.userType === 'admin' && subCategoryExist) {
+        await logActivity(req, req.user._id, 'DELETE', 'Categories', `Admin deleted subcategory: ${subCategoryExist.name}`, { subcategory_id: subCategoryExist._id }, 'admin');
+      }
+    } catch (e) {}
 
     res.send({ message: 'Subcategory deleted successfully' });
   },

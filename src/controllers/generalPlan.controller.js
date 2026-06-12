@@ -167,6 +167,13 @@ const purchaseGeneralPlan = {
       existingPurchase.product_ids.push(...product_ids);
       await existingPurchase.save();
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor') {
+          await logActivity(req, req.user._id, 'UPDATE', 'Plans', `Vendor refilled plan: ${plan.plan_type}`, { purchase_id: existingPurchase._id }, 'vendor');
+        }
+      } catch (e) {}
+
       return res.status(200).json({ success: true, message: 'Products added to your plan successfully!', data: existingPurchase });
     }
 
@@ -210,6 +217,13 @@ const purchaseGeneralPlan = {
       amount: totalPayable,
       product_ids,
     });
+
+    try {
+      const { logActivity } = require('../utils/activityLogger');
+      if (req.user && req.user.userType === 'vendor') {
+        await logActivity(req, req.user._id, 'CREATE', 'Plans', `Vendor purchased plan: ${plan.plan_type}`, { purchase_id: purchase._id }, 'vendor');
+      }
+    } catch (e) {}
 
     return res.status(200).json({ success: true, message: 'General plan purchased successfully!', data: purchase });
   },

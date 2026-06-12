@@ -445,6 +445,13 @@ const createProduct = {
         await product.save();
       }
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor') {
+          await logActivity(req, req.user._id, 'CREATE', 'Products', `Vendor created product: ${product.product_name}`, { product_id: product._id }, 'vendor');
+        }
+      } catch (e) {}
+
       const msg = product.status === 'draft'
         ? 'Free listing limit reached: listing saved as Draft'
         : 'Product created successfully and submitted for admin approval';
@@ -1533,9 +1540,28 @@ const updateProduct = {
         ...body,
       };
 
+      const _ = require('lodash');
+      const oldDocJSON = JSON.parse(JSON.stringify(existing.toObject()));
+      const updateDataJSON = JSON.parse(JSON.stringify(updateData));
+      
+      let isChanged = false;
+      for (const key of Object.keys(updateDataJSON)) {
+        if (!_.isEqual(oldDocJSON[key], updateDataJSON[key])) {
+          isChanged = true;
+          break;
+        }
+      }
+
       const product = await Product.findByIdAndUpdate(_id, updateData, {
         new: true,
       });
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor' && product && isChanged) {
+          await logActivity(req, req.user._id, 'UPDATE', 'Products', `Vendor updated product: ${product.product_name}`, { product_id: product._id }, 'vendor');
+        }
+      } catch (e) {}
 
       return res.status(200).json({
         status: 200,
@@ -1584,6 +1610,13 @@ const deleteProduct = {
       }
 
       await Product.findByIdAndDelete(_id);
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor' && existing) {
+          await logActivity(req, req.user._id, 'DELETE', 'Products', `Vendor deleted product: ${existing.product_name}`, { product_id: existing._id }, 'vendor');
+        }
+      } catch (e) {}
 
       res.send({ message: 'Product deleted successfully' });
     } catch (error) {

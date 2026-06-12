@@ -65,6 +65,10 @@ const login = {
       return res.status(httpStatus.BAD_REQUEST).json({ status: 400, message: 'Invalid credentials' });
     }
     const token = await generateAuthTokens(admin, 'admin');
+    
+    const { logActivity } = require('../utils/activityLogger');
+    await logActivity(req, admin._id, 'LOGIN', 'Auth', 'Admin logged into the system');
+
     return res.status(httpStatus.OK).json({
       status: 200,
       success: true,
@@ -97,6 +101,12 @@ const assignPermissions = {
       admin.permissions = permissions;
       await admin.save();
       
+      const { logActivity } = require('../utils/activityLogger');
+      // If the admin who is performing this action is authenticated, req.user will exist
+      if (req.user) {
+        await logActivity(req, req.user._id, 'UPDATE', 'Admin Permissions', `Assigned permissions to admin ${admin.email}`, { target_admin_id: admin._id });
+      }
+
       return res.status(httpStatus.OK).json({
         status: 200,
         success: true,
@@ -139,6 +149,7 @@ const getAvailablePages = {
         {name: 'vendor-payments', displayName: 'Vendor Payments' },
         {name: 'metadata', displayName: 'Metadata' },
         {name: 'dynamic-component', displayName: 'Dynamic Component' },
+        {name: 'activity-logs', displayName: 'Activity Logs' },
       ];
       return res.status(httpStatus.OK).json({
         status: 200,
@@ -353,6 +364,71 @@ const getMyPermissions = {
   },
 };
 
+
+
+const getAllUsers = {
+  handler: async (req, res) => {
+    try {
+      const User = require('../models/user.model');
+      const { search } = req.query;
+      
+      const query = {};
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { first_name: searchRegex },
+          { last_name: searchRegex },
+          { full_name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex }
+        ];
+      }
+
+      const users = await User.find(query).sort({ createdAt: -1 });
+      
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        data: users,
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 500,
+        success: false,
+        message: 'Failed to get users',
+        error: error.message
+      });
+    }
+  },
+};
+
+const getActivitiesLog = {
+  handler: async (req, res) => {
+    try {
+      const ActivityLog = require('../models/activityLog.model');
+      
+      const logs = await ActivityLog.find()
+        .populate('admin_id', 'name email')
+        .populate('vendor_id', 'business_name email ContactDetails.email')
+        .sort({ createdAt: -1 })
+        .limit(500); // Limit to recent 500 for performance
+      
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        data: logs,
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 500,
+        success: false,
+        message: 'Failed to get activity logs',
+        error: error.message
+      });
+    }
+  },
+};
+
 module.exports = {
   register,
   login,
@@ -362,5 +438,6 @@ module.exports = {
   getMyPermissions,
   uploadMetadataCsv,
   getMetadataJson,
+  getAllUsers,
+  getActivitiesLog,
 };
-

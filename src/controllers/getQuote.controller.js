@@ -949,6 +949,13 @@ const updateQuote = {
         }
       }
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor') {
+          await logActivity(req, req.user._id, 'UPDATE', 'Quotes', `Vendor updated quote for ${quote.product_id?.product_name || 'product'}`, { quote_id: quote._id }, 'vendor');
+        }
+      } catch (e) {}
+
       res.status(httpStatus.OK).json({
         success: true,
         message: 'Quote updated successfully',
@@ -1278,6 +1285,13 @@ const changeStatus = {
       } catch (emailError) {
         // Don't fail the request if email fails
       }
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor') {
+          await logActivity(req, req.user._id, 'UPDATE', 'Quotes', `Vendor changed quote status to ${internal}`, { quote_id: updated._id }, 'vendor');
+        }
+      } catch (e) {}
 
       res.status(httpStatus.OK).json({ status: 200, message: 'Status updated', data: updated });
     } catch (error) {

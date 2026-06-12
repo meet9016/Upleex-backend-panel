@@ -245,6 +245,13 @@ const updateOrderStatus = {
     }
     
     await order.save();
+
+    try {
+      const { logActivity } = require('../../utils/activityLogger');
+      if (req.user && req.user.userType === 'vendor') {
+        await logActivity(req, req.user._id, 'UPDATE', 'Orders', `Vendor updated order #${order.order_id} status to ${status}`, { order_id: order._id }, 'vendor');
+      }
+    } catch (e) {}
     
     // SEND NOTIFICATION TO USER
     const statusMessages = {
@@ -435,6 +442,13 @@ const bulkUpdateOrderStatus = {
     });
     
     await Promise.all(updatePromises);
+
+    try {
+      const { logActivity } = require('../../utils/activityLogger');
+      if (req.user && req.user.userType === 'vendor') {
+        await logActivity(req, req.user._id, 'UPDATE', 'Orders', `Vendor bulk updated ${orders.length} orders to status ${status}`, { orderIds }, 'vendor');
+      }
+    } catch (e) {}
     
     res.status(httpStatus.OK).json({
       status: 200,

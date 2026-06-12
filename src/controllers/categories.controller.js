@@ -212,6 +212,13 @@ const createCategory = {
         seo_content: seoContent,
       });
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin') {
+          await logActivity(req, req.user._id, 'CREATE', 'Categories', `Admin created category: ${category.categories_name}`, { category_id: category._id });
+        }
+      } catch (e) {}
+
       return res.status(201).json({
         success: true,
         message: 'Category created successfully!',
@@ -469,6 +476,13 @@ const updateCategory = {
       new: true,
     });
 
+    try {
+      const { logActivity } = require('../utils/activityLogger');
+      if (req.user && req.user.userType === 'admin' && category) {
+        await logActivity(req, req.user._id, 'UPDATE', 'Categories', `Admin updated category: ${category.categories_name}`, { category_id: category._id });
+      }
+    } catch (e) {}
+
     res.send({
       success: true,
       message: 'Category updated successfully!',
@@ -492,6 +506,13 @@ const deleteCategory = {
     }
 
     await Category.findByIdAndDelete(_id);
+
+    try {
+      const { logActivity } = require('../utils/activityLogger');
+      if (req.user && req.user.userType === 'admin' && categoryExist) {
+        await logActivity(req, req.user._id, 'DELETE', 'Categories', `Admin deleted category: ${categoryExist.categories_name}`, { category_id: categoryExist._id });
+      }
+    } catch (e) {}
 
     res.send({ message: 'Category deleted successfully' });
   },

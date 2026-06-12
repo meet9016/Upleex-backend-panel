@@ -166,6 +166,14 @@ const approveService = {
         console.error('Vendor service notification error:', notifErr);
       }
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin') {
+          const action = newStatus === 'approved' ? 'APPROVE' : (newStatus === 'rejected' ? 'REJECT' : 'UPDATE');
+          await logActivity(req, req.user._id, action, 'Services', `Admin ${newStatus} service: ${updatedService.service_name}`, { service_id: updatedService._id }, 'admin');
+        }
+      } catch (e) {}
+
       const message = newStatus === 'approved' 
         ? 'Service approved successfully. ₹29 deducted from vendor wallet.'
         : `Service ${newStatus} successfully`;
@@ -251,6 +259,13 @@ const bulkApproveServices = {
         countsByVendor[vid] = { pending, approved, rejected };
       }
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin') {
+          await logActivity(req, req.user._id, 'APPROVE', 'Services', `Admin bulk approved ${service_ids.length} services`, { service_ids }, 'admin');
+        }
+      } catch (e) {}
+
       res.status(200).json({
         status: 200,
         message: `${service_ids.length} services approved successfully`,
@@ -299,6 +314,13 @@ const bulkRejectServices = {
         const rejected = await Service.countDocuments({ vendor_id: vid, approval_status: 'rejected' });
         countsByVendor[vid] = { pending, approved, rejected };
       }
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'admin') {
+          await logActivity(req, req.user._id, 'REJECT', 'Services', `Admin bulk rejected ${service_ids.length} services`, { service_ids }, 'admin');
+        }
+      } catch (e) {}
 
       res.status(200).json({
         status: 200,

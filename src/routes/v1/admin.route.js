@@ -36,6 +36,18 @@ router.get(
 );
 
 router.get(
+  '/users',
+  auth(),
+  catchAsync(adminController.getAllUsers.handler)
+);
+
+router.get(
+  '/activity-logs',
+  auth(),
+  catchAsync(adminController.getActivitiesLog.handler)
+);
+
+router.get(
   '/all-admins',
   auth(),
   catchAsync(adminController.getAllAdmins.handler)

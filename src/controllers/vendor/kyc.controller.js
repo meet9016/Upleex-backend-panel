@@ -181,7 +181,11 @@ const saveKyc = {
         return currentPages;
       };
 
+      const _ = require('lodash');
+      let dataChanged = false;
+
       if (doc) {
+        const oldData = doc.toObject();
         // Deep merge for nested sections
         if (contact) {
           doc.ContactDetails = { ...doc.ContactDetails.toObject(), ...contact };
@@ -223,7 +227,26 @@ const saveKyc = {
 
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
+        const newData = doc.toObject();
+        // Check if important data actually changed (ignoring timestamps and completed_pages)
+        const fieldsToCheck = ['ContactDetails', 'Identity', 'Bank', 'Documents', 'Declaration'];
+        for (const field of fieldsToCheck) {
+          if (!_.isEqual(oldData[field], newData[field])) {
+            dataChanged = true;
+            break;
+          }
+        }
+
         await doc.save();
+
+        try {
+          const { logActivity } = require('../../utils/activityLogger');
+          if (req.user && req.user.userType === 'vendor' && dataChanged) {
+            await logActivity(req, req.user._id, 'UPDATE', 'Vendor KYC', `Vendor updated KYC details`, { kyc_id: doc._id }, 'vendor');
+          }
+        } catch (logErr) {
+          console.error('Error logging KYC:', logErr);
+        }
 
         // Trigger KYC incomplete email notification
         const completedSteps = doc.completed_pages?.length || 0;
@@ -278,6 +301,15 @@ const saveKyc = {
           status: 'pending',
           vendor_type
         });
+
+        try {
+          const { logActivity } = require('../../utils/activityLogger');
+          if (req.user && req.user.userType === 'vendor') {
+            await logActivity(req, req.user._id, 'CREATE', 'Vendor KYC', `Vendor submitted KYC for review`, { kyc_id: doc._id }, 'vendor');
+          }
+        } catch (logErr) {
+          console.error('Error logging KYC:', logErr);
+        }
 
         // Trigger KYC incomplete email notification for new KYC
         const completedSteps = doc.completed_pages?.length || 0;
@@ -563,6 +595,16 @@ const changeStatus = {
           console.error('Error sending status change email:', emailError);
         }
       }
+
+      try {
+        const { logActivity } = require('../../utils/activityLogger');
+        // Since changeStatus does not currently have auth() middleware in route, req.user might be missing.
+        // We log if req.user exists. (If it's admin panel, they should have token, but just in case we check).
+        if (req.user && req.user.userType === 'admin') {
+          const action = status === 'approved' ? 'APPROVE' : (status === 'rejected' ? 'REJECT' : 'UPDATE');
+          await logActivity(req, req.user._id, action, 'Vendor', `Admin ${status} vendor KYC for ${vendorName}`, { kyc_id: doc._id, vendor_id: v_id }, 'admin');
+        }
+      } catch (e) {}
 
       return res.status(200).json({ status: 200, message: 'Status updated', data: doc.toJSON() });
     } catch (error) {

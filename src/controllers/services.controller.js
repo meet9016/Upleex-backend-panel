@@ -109,6 +109,13 @@ const createService = {
 
       }
 
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor') {
+          await logActivity(req, req.user._id, 'CREATE', 'Services', `Vendor created service: ${service.service_name}`, { service_id: service._id }, 'vendor');
+        }
+      } catch (e) {}
+
       return res.status(200).json({
         status: 200,
         message: 'Service created successfully',
@@ -404,7 +411,26 @@ const updateService = {
         body.sub_images = subImages.slice(0, 4);
       }
 
+      const _ = require('lodash');
+      const oldDocJSON = JSON.parse(JSON.stringify(existing.toObject()));
+      const updateDataJSON = JSON.parse(JSON.stringify(body));
+      
+      let isChanged = false;
+      for (const key of Object.keys(updateDataJSON)) {
+        if (!_.isEqual(oldDocJSON[key], updateDataJSON[key])) {
+          isChanged = true;
+          break;
+        }
+      }
+
       const service = await Service.findByIdAndUpdate(id, body, { new: true });
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor' && isChanged) {
+          await logActivity(req, req.user._id, 'UPDATE', 'Services', `Vendor updated service: ${service.service_name}`, { service_id: service._id }, 'vendor');
+        }
+      } catch (e) {}
 
       return res.status(200).json({
         status: 200,
@@ -436,6 +462,13 @@ const deleteService = {
       }
 
       await Service.findByIdAndDelete(id);
+
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user && req.user.userType === 'vendor' && existing) {
+          await logActivity(req, req.user._id, 'DELETE', 'Services', `Vendor deleted service: ${existing.service_name}`, { service_id: existing._id }, 'vendor');
+        }
+      } catch (e) {}
 
       res.status(200).json({ status: 200, message: 'Service deleted successfully' });
     } catch (error) {

@@ -309,6 +309,11 @@ const approveProduct = {
         { new: true }
       );
 
+      const { logActivity } = require('../utils/activityLogger');
+      if (req.user) {
+        await logActivity(req, req.user._id, 'UPDATE', 'Products', `Admin ${newStatus} product ${updatedProduct.product_name} (Vendor: ${updatedProduct.vendor_name || updatedProduct.vendor_id})`, { product_id: productId, status: newStatus });
+      }
+
       // Send email notification to vendor
       let vendorEmail = '';
       let vendorName = 'Vendor';
@@ -487,6 +492,13 @@ const bulkApproveProducts = {
         { _id: { $in: product_ids } },
         { $set: { approval_status: 'approved', rejection_reason: '' } }
       );
+      
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user) {
+          await logActivity(req, req.user._id, 'UPDATE', 'Products', `Admin bulk approved ${product_ids.length} products`, { product_ids });
+        }
+      } catch (err) {}
 
       // Send email notifications (background-ish)
       const sendEmails = async () => {
@@ -606,6 +618,13 @@ const bulkRejectProducts = {
         { _id: { $in: product_ids } },
         { $set: { approval_status: 'rejected', rejection_reason: rejection_reason || '' } }
       );
+      
+      try {
+        const { logActivity } = require('../utils/activityLogger');
+        if (req.user) {
+          await logActivity(req, req.user._id, 'UPDATE', 'Products', `Admin bulk rejected ${product_ids.length} products`, { product_ids, rejection_reason });
+        }
+      } catch (err) {}
 
       // Send email notifications (background-ish)
       const sendEmails = async () => {
