@@ -73,7 +73,8 @@ const exportToTreePDF = (res, data, filename, title) => {
       const doc = new PDFDocument({ 
         margin: 30, 
         size: 'A4',
-        layout: 'landscape'
+        layout: 'landscape',
+        bufferPages: true
       });
       
       const brandColor = '#4A90E2';
@@ -254,6 +255,20 @@ const exportToTreePDF = (res, data, filename, title) => {
         });
       });
 
+      // Add watermark to all pages
+      if (fs.existsSync(logoPath)) {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start, end = range.start + range.count; i < end; i++) {
+          doc.switchToPage(i);
+          doc.save();
+          doc.opacity(0.1);
+          const imgWidth = 400;
+          const x = (doc.page.width - imgWidth) / 2;
+          const y = (doc.page.height - imgWidth/2) / 2;
+          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          doc.restore();
+        }
+      }
       doc.end();
     } catch (error) {
       reject(error);
@@ -316,7 +331,8 @@ const exportOrdersToTreePDF = (res, data, filename, title) => {
       const doc = new PDFDocument({ 
         margin: 30, 
         size: 'A4',
-        layout: 'landscape'
+        layout: 'landscape',
+        bufferPages: true
       });
       
       const brandColor = '#4A90E2';
@@ -483,6 +499,20 @@ const exportOrdersToTreePDF = (res, data, filename, title) => {
         });
       });
 
+      // Add watermark to all pages
+      if (fs.existsSync(logoPath)) {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start, end = range.start + range.count; i < end; i++) {
+          doc.switchToPage(i);
+          doc.save();
+          doc.opacity(0.1);
+          const imgWidth = 400;
+          const x = (doc.page.width - imgWidth) / 2;
+          const y = (doc.page.height - imgWidth/2) / 2;
+          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          doc.restore();
+        }
+      }
       doc.end();
     } catch (error) {
       reject(error);
@@ -545,7 +575,8 @@ const exportQuotesToTreePDF = (res, data, filename, title) => {
       const doc = new PDFDocument({ 
         margin: 30, 
         size: 'A4',
-        layout: 'landscape'
+        layout: 'landscape',
+        bufferPages: true
       });
       
       const brandColor = '#4A90E2';
@@ -708,6 +739,20 @@ const exportQuotesToTreePDF = (res, data, filename, title) => {
         });
       });
 
+      // Add watermark to all pages
+      if (fs.existsSync(logoPath)) {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start, end = range.start + range.count; i < end; i++) {
+          doc.switchToPage(i);
+          doc.save();
+          doc.opacity(0.1);
+          const imgWidth = 400;
+          const x = (doc.page.width - imgWidth) / 2;
+          const y = (doc.page.height - imgWidth/2) / 2;
+          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          doc.restore();
+        }
+      }
       doc.end();
     } catch (error) {
       reject(error);

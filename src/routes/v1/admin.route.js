@@ -42,6 +42,12 @@ router.get(
 );
 
 router.get(
+  '/users',
+  auth(),
+  catchAsync(adminController.getAllUsers.handler)
+);
+
+router.get(
   '/my-permissions',
   auth(),
   catchAsync(adminController.getMyPermissions.handler)

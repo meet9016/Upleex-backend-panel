@@ -100,7 +100,8 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       const doc = new PDFDocument({ 
         margin: 30, 
         size: options.size || 'A4',
-        layout: options.layout || 'landscape'
+        layout: options.layout || 'landscape',
+        bufferPages: true
       });
       
       const brandColor = '#4A90E2';
@@ -141,6 +142,7 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
 
         // Divider
         doc.moveTo(30, 85).lineTo(doc.page.width - 30, 85).strokeColor(borderColor).lineWidth(1).stroke();
+
 
         // Table Header
         const tableY = 110;
@@ -208,6 +210,20 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
         yPosition += rowHeight;
       });
 
+      // Add watermark to all pages
+      if (fs.existsSync(logoPath)) {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start, end = range.start + range.count; i < end; i++) {
+          doc.switchToPage(i);
+          doc.save();
+          doc.opacity(0.1);
+          const imgWidth = 400;
+          const x = (doc.page.width - imgWidth) / 2;
+          const y = (doc.page.height - imgWidth/2) / 2;
+          doc.image(logoPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          doc.restore();
+        }
+      }
       doc.end();
     } catch (error) {
       reject(error);

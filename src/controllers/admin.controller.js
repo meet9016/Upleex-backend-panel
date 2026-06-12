@@ -11,6 +11,7 @@ const {
   toSeoContent,
   METADATA_JSON_PATH,
 } = require('../utils/metadataCsv');
+const User = require('../models/user.model');
 
 const register = {
   validation: {
@@ -353,6 +354,42 @@ const getMyPermissions = {
   },
 };
 
+const getAllUsers = {
+  handler: async (req, res) => {
+    try {
+
+      const { search } = req.query;
+      
+      const query = {};
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { first_name: searchRegex },
+          { last_name: searchRegex },
+          { full_name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex }
+        ];
+      }
+
+      const users = await User.find(query).sort({ createdAt: -1 });
+      
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        data: users,
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        status: 500,
+        success: false,
+        message: 'Failed to get users',
+        error: error.message
+      });
+    }
+  },
+};
+
 module.exports = {
   register,
   login,
@@ -362,5 +399,6 @@ module.exports = {
   getMyPermissions,
   uploadMetadataCsv,
   getMetadataJson,
+  getAllUsers,
 };
 
