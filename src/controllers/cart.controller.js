@@ -1,7 +1,28 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Cart, Product } = require('../models');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
+
+const resolveProduct = async (productIdentifier) => {
+  if (!productIdentifier) {
+    return null;
+  }
+
+  if (mongoose.Types.ObjectId.isValid(productIdentifier)) {
+    const productById = await Product.findById(productIdentifier);
+    if (productById) {
+      return productById;
+    }
+  }
+
+  return Product.findOne({
+    $or: [
+      { slug: productIdentifier },
+      { product_id: productIdentifier },
+    ],
+  });
+};
 
 const addToCart = catchAsync(async (req, res) => {
   const { product_id, qty } = req.body;
@@ -10,15 +31,17 @@ const addToCart = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to add items to cart');
   }
 
-  const product = await Product.findById(product_id);
+  const product = await resolveProduct(product_id);
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
 
+  const actualProductId = product._id;
+
   // Check if item already exists in active cart
   let cartItem = await Cart.findOne({
     user_id: req.user.id,
-    product_id: product_id,
+    product_id: actualProductId,
     status: 'active'
   });
 
@@ -28,7 +51,7 @@ const addToCart = catchAsync(async (req, res) => {
   } else {
     cartItem = await Cart.create({
       user_id: req.user.id,
-      product_id: product_id,
+      product_id: actualProductId,
       qty: parseInt(qty) || 1,
       status: 'active'
     });
