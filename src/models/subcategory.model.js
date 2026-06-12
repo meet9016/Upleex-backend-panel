@@ -75,9 +75,7 @@ const generateSlug = (text) => {
     .toString()
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-')       
-    .replace(/[^\w\-]+/g, '')  
-    .replace(/\-\-+/g, '-');    
+    .replace(/[^a-z0-9]+/g, ''); 
 };
 
 // Pre-save hook to generate slug
@@ -94,7 +92,7 @@ subCategorySchema.pre('save', async function(next) {
       if (!existingSubCategory || existingSubCategory._id.equals(this._id)) {
         break;
       }
-      uniqueSlug = `${baseSlug}-${counter}`;
+      uniqueSlug = `${baseSlug}${counter}`;
       counter++;
     }
     this.slug = uniqueSlug;

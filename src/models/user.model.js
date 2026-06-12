@@ -46,6 +46,14 @@ const userSchema = new mongoose.Schema({
         enum: ['web', 'ios', 'android'],
         default: 'web',
     },
+    city_id: {
+        type: String,
+        default: null,
+    },
+    city_name: {
+        type: String,
+        default: null,
+    },
     fcmTokens: [{
         type: String,
         trim: true,

@@ -142,7 +142,9 @@ const login = {
         email: user.email,
         phone: user.phone,
         profile_photo: user.profile_photo,
-        platform: user.platform
+        platform: user.platform,
+        city_id: user.city_id,
+        city_name: user.city_name
       }
     });
   }
@@ -230,6 +232,8 @@ const updateUserProfile = {
         'string.pattern.base': 'Mobile number must be between 10 and 15 digits'
       }),
       gender: Joi.string().valid('male', 'female', 'other').optional(),
+      city_id: Joi.string().optional().allow(''),
+      city_name: Joi.string().optional().allow(''),
     }),
   },
   handler: async (req, res) => {
@@ -239,7 +243,7 @@ const updateUserProfile = {
       }
 
       const userId = req.user.id || req.user._id;
-      const { first_name, last_name, mobile, gender } = req.body;
+      const { first_name, last_name, mobile, gender, city_id, city_name } = req.body;
 
       // Find user
       const user = await User.findById(userId);
@@ -252,6 +256,8 @@ const updateUserProfile = {
       if (last_name) user.last_name = last_name;
       if (mobile) user.mobile = mobile;
       if (gender) user.gender = gender;
+      if (city_id !== undefined) user.city_id = city_id;
+      if (city_name !== undefined) user.city_name = city_name;
 
       // Update full_name
       if (first_name || last_name) {
@@ -274,6 +280,8 @@ const updateUserProfile = {
           phone: user.phone,
           gender: user.gender,
           profile_photo: user.profile_photo,
+          city_id: user.city_id,
+          city_name: user.city_name,
         }
       });
 
@@ -491,7 +499,9 @@ const webLoginRegister = {
               name: newUser.name,
               email: newUser.email,
               phone: newUser.phone,
-              platform: newUser.platform
+              platform: newUser.platform,
+              city_id: newUser.city_id,
+              city_name: newUser.city_name
             }
           }
         });
@@ -518,7 +528,9 @@ const webLoginRegister = {
             name: user.name,
             email: user.email,
             phone: user.phone,
-            platform: user.platform
+            platform: user.platform,
+            city_id: user.city_id,
+            city_name: user.city_name
           }
         }
       });

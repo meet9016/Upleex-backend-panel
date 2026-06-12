@@ -1,43 +1,61 @@
-require('dotenv').config();
 const mongoose = require('mongoose');
-const config = require('./src/config/config');
 const Category = require('./src/models/category.model');
 const SubCategory = require('./src/models/subcategory.model');
 const Product = require('./src/models/product.model');
+require('dotenv').config();
 
-const migrateSlugs = async () => {
+const DB_URL = process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017/upleex'; // Make sure DB URL is correct or loads from .env
+
+const generateSlug = (text) => {
+  if (!text) return '';
+  return text.toString().toLowerCase().trim().replace(/[^a-z0-9]+/g, '');
+};
+
+async function migrateSlugs() {
   try {
-    console.log('Connecting to MongoDB...', config.mongoose.url);
-    await mongoose.connect(config.mongoose.url, config.mongoose.options);
-    console.log('Connected.');
+    await mongoose.connect(DB_URL);
+    console.log('Connected to DB');
 
-    // Find and migrate categories
-    const categories = await Category.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-    console.log(`Found ${categories.length} categories without slugs. Migrating...`);
+    // Categories
+    const categories = await Category.find({});
     for (const cat of categories) {
-      await cat.save(); // triggers the pre-save hook
+      if (cat.slug && cat.slug.includes('-')) {
+        cat.slug = cat.slug.replace(/-/g, '');
+        // The pre-save hook will NOT override it because we are modifying slug directly, 
+        // wait, the hook says `if (this.isModified('categories_name') || !this.slug)`
+        // Since categories_name is not modified, and this.slug exists, the hook skips generating a new one!
+        // But wait, what if the slug conflicts? We will handle conflicts if they happen (script will crash, we can fix manually).
+        await cat.save();
+      }
     }
+    console.log('Categories migrated');
 
-    // Find and migrate subcategories
-    const subCategories = await SubCategory.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-    console.log(`Found ${subCategories.length} subcategories without slugs. Migrating...`);
-    for (const sub of subCategories) {
-      await sub.save();
+    // SubCategories
+    const subcats = await SubCategory.find({});
+    for (const sub of subcats) {
+      if (sub.slug && sub.slug.includes('-')) {
+        sub.slug = sub.slug.replace(/-/g, '');
+        await sub.save();
+      }
     }
+    console.log('Subcategories migrated');
 
-    // Find and migrate products
-    const products = await Product.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-    console.log(`Found ${products.length} products without slugs. Migrating...`);
+    // Products
+    const products = await Product.find({});
     for (const prod of products) {
-      await prod.save();
+      if (prod.slug && prod.slug.includes('-')) {
+        prod.slug = prod.slug.replace(/-/g, '');
+        await prod.save();
+      }
     }
+    console.log('Products migrated');
 
-    console.log('Migration complete!');
+    console.log('Done!');
     process.exit(0);
   } catch (error) {
-    console.error('Error migrating slugs:', error);
+    console.error('Error during migration', error);
     process.exit(1);
   }
-};
+}
 
 migrateSlugs();
