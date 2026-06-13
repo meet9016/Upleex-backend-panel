@@ -266,7 +266,11 @@ const exportToTreePDF = (res, data, filename, title) => {
           const imgWidth = 50;
           const x = (doc.page.width - imgWidth) / 2;
           const y = (doc.page.height - imgWidth) / 2;
-          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          try {
+            doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          } catch(err) {
+            console.error('Error drawing watermark:', err);
+          }
           doc.restore();
         }
       }
@@ -511,7 +515,11 @@ const exportOrdersToTreePDF = (res, data, filename, title) => {
           const imgWidth = 150;
           const x = (doc.page.width - imgWidth) / 2;
           const y = (doc.page.height - imgWidth) / 2;
-          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          try {
+            doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          } catch(err) {
+            console.error('Error drawing watermark:', err);
+          }
           doc.restore();
         }
       }
@@ -752,7 +760,11 @@ const exportQuotesToTreePDF = (res, data, filename, title) => {
           const imgWidth = 150;
           const x = (doc.page.width - imgWidth) / 2;
           const y = (doc.page.height - imgWidth) / 2;
-          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          try {
+            doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          } catch(err) {
+            console.error('Error drawing watermark:', err);
+          }
           doc.restore();
         }
       }

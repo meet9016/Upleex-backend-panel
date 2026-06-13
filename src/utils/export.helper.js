@@ -168,9 +168,21 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
       };
 
       let yPosition = drawHeader();
-      const rowHeight = 30;
 
       data.forEach((item, index) => {
+        const rowData = rowMapper(item);
+
+        // Calculate dynamic row height
+        let maxCellHeight = 30; // Minimum row height
+        rowData.forEach((val, i) => {
+          doc.fontSize(9).font('Helvetica');
+          const cellHeight = doc.heightOfString(String(val || ''), { width: adjustedColumnWidths[i] - 20 });
+          if (cellHeight + 20 > maxCellHeight) {
+            maxCellHeight = cellHeight + 20;
+          }
+        });
+        const rowHeight = maxCellHeight;
+
         // Check page break
         if (yPosition + rowHeight > 520) {
           doc.addPage();
@@ -184,7 +196,6 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           doc.restore();
         }
 
-        const rowData = rowMapper(item);
         let xPos = 30;
 
         rowData.forEach((val, i) => {
@@ -198,7 +209,7 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           }
           const cellColor = options.cellColorMapper ? options.cellColorMapper(i, String(val || '')) : null;
           doc.fillColor(cellColor || '#374151').fontSize(9).font('Helvetica');
-          doc.text(String(val || ''), xPos + 10, yPosition + 11, { width: adjustedColumnWidths[i] - 20, align });
+          doc.text(String(val || ''), xPos + 10, yPosition + 10, { width: adjustedColumnWidths[i] - 20, align });
           xPos += adjustedColumnWidths[i];
         });
         doc.fillColor('#374151');
@@ -221,7 +232,11 @@ const exportToPDF = (res, data, headers, columnWidths, filename, title, rowMappe
           const imgWidth = 50;
           const x = (doc.page.width - imgWidth) / 2;
           const y = (doc.page.height - imgWidth) / 2;
-          doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          try {
+            doc.image(watermarkPath, x, y, { width: imgWidth, align: 'center', valign: 'center' });
+          } catch (err) {
+            console.error('Error drawing watermark image:', err);
+          }
           doc.restore();
         }
       }
