@@ -89,6 +89,7 @@ const createOrder = catchAsync(async (req, res) => {
       vendor_id: product.vendor_id,
       product_name: product.product_name,
       product_image: product.product_main_image || '',
+      hsn_code: product.hsnCode || '',
       price: price,
       quantity: quantity,
       subtotal: itemSubtotal,

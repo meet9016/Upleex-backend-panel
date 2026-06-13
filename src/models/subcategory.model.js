@@ -33,6 +33,10 @@ const subCategorySchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    hsnCodes: [{
+      materialType: { type: String, trim: true },
+      code: { type: String, trim: true }
+    }],
     image: {
       type: String,
     },

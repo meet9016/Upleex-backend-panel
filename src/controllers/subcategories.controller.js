@@ -184,6 +184,7 @@ const createSubCategory = {
     body: Joi.object().keys({
       id: Joi.string().required(),
       name: Joi.string().trim().required(),
+      hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
       image: Joi.string().allow(),
       seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
     }),
@@ -218,9 +219,23 @@ const createSubCategory = {
 
       const seoContent = parseSeoContentInput(req.body.seo_content);
 
+      let parsedHsnCodes = [];
+      if (req.body.hsnCodes) {
+        if (typeof req.body.hsnCodes === 'string') {
+          try {
+            parsedHsnCodes = JSON.parse(req.body.hsnCodes);
+          } catch (e) {
+            parsedHsnCodes = [];
+          }
+        } else {
+          parsedHsnCodes = req.body.hsnCodes;
+        }
+      }
+
       const subCategory = await SubCategory.create({
         categoryId: id,
         name: req.body.name,
+        hsnCodes: parsedHsnCodes,
         image: imageUrl,
         seo_content: seoContent,
       });
@@ -232,6 +247,7 @@ const createSubCategory = {
           id: subCategory.id,
           categoryId: subCategory.categoryId,
           name: subCategory.name,
+          hsnCodes: subCategory.hsnCodes,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,
@@ -272,6 +288,7 @@ const getAllSubCategories = {
           id: item.id || item._id,
           categoryId: item.categoryId,
           name: item.name,
+          hsnCode: item.hsnCode,
           image: item.image,
           created_at: item.createdAt,
           updated_at: item.updatedAt,
@@ -305,6 +322,7 @@ const getSubCategoryById = {
         id: subCategory.id,
         categoryId: subCategory.categoryId,
         name: subCategory.name,
+        hsnCodes: subCategory.hsnCodes,
         image: subCategory.image,
         created_at: subCategory.createdAt,
         updated_at: subCategory.updatedAt,
@@ -324,6 +342,7 @@ const updateSubCategory = {
       .keys({
         id: Joi.string().required(),
         name: Joi.string().trim().required(),
+        hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
         image: Joi.string().allow(),
         seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
       })
@@ -392,6 +411,20 @@ const updateSubCategory = {
         image: imageUrl,
       };
 
+      if (req.body.hsnCodes !== undefined) {
+        let parsedHsnCodes = [];
+        if (typeof req.body.hsnCodes === 'string') {
+          try {
+            parsedHsnCodes = JSON.parse(req.body.hsnCodes);
+          } catch (e) {
+            parsedHsnCodes = [];
+          }
+        } else {
+          parsedHsnCodes = req.body.hsnCodes;
+        }
+        updateData.hsnCodes = parsedHsnCodes;
+      }
+
       if (req.body.seo_content !== undefined) {
         updateData.seo_content = parseSeoContentInput(req.body.seo_content);
       }
@@ -417,6 +450,7 @@ const updateSubCategory = {
           id: subCategory.id,
           categoryId: subCategory.categoryId,
           name: subCategory.name,
+          hsnCodes: subCategory.hsnCodes,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,

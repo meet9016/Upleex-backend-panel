@@ -71,6 +71,9 @@ const productSchema = new mongoose.Schema(
     cancel_price: {
       type: String,
     },
+    hsnCode: {
+      type: String,
+    },
     description: {
       type: String,
     },

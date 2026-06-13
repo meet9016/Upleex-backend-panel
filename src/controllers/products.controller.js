@@ -398,6 +398,7 @@ const createProduct = {
         const subDoc = await SubCategory.findById(data.sub_category_id);
         if (subDoc) {
           data.sub_category_name = subDoc.name;
+          data.hsnCode = data.hsnCode || (subDoc.hsnCodes && subDoc.hsnCodes.length > 0 ? subDoc.hsnCodes[0].code : '');
         }
       }
 
@@ -1500,6 +1501,7 @@ const updateProduct = {
         const subDoc = await SubCategory.findById(body.sub_category_id);
         if (subDoc) {
           body.sub_category_name = subDoc.name;
+          body.hsnCode = body.hsnCode || subDoc.hsnCode || '';
         }
       }
 

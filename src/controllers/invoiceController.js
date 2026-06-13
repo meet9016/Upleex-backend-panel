@@ -293,10 +293,11 @@ const generateInvoicePDF = async (req, res) => {
     
     const headers = [
       { text: 'Item & Description', x: 55 },
+      { text: 'HSN', x: 235 },
       { text: 'Type', x: 280 },
-      { text: 'Unit Price', x: 340 },
-      { text: 'Qty', x: 430 },
-      { text: 'Net Amount', x: 480 }
+      { text: 'Unit Price', x: 330 },
+      { text: 'Qty', x: 400 },
+      { text: 'Net Amount', x: 450 }
     ];
 
     headers.forEach(header => {
@@ -323,6 +324,8 @@ const generateInvoicePDF = async (req, res) => {
       const qty = isQuote ? (item.qty) : (item.quantity || 1);
       const rowTotal = isQuote ? (item.totalPrice || item.calculatedPrice) : (item.price * (item.quantity || 1));
 
+      const hsn = item.hsnCode || item.hsn_code || product.hsnCode || product.hsn_code || 'N/A';
+
       // Alternate row background
       if (index % 2 === 0) {
         drawRoundedRect(50, currentY - 3, 510, 40, 2, '#F9FAFB');
@@ -331,31 +334,36 @@ const generateInvoicePDF = async (req, res) => {
       doc.fontSize(10)
         .font('Helvetica-Bold')
         .fillColor('#111827')
-        .text(name || '', 55, currentY, { width: 220 });
+        .text(name || '', 55, currentY, { width: 175 });
       
       doc.fontSize(7)
         .font('Helvetica')
         .fillColor('#9CA3AF')
-        .text(`SKU: ${sku}`, 55, currentY + 13, { width: 220 });
+        .text(`SKU: ${sku}`, 55, currentY + 13, { width: 175 });
+
+      doc.fontSize(8)
+        .font('Helvetica')
+        .fillColor('#4B5563')
+        .text(hsn, 235, currentY + 5, { width: 40 });
 
       // Type badge
       const typeColor = ['rent', 'rental'].includes(typeLabel.toLowerCase()) ? '#2563EB' : '#059669';
       doc.fillColor(typeColor)
         .fontSize(8)
         .font('Helvetica-Bold')
-        .text(typeLabel, 280, currentY + 5, { width: 60 });
+        .text(typeLabel, 280, currentY + 5, { width: 45 });
 
       doc.fontSize(9)
         .font('Helvetica-Bold')
         .fillColor('#4B5563')
-        .text(`Rs. ${Number(price || 0).toLocaleString()}`, 340, currentY + 5, { width: 80, align: 'left' });
+        .text(`Rs. ${Number(price || 0).toLocaleString()}`, 330, currentY + 5, { width: 65, align: 'left' });
       
-      doc.text(`${qty}`, 430, currentY + 5, { width: 50, align: 'left' });
+      doc.text(`${qty}`, 400, currentY + 5, { width: 40, align: 'left' });
       
       doc.fontSize(9)
         .font('Helvetica-Bold')
         .fillColor('#111827')
-        .text(`Rs. ${Number(rowTotal || 0).toLocaleString()}`, 480, currentY + 5, { width: 80, align: 'left' });
+        .text(`Rs. ${Number(rowTotal || 0).toLocaleString()}`, 450, currentY + 5, { width: 80, align: 'left' });
 
       currentY += 45;
     });

@@ -20,6 +20,10 @@ const orderItemSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    hsn_code: {
+      type: String,
+      default: '',
+    },
     price: {
       type: Number,
       required: true,
