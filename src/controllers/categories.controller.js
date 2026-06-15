@@ -275,10 +275,13 @@ const getAllCategories = {
           };
 
           // If city is provided, filter by city
+          let isValidCity = false;
           if (req.query.city) {
-            const VendorKyc = require('../models').VendorKyc;
             const raw = String(req.query.city).trim();
-            const parts = raw.split('-');
+            if (raw !== 'Select City' && raw !== 'null' && raw !== 'undefined' && raw !== '') {
+              isValidCity = true;
+              const VendorKyc = require('../models').VendorKyc;
+                        const parts = raw.split('-');
             const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
             const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
             
@@ -319,6 +322,7 @@ const getAllCategories = {
                 })),
                 seo_content: formatSeoContentResponse(cat.seo_content),
               };
+              }
             }
           }
 
