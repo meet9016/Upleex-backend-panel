@@ -351,6 +351,8 @@ const getAllCategories = {
         })
       );
 
+      transformedData.sort((a, b) => Number(b.product_count || 0) - Number(a.product_count || 0));
+
       res.status(200).json({
         success: true,
         total,
