@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const config = require('../config/config');
 const Wallet = require('../models/wallet.model');
 const Vendor = require('../models/vendor/vendor.model');
+const Setting = require('../models/setting.model');
 
 // Initialize Razorpay
 let razorpay;
@@ -69,7 +70,7 @@ const getWalletBalance = catchAsync(async (req, res) => {
 });
 
 // Demo account numbers - wallet amount will NOT be deducted for these numbers
-const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245', '8200199856'];
+// (Dynamic fetch below)
 
 // Create Razorpay order for adding money
 const createAddMoneyOrder = catchAsync(async (req, res) => {
@@ -101,6 +102,8 @@ const createAddMoneyOrder = catchAsync(async (req, res) => {
 
   // Check if this is a demo vendor account
   const vendor = await Vendor.findById(vendorId).select('number');
+  const setting = await Setting.findOne({ key: 'demoNumbers' });
+  const DEMO_VENDOR_NUMBERS = setting?.value || [];
   const isDemoAccount = vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number);
 
   if (isDemoAccount) {
@@ -226,6 +229,8 @@ const verifyAddMoneyPayment = catchAsync(async (req, res) => {
 
   // Check if this is a demo vendor account
   const vendor = await Vendor.findById(vendorId).select('number');
+  const setting = await Setting.findOne({ key: 'demoNumbers' });
+  const DEMO_VENDOR_NUMBERS = setting?.value || [];
   const isDemoAccount = vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number);
 
   if (!isDemoAccount) {

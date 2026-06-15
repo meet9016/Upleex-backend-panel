@@ -180,27 +180,32 @@ const purchaseGeneralPlan = {
 
     const totalPayable = plan.amount;
 
-    // Check wallet balance
-    const Wallet = require('../models/wallet.model');
-    const wallet = await Wallet.findOne({ vendor_id });
+    // Check wallet balance (skip for demo vendor)
+    const walletService = require('../services/wallet.service');
+    const isDemo = await walletService.isDemoVendor(vendor_id);
     
-    if (!wallet) {
-      return res.status(httpStatus.BAD_REQUEST).json({ message: 'Wallet not found. Please add money to your wallet.' });
+    if (!isDemo) {
+      const Wallet = require('../models/wallet.model');
+      const wallet = await Wallet.findOne({ vendor_id });
+      
+      if (!wallet) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Wallet not found. Please add money to your wallet.' });
+      }
+
+      if (wallet.balance < totalPayable) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: 'Insufficient wallet balance' });
+      }
+
+      // Generate transaction ID
+      const transactionId = `WLT${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      // Deduct money
+      wallet.deductMoney(totalPayable, transactionId, `Purchased General Plan: ${plan.plan_type}`, {
+        purpose: 'general_plan_purchase',
+        plan_id: plan._id
+      });
+      await wallet.save();
     }
-
-    if (wallet.balance < totalPayable) {
-      return res.status(httpStatus.BAD_REQUEST).json({ message: 'Insufficient wallet balance' });
-    }
-
-    // Generate transaction ID
-    const transactionId = `WLT${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    // Deduct money
-    wallet.deductMoney(totalPayable, transactionId, `Purchased General Plan: ${plan.plan_type}`, {
-      purpose: 'general_plan_purchase',
-      plan_id: plan._id
-    });
-    await wallet.save();
 
     const purchase = await GeneralPlanPurchase.create({
       vendor_id,

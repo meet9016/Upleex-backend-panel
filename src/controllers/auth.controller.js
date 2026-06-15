@@ -3,7 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const { authService, tokenService, emailService, smsService } = require('../services');
 const Joi = require('joi');
 const ApiError = require('../utils/ApiError');
-const { User, Cart, Payment, Otp } = require('../models');
+const { User, Cart, Payment, Otp, Setting } = require('../models');
 const { sendWelcomeEmail } = require('../services/email.service');
 const multer = require('multer');
 const path = require('path');
@@ -369,9 +369,10 @@ const webLoginRegister = {
         const isFromMobileApp = url && (url.includes('api/api/v1') || url.includes('web-login-register') && url !== '1upleex.com');
 
         // Real random OTP for the website, static 123456 for mobile app and others
-        // Special case: 111111 for 8200199856
         let generatedOtp;
-        const isSpecialNumber = number && (number === '8200199856' || number.endsWith('8200199856'));
+        const setting = await Setting.findOne({ key: 'demoNumbers' });
+        const demoNumbers = setting?.value || [];
+        const isSpecialNumber = number && demoNumbers.some(dn => number === dn || number.endsWith(dn));
         
         if (isSpecialNumber) {
           generatedOtp = '111111';
@@ -434,8 +435,12 @@ const webLoginRegister = {
       // Check OTP in database
       let otpRecord = await Otp.findOne({ phone: number, otp: otp });
 
-      // Special case: Allow 111111 for 8200199856 even if not exactly matched (fallback)
-      if (!otpRecord && (number === '8200199856' || (number && number.endsWith('8200199856'))) && otp === '111111') {
+      // Special case: Allow 111111 for demoNumbers even if not exactly matched (fallback)
+      const settingForOtp = await Setting.findOne({ key: 'demoNumbers' });
+      const demoNumbersForOtp = settingForOtp?.value || [];
+      const isDemoForOtp = number && demoNumbersForOtp.some(dn => number === dn || number.endsWith(dn));
+      
+      if (!otpRecord && isDemoForOtp && otp === '111111') {
         otpRecord = await Otp.findOne({ phone: number });
       }
 

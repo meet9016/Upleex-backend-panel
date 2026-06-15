@@ -42,6 +42,7 @@ const vendorReportRoute = require('./vendorReport.route');
 const appVersionRoute = require('./appVersion.route');
 const generalPlanRoute = require('./generalPlan.route');
 const dynamicPageRoute = require('./dynamicPage.route');
+const settingsRoute = require('./settings.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -221,6 +222,10 @@ const defaultRoutes = [
   {
     path: '/dynamic-pages',
     route: dynamicPageRoute,
+  },
+  {
+    path: '/settings',
+    route: settingsRoute,
   },
 ];
 

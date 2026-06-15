@@ -2,9 +2,7 @@ const Wallet = require('../models/wallet.model');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const Vendor = require('../models/vendor/vendor.model');
-
-const DEMO_VENDOR_NUMBERS = ['7874977238', '9601545245', '8200199856'];
-
+const Setting = require('../models/setting.model');
 /**
  * Check if a vendor is the demo account (skip wallet deductions)
  * @param {string} vendorId
@@ -18,7 +16,12 @@ const isDemoVendor = async (vendorId) => {
       ? { _id: vendorId }
       : { number: vendorId };
     const vendor = await Vendor.findOne(query).select('number').lean();
-    return !!(vendor && DEMO_VENDOR_NUMBERS.includes(vendor.number));
+    const setting = await Setting.findOne({ key: 'demoNumbers' });
+    const demoNumbers = setting?.value || [];
+    const isDemo = vendor && vendor.number && demoNumbers.some(dn => 
+      String(vendor.number) === String(dn) || String(vendor.number).endsWith(String(dn))
+    );
+    return !!isDemo;
   } catch (e) {
     return false;
   }
