@@ -28,7 +28,9 @@ const {
   exportRentalBoostPurchasesToExcel,
   exportRentalBoostPurchasesToPDF,
   exportAllPlanPurchasesToExcel,
-  exportAllPlanPurchasesToPDF
+  exportAllPlanPurchasesToPDF,
+  exportUsersToExcel,
+  exportUsersToPDF
 } = require('../../controllers/export.controller');
 
 const router = express.Router();
@@ -36,6 +38,10 @@ const router = express.Router();
 // Product export routes
 router.get('/products/excel', auth(), exportProductsToExcel.handler);
 router.get('/products/pdf', auth(), exportProductsToPDF.handler);
+
+// User export routes
+router.get('/users/excel', auth('admin'), exportUsersToExcel.handler);
+router.get('/users/pdf', auth('admin'), exportUsersToPDF.handler);
 
 // Quote export routes  
 router.get('/quotes/excel', auth(), exportQuotesToExcel.handler);

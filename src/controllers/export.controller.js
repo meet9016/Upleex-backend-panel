@@ -14,6 +14,7 @@ const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
 const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
 const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
 const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+const User = require('../models/user.model');
 
 // Export Products to Excel
 const exportProductsToExcel = {
@@ -693,6 +694,95 @@ const exportVendorsToExcel = {
 
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Users to Excel
+const exportUsersToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+
+      const query = {};
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { first_name: searchRegex },
+          { last_name: searchRegex },
+          { full_name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex }
+        ];
+      }
+
+      const users = await User.find(query).sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Full Name', key: 'full_name', width: 25 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Phone', key: 'phone', width: 15 },
+        { header: 'Platform', key: 'platform', width: 15 },
+        { header: 'Join Date', key: 'createdAt', width: 15 }
+      ];
+
+      const data = users.map(user => ({
+        full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.name || 'N/A',
+        email: user.email || 'N/A',
+        phone: user.phone || user.mobile || 'N/A',
+        platform: user.platform ? user.platform.charAt(0).toUpperCase() + user.platform.slice(1) : 'N/A',
+        createdAt: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'
+      }));
+
+      await exportToExcel(res, data, columns, `users_${new Date().toISOString().split('T')[0]}.xlsx`, 'Users');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Users to PDF
+const exportUsersToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { search } = req.query;
+
+      const query = {};
+      if (search) {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { first_name: searchRegex },
+          { last_name: searchRegex },
+          { full_name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex }
+        ];
+      }
+
+      const users = await User.find(query).sort({ createdAt: -1 });
+
+      const headers = ['Full Name', 'Email', 'Phone', 'Platform', 'Join Date'];
+      const columnWidths = [150, 180, 100, 100, 100];
+      const filename = `users_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Users Report';
+
+      const rowMapper = (user) => [
+        user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.name || 'N/A',
+        user.email || 'N/A',
+        user.phone || user.mobile || 'N/A',
+        user.platform ? user.platform.charAt(0).toUpperCase() + user.platform.slice(1) : 'N/A',
+        user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'
+      ];
+
+      await exportToPDF(res, users, headers, columnWidths, filename, title, rowMapper);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
     }
   }
 };
@@ -2205,5 +2295,7 @@ module.exports = {
   exportRentalBoostPurchasesToExcel,
   exportRentalBoostPurchasesToPDF,
   exportAllPlanPurchasesToExcel,
-  exportAllPlanPurchasesToPDF
+  exportAllPlanPurchasesToPDF,
+  exportUsersToExcel,
+  exportUsersToPDF
 };
