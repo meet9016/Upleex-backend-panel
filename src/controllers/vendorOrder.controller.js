@@ -172,6 +172,14 @@ const updateOrderStatus = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
     }
     
+    // Validate based on delivery type
+    if (order.delivery_type === 'shipping') {
+      const allowedStatuses = ['pending', 'accepted', 'completed'];
+      if (!allowedStatuses.includes(status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'This status is not allowed for shipping orders. Only pending, accepted, and completed are allowed.');
+      }
+    }
+    
     const oldStatus = order.vendor_status;
     order.vendor_status = status;
     
@@ -253,6 +261,11 @@ const updateOrderStatus = {
       delivery: 'Your order is out for delivery!',
       delivered: 'Your order has been delivered successfully.',
       completed: 'Your order is marked as completed.',
+      preparing: 'Your order is being prepared.',
+      ready_for_pickup: 'Your order is ready for pickup.',
+      picked_up: 'Your order has been picked up and is on the way.',
+      out_for_delivery: 'Your order is out for delivery.'
+
     };
 
     if (statusMessages[status]) {
@@ -339,17 +352,50 @@ const getOrderDetails = {
 
 const getDeliveryStatusOptions = {
   handler: catchAsync(async (req, res) => {
-    const statusOptions = [
+    const { order_id } = req.query;
+    let deliveryType = 'face_to_face';
+    
+    // If order_id is provided, get delivery_type from order
+    if (order_id) {
+      const order = await Order.findById(order_id);
+      if (order) {
+        deliveryType = order.delivery_type;
+      }
+    }
+    
+    const allStatuses = [
       { value: 'pending', label: 'Pending' },
       { value: 'accepted', label: 'Accepted' },
+      { value: 'preparing', label: 'Preparing' },
+      { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+      { value: 'picked_up', label: 'Picked Up' },
+      { value: 'out_for_delivery', label: 'Out for Delivery' },
+      { value: 'delivered', label: 'Delivered' },
+      { value: 'cancelled', label: 'Cancelled' },
       { value: 'completed', label: 'Completed' },
     ];
+    
+    // Determine which statuses are enabled
+    const statusOptions = allStatuses.map(status => {
+      let enabled = true;
+      
+      // For shipping delivery type, only enable pending, accepted, completed
+      if (deliveryType === 'shipping') {
+        const allowedStatuses = ['pending', 'accepted', 'completed'];
+        enabled = allowedStatuses.includes(status.value);
+      }
+      
+      return {
+        ...status,
+        enabled
+      };
+    });
     
     res.status(httpStatus.OK).json({
       status: 200,
       success: true,
       message: 'Status options retrieved successfully',
-      data: { statusOptions }
+      data: { statusOptions, delivery_type: deliveryType }
     });
   })
 };
@@ -445,10 +491,105 @@ const bulkUpdateOrderStatus = {
   })
 };
 
+const updateShiprocketOrder = {
+  handler: catchAsync(async (req, res) => {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Order ID is required');
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
+    }
+
+    if (!order.shiprocket_order_id) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'This order is not synced with Shiprocket');
+    }
+
+    const shiprocketService = require('../services/shiprocket.service');
+    const shiprocketData = await shiprocketService.getShiprocketOrder(order.shiprocket_order_id);
+
+    if (shiprocketData) {
+      order.shiprocket_response = shiprocketData;
+
+      const shipment = shiprocketData.shipments?.[0] || {};
+      
+      if (shipment.awb_code && !order.delivery_tracking.tracking_number) {
+        order.delivery_tracking.tracking_number = shipment.awb_code;
+      }
+      
+      if (shipment.courier_name && !order.delivery_tracking.courier_partner) {
+        order.delivery_tracking.courier_partner = shipment.courier_name;
+      }
+
+      if (shipment.status) {
+        const statusMap = {
+          'PICKUP SCHEDULED': 'preparing',
+          'PICKED UP': 'picked_up',
+          'OUT FOR DELIVERY': 'out_for_delivery',
+          'DELIVERED': 'delivered',
+          'CANCELLED': 'cancelled',
+          'RTO': 'returned'
+        };
+        
+        const vendorStatus = statusMap[shipment.status];
+        if (vendorStatus && order.vendor_status !== vendorStatus) {
+          order.vendor_status = vendorStatus;
+          order.order_status = vendorStatus;
+        }
+      }
+
+      await order.save();
+    }
+
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      message: 'Shiprocket order details updated successfully',
+      data: {
+        order,
+        shiprocketData
+      }
+    });
+  })
+};
+
+const trackShipment = {
+  handler: catchAsync(async (req, res) => {
+    const { orderId } = req.params;
+    const { awb_code } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
+    }
+
+    const awbCode = awb_code || order.delivery_tracking?.tracking_number;
+
+    if (!awbCode) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'AWB code not available for this order');
+    }
+
+    const shiprocketService = require('../services/shiprocket.service');
+    const trackingData = await shiprocketService.trackShipment(awbCode);
+
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      message: 'Shipment tracking data fetched successfully',
+      data: trackingData
+    });
+  })
+};
+
 module.exports = {
   getVendorOrders,
   updateOrderStatus,
   getOrderDetails,
   getDeliveryStatusOptions,
-  bulkUpdateOrderStatus
+  bulkUpdateOrderStatus,
+  updateShiprocketOrder,
+  trackShipment
 };

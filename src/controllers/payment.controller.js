@@ -31,7 +31,7 @@ const createOrder = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to create order');
   }
 
-  const { order_notes, payment_type } = req.body;
+  const { order_notes, payment_type, delivery_type, address_id, shipping_charge } = req.body;
 
   // Get user email from database if not in request
   let userEmail = req.user.email;
@@ -51,6 +51,30 @@ const createOrder = catchAsync(async (req, res) => {
 
   if (!cartItems.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cart is empty');
+  }
+
+  // Fetch address details if Courier Shipping is selected
+  let shippingAddressDetails = null;
+  if (delivery_type === 'shipping') {
+    if (!address_id) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Address ID is required for courier shipping');
+    }
+    const AddressModel = require('../models/address.model');
+    const selectedAddress = await AddressModel.findOne({ _id: address_id, user_id: req.user.id });
+    if (!selectedAddress) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Selected shipping address not found');
+    }
+    shippingAddressDetails = {
+      name: selectedAddress.name,
+      phone: selectedAddress.phone,
+      alternate_phone: selectedAddress.alternate_phone || '',
+      address_line1: selectedAddress.address_line1,
+      address_line2: selectedAddress.address_line2 || '',
+      city: selectedAddress.city,
+      state: selectedAddress.state,
+      pincode: selectedAddress.pincode,
+      country: selectedAddress.country || 'India',
+    };
   }
 
   // Calculate totals and group by vendor
@@ -78,8 +102,8 @@ const createOrder = catchAsync(async (req, res) => {
     const price = Number(product.price) || 0;
     const quantity = Number(cartItem.qty) || 1;
     const itemSubtotal = price * quantity;
-    const itemGst = Math.round(itemSubtotal * 0.18); // 18% GST
-    const itemFinalAmount = itemSubtotal + itemGst;
+    const itemGst = Number((itemSubtotal * 0.18).toFixed(2)); // 18% GST with float precision
+    const itemFinalAmount = Number((itemSubtotal + itemGst).toFixed(2));
 
     subtotal += itemSubtotal;
     gstAmount += itemGst;
@@ -95,6 +119,7 @@ const createOrder = catchAsync(async (req, res) => {
       subtotal: itemSubtotal,
       gst_amount: itemGst,
       final_amount: itemFinalAmount,
+      sku: product.sku || '',
     };
 
     orderItems.push(orderItem);
@@ -110,20 +135,29 @@ const createOrder = catchAsync(async (req, res) => {
     vendorGroups[product.vendor_id].vendor_amount += itemFinalAmount;
   }
 
-  const deliveryCharges = 0; // Free delivery for now
+  // Round vendor amounts to prevent floating point issues
+  for (const vendorId in vendorGroups) {
+    vendorGroups[vendorId].vendor_amount = Number(vendorGroups[vendorId].vendor_amount.toFixed(2));
+  }
+
+  let deliveryCharges = 0;
+  if (delivery_type === 'shipping') {
+    deliveryCharges = Number(shipping_charge) || 0;
+  }
   const installationCharges = 0; // Free installation for now
   const depositAmount = 0; // No deposit for now
-  const totalAmount = subtotal + gstAmount + deliveryCharges + installationCharges + depositAmount;
+  
+  const totalAmount = Number((subtotal + gstAmount + deliveryCharges + installationCharges + depositAmount).toFixed(2));
 
   let amountToPay = totalAmount;
   if (payment_type === '30_percent') {
-    amountToPay = totalAmount * 0.3;
+    amountToPay = Math.round(totalAmount * 0.3);
   }
 
   // Create order ID
   const orderId = generateOrderId();
 
-// Check if Razorpay keys are configured
+  // Check if Razorpay keys are configured
   const razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
   const razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
@@ -159,6 +193,8 @@ const createOrder = catchAsync(async (req, res) => {
       deposit_amount: depositAmount,
       total_amount: totalAmount,
       payment_type: payment_type || 'full',
+      delivery_type: delivery_type || 'face_to_face',
+      shipping_address: shippingAddressDetails,
       razorpay_order_id: razorpayOrder.id,
       order_notes: order_notes || '',
       vendor_payments: Object.values(vendorGroups),
@@ -181,6 +217,248 @@ const createOrder = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Razorpay error: ${razorpayError.message}`);
   }
 });
+
+// Sync order to Shiprocket for shipping delivery type
+const syncOrderToShiprocket = async (order) => {
+  console.log('order',order)
+  console.log('\n========================================');
+  console.log('[Shiprocket] ▶ syncOrderToShiprocket triggered');
+  console.log(`[Shiprocket]   Order ID      : ${order.order_id}`);
+  console.log(`[Shiprocket]   delivery_type : ${order.delivery_type}`);
+  console.log(`[Shiprocket]   Already synced: ${!!order.shiprocket_shipment_id}`);
+  console.log('========================================\n');
+
+  if (order.delivery_type === 'shipping' && !order.shiprocket_shipment_id) {
+    try {
+      const moment = require('moment');
+      const shiprocketService = require('../services/shiprocket.service');
+      const formattedDate = moment(order.createdAt).format('YYYY-MM-DD HH:mm');
+
+      console.log('[Shiprocket] Checking shipping_address:', JSON.stringify(order.shipping_address, null, 2));
+      
+      const getValidAddress = (line1, line2, city, state) => {
+        let addr1 = String(line1 || '').trim();
+        let addr2 = String(line2 || '').trim();
+        
+        console.log('[Shiprocket] Raw address parts:', { addr1, addr2, city, state });
+        
+        if (!addr1 && !addr2) {
+          addr1 = 'Customer Address';
+          if (city) {
+            addr2 = city + (state ? ', ' + state : '');
+          }
+        } else if ((addr1 + ' ' + addr2).trim().length < 3) {
+          if (addr1.length < 3) {
+            addr1 = addr2.length >= 3 ? addr2 : 'Customer Address';
+            addr2 = addr1 === 'Customer Address' ? (city || '') : '';
+          }
+        }
+        
+        const finalAddr1 = addr1;
+        const finalAddr2 = addr2;
+        const combined = (finalAddr1 + ' ' + finalAddr2).trim();
+        
+        console.log('[Shiprocket] Final address:', { finalAddr1, finalAddr2, combined, length: combined.length });
+        
+        return { addr1: finalAddr1, addr2: finalAddr2 };
+      };
+
+      const { addr1: billingAddr1, addr2: billingAddr2 } = getValidAddress(
+        order.shipping_address?.address_line1,
+        order.shipping_address?.address_line2,
+        order.shipping_address?.city,
+        order.shipping_address?.state
+      );
+      const { addr1: shippingAddr1, addr2: shippingAddr2 } = getValidAddress(
+        order.shipping_address?.address_line1,
+        order.shipping_address?.address_line2,
+        order.shipping_address?.city,
+        order.shipping_address?.state
+      );
+
+      const shiprocketPayload = {
+        order_id: order.order_id,
+        order_date: formattedDate,
+        pickup_location: 'Home',
+        comment: order.order_notes || 'Upleex Order',
+        reseller_name: '',
+        company_name: 'Upleex',
+        billing_customer_name: order.shipping_address?.name?.split(' ')[0] || order.user_name?.split(' ')[0] || 'Customer',
+        billing_last_name: order.shipping_address?.name?.split(' ').slice(1).join(' ') || '',
+        billing_address: billingAddr1,
+        billing_address_2: billingAddr2,
+        billing_isd_code: '91',
+        billing_city: order.shipping_address?.city || '',
+        billing_pincode: order.shipping_address?.pincode || '',
+        billing_state: order.shipping_address?.state || '',
+        billing_country: order.shipping_address?.country || 'India',
+        billing_email: order.user_email || 'customer@upleex.com',
+        billing_phone: order.shipping_address?.phone || order.user_phone || '9999999999',
+        billing_alternate_phone: order.shipping_address?.alternate_phone || '',
+        shipping_is_billing: 1,
+        shipping_customer_name: order.shipping_address?.name?.split(' ')[0] || order.user_name?.split(' ')[0] || 'Customer',
+        shipping_last_name: order.shipping_address?.name?.split(' ').slice(1).join(' ') || '',
+        shipping_address: shippingAddr1,
+        shipping_address_2: shippingAddr2,
+        shipping_city: order.shipping_address?.city || '',
+        shipping_pincode: order.shipping_address?.pincode || '',
+        shipping_country: order.shipping_address?.country || 'India',
+        shipping_state: order.shipping_address?.state || '',
+        shipping_email: order.user_email || 'customer@upleex.com',
+        shipping_phone: order.shipping_address?.phone || order.user_phone || '9999999999',
+        order_items: order.items.map(item => ({
+          name: item.product_name,
+          sku: item.sku || `SKU-${item.product_id}`,
+          units: item.quantity,
+          selling_price: item.price,
+          discount: '0',
+          tax: '18',
+          hsn: '',
+        })),
+        payment_method: order.payment_method === 'cod' ? 'COD' : 'Prepaid',
+        shipping_charges: order.delivery_charges || 0,
+        giftwrap_charges: 0,
+        transaction_charges: 0,
+        total_discount: 0,
+        sub_total: order.subtotal,
+        length: 10,
+        breadth: 10,
+        height: 10,
+        weight: 0.5,
+        ewaybill_no: '',
+        customer_gstin: '',
+        invoice_number: order.order_id,
+        order_type: 'ESSENTIALS',
+      };
+
+      console.log('\n[Shiprocket] ─── STEP 1: Payload ready ───────────────────────');
+      console.log('[Shiprocket]   API URL       : https://apiv2.shiprocket.in/v1/external/orders/create/adhoc');
+      console.log(`[Shiprocket]   pickup_location: ${shiprocketPayload.pickup_location}`);
+      console.log(`[Shiprocket]   payment_method : ${shiprocketPayload.payment_method}`);
+      console.log(`[Shiprocket]   sub_total      : ${shiprocketPayload.sub_total}`);
+      console.log(`[Shiprocket]   items count    : ${shiprocketPayload.order_items.length}`);
+      console.log('[Shiprocket]   Full Payload   :\n', JSON.stringify(shiprocketPayload, null, 2));
+      console.log('[Shiprocket] ────────────────────────────────────────────────────\n');
+
+      console.log('[Shiprocket] ─── STEP 2: Calling Shiprocket API... ─────────────');
+      const shiprocketRes = await shiprocketService.createShiprocketOrder(shiprocketPayload);
+      console.log('[Shiprocket] ─── STEP 3: API Response received ─────────────────');
+      console.log('[Shiprocket]   Full Response  :\n', JSON.stringify(shiprocketRes, null, 2));
+      console.log('[Shiprocket] ────────────────────────────────────────────────────\n');
+
+      if (shiprocketRes) {
+        order.shiprocket_order_id = String(shiprocketRes.order_id || '');
+        order.shiprocket_shipment_id = String(shiprocketRes.shipment_id || '');
+        order.shiprocket_response = shiprocketRes;
+
+        const shipmentId = shiprocketRes.shipment_id;
+
+        console.log('\n[Shiprocket] ─── STEP 4: Auto Courier Assignment & AWB Generation ───');
+        
+        // STEP 4: Check serviceability and get best courier
+        try {
+          const pickupPostcode = config.shiprocket.pickupLocation === 'Home' ? '394105' : '110001'; // Configurable pickup pincode
+          const deliveryPostcode = order.shipping_address?.pincode;
+          const cod = order.payment_method === 'cod' ? 1 : 0;
+          const weight = 0.5; // Default weight in kg
+
+          if (deliveryPostcode) {
+            console.log(`[Shiprocket] Checking serviceability for ${pickupPostcode} → ${deliveryPostcode}`);
+            
+            const serviceabilityParams = {
+              pickup_postcode: pickupPostcode,
+              delivery_postcode: deliveryPostcode,
+              cod: cod,
+              weight: weight
+            };
+
+            const serviceabilityResponse = await shiprocketService.checkCourierServiceability(serviceabilityParams);
+            const availableCouriers = serviceabilityResponse?.data?.available_courier_companies || [];
+
+            if (availableCouriers.length > 0) {
+              // Select best courier (first one - usually recommended by Shiprocket)
+              const selectedCourier = availableCouriers[0];
+              const courierId = selectedCourier.courier_company_id;
+              
+              console.log(`[Shiprocket] ✅ Selected Courier: ${selectedCourier.courier_name} (ID: ${courierId})`);
+              console.log(`[Shiprocket]   Rate: ₹${selectedCourier.rate}`);
+              console.log(`[Shiprocket]   EDD: ${selectedCourier.etd}`);
+
+              // STEP 5: Assign AWB to shipment
+              console.log('\n[Shiprocket] ─── STEP 5: Assigning AWB ────────────────────────');
+              try {
+                const awbResponse = await shiprocketService.assignAwbToShipment(shipmentId, courierId);
+                console.log('[Shiprocket] AWB Response:', JSON.stringify(awbResponse, null, 2));
+
+                if (awbResponse?.awb_code || awbResponse?.data?.awb_code) {
+                  const awbCode = awbResponse.awb_code || awbResponse.data.awb_code;
+                  const courierName = awbResponse.courier_name || awbResponse.data?.courier_name || selectedCourier.courier_name;
+                  
+                  order.delivery_tracking.tracking_number = String(awbCode);
+                  order.delivery_tracking.courier_partner = String(courierName);
+                  
+                  console.log(`[Shiprocket] ✅ AWB Assigned: ${awbCode}`);
+                  console.log(`[Shiprocket] ✅ Courier: ${courierName}`);
+
+                  // STEP 6: Generate Pickup
+                  console.log('\n[Shiprocket] ─── STEP 6: Generating Pickup ────────────────────');
+                  try {
+                    const pickupResponse = await shiprocketService.generatePickup(shipmentId);
+                    order.pickup_generated = true;
+                    order.pickup_response = pickupResponse;
+                    
+                    console.log('[Shiprocket] Pickup Response:', JSON.stringify(pickupResponse, null, 2));
+                    console.log(`[Shiprocket] ✅ Pickup Generated Successfully!`);
+                    
+                    // Update vendor status
+                    order.vendor_status = 'preparing';
+                    order.order_status = 'processing';
+                    
+                  } catch (pickupError) {
+                    console.error('[Shiprocket] ⚠️ Pickup generation failed:', pickupError.message);
+                    // Don't fail the whole process
+                  }
+                }
+              } catch (awbError) {
+                console.error('[Shiprocket] ⚠️ AWB assignment failed:', awbError.message);
+                // AWB might be auto-assigned by Shiprocket, continue
+              }
+            } else {
+              console.log('[Shiprocket] ⚠️ No couriers available for this route');
+            }
+          } else {
+            console.log('[Shiprocket] ⚠️ No delivery postcode found');
+          }
+        } catch (serviceabilityError) {
+          console.error('[Shiprocket] ⚠️ Serviceability check failed:', serviceabilityError.message);
+          // Continue - cron job will handle this later
+        }
+
+        // Save everything
+        order.order_notes = (order.order_notes || '') + `\n[Shiprocket] Order created. Shipment ID: ${shipmentId}`;
+        await order.save();
+
+        console.log('\n[Shiprocket] ✅ COMPLETE FLOW FINISHED!');
+        console.log(`[Shiprocket]   shiprocket_order_id   : ${order.shiprocket_order_id}`);
+        console.log(`[Shiprocket]   shiprocket_shipment_id: ${order.shiprocket_shipment_id}`);
+        console.log(`[Shiprocket]   awb_code              : ${order.delivery_tracking.tracking_number || 'pending'}`);
+        console.log(`[Shiprocket]   courier_name          : ${order.delivery_tracking.courier_partner || 'pending'}`);
+        console.log(`[Shiprocket]   pickup_generated      : ${order.pickup_generated || false}`);
+        console.log(`[Shiprocket]   vendor_status         : ${order.vendor_status}`);
+        console.log('========================================\n');
+      }
+    } catch (shiprocketError) {
+      console.error('\n[Shiprocket] ❌ FAILED!');
+      console.error(`[Shiprocket]   Error Message: ${shiprocketError.message}`);
+      console.error('========================================\n');
+      order.order_notes = (order.order_notes || '') + `\n[Shiprocket Sync Failed] Error: ${shiprocketError.message}`;
+      await order.save();
+    }
+  } else {
+    console.log('[Shiprocket] ⏭ Skipped — delivery_type is not "shipping" OR already synced.');
+    console.log('========================================\n');
+  }
+};
 
 // Verify payment and update order
 const verifyPayment = catchAsync(async (req, res) => {
@@ -220,6 +498,9 @@ const verifyPayment = catchAsync(async (req, res) => {
   });
 
   await order.save();
+
+  // Sync to Shiprocket if required
+  await syncOrderToShiprocket(order);
 
   // Update cart items to ordered status
   await Cart.updateMany(
@@ -719,7 +1000,10 @@ const razorpayWebhook = catchAsync(async (req, res) => {
         });
         
         await order.save();
-        
+
+        // Sync to Shiprocket if required
+        await syncOrderToShiprocket(order);
+
         // Update cart items
         await Cart.updateMany(
           { user_id: order.user_id, status: 'active' },

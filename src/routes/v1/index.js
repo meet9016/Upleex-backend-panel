@@ -43,6 +43,8 @@ const appVersionRoute = require('./appVersion.route');
 const generalPlanRoute = require('./generalPlan.route');
 const dynamicPageRoute = require('./dynamicPage.route');
 const settingsRoute = require('./settings.route');
+const addressRoute = require('./address.route');
+const shippingRoute = require('./shipping.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -226,6 +228,12 @@ const defaultRoutes = [
   {
     path: '/settings',
     route: settingsRoute,
+    path: '/addresses',
+    route: addressRoute,
+  },
+  {
+    path: '/shipping',
+    route: shippingRoute,
   },
 ];
 

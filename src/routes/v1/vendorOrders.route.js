@@ -5,6 +5,8 @@ const {
   getOrderDetails,
   getDeliveryStatusOptions,
   bulkUpdateOrderStatus,
+  updateShiprocketOrder,
+  trackShipment,
 } = require('../../controllers/vendorOrder.controller');
 const auth = require('../../middlewares/auth');
 
@@ -24,5 +26,11 @@ router.put('/:orderId/status', auth('vendor'), updateOrderStatus.handler);
 
 // Bulk update order status
 router.put('/bulk/status', auth('vendor'), bulkUpdateOrderStatus.handler);
+
+// Update Shiprocket order details (fetch latest status/AWB)
+router.post('/:orderId/shiprocket/update', auth('vendor'), updateShiprocketOrder.handler);
+
+// Track shipment via AWB
+router.post('/:orderId/shiprocket/track', auth('vendor'), trackShipment.handler);
 
 module.exports = router;
