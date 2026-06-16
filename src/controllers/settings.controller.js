@@ -5,7 +5,7 @@ const { Setting } = require('../models');
 const getSetting = catchAsync(async (req, res) => {
   const setting = await Setting.findOne({ key: req.params.key });
   if (!setting) {
-    return res.status(httpStatus.NOT_FOUND).json({ success: false, message: 'Setting not found', data: { value: null } });
+    return res.status(httpStatus.OK).json({ success: true, data: { value: null } });
   }
   res.status(httpStatus.OK).json({ success: true, data: setting });
 });
