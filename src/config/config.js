@@ -31,6 +31,9 @@ const envVarsSchema = Joi.object()
     SMS_GATEWAY_HUB_SENDER_ID: Joi.string().description('SMS Gateway Hub Sender ID'),
     SMS_GATEWAY_HUB_ENTITY_ID: Joi.string().allow('').optional().description('DLT Entity ID'),
     SMS_GATEWAY_HUB_TEMPLATE_ID: Joi.string().allow('').optional().description('DLT Template ID'),
+    SHIPROCKET_EMAIL: Joi.string().allow('').optional().description('Shiprocket login email'),
+    SHIPROCKET_PASSWORD: Joi.string().allow('').optional().description('Shiprocket login password'),
+    SHIPROCKET_PICKUP_LOCATION: Joi.string().allow('').optional().description('Shiprocket default pickup location'),
   })
   .unknown();
 
@@ -78,5 +81,10 @@ module.exports = {
     senderId: envVars.SMS_GATEWAY_HUB_SENDER_ID,
     entityId: envVars.SMS_GATEWAY_HUB_ENTITY_ID,
     templateId: envVars.SMS_GATEWAY_HUB_TEMPLATE_ID,
+  },
+  shiprocket: {
+    email: envVars.SHIPROCKET_EMAIL,
+    password: envVars.SHIPROCKET_PASSWORD,
+    pickupLocation: envVars.SHIPROCKET_PICKUP_LOCATION || 'Primary',
   },
 };

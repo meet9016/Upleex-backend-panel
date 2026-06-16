@@ -34,3 +34,5 @@ module.exports.AdminNotification = require('./adminNotification.model');
 module.exports.VendorNotification = require('./vendorNotification.model');
 module.exports.Notification = require('./notification.model');
 
+module.exports.Setting = require('./setting.model');
+module.exports.Address = require('./address.model');

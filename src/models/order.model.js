@@ -16,6 +16,10 @@ const orderItemSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    sku: {
+      type: String,
+      default: '',
+    },
     product_image: {
       type: String,
       default: '',
@@ -70,6 +74,44 @@ const orderSchema = new mongoose.Schema(
       default: '',
     },
     items: [orderItemSchema],
+    delivery_type: {
+      type: String,
+      enum: ['face_to_face', 'shipping'],
+      default: 'face_to_face',
+    },
+    shipping_address: {
+      name: String,
+      phone: String,
+      alternate_phone: String,
+      address_line1: String,
+      address_line2: String,
+      city: String,
+      state: String,
+      pincode: String,
+      country: { type: String, default: 'India' },
+    },
+    shiprocket_order_id: {
+      type: String,
+      default: '',
+    },
+    shiprocket_shipment_id: {
+      type: String,
+      default: '',
+    },
+    shiprocket_response: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    pickup_generated: {
+      type: Boolean,
+      default: false
+    },
+    pickup_response: {
+      type: mongoose.Schema.Types.Mixed
+    },
+    tracking_response: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
     subtotal: {
       type: Number,
       required: true,
@@ -140,6 +182,10 @@ const orderSchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+      status: {
+        type: String,
+        default: '',
+      },
       estimated_delivery: {
         type: Date,
       },
@@ -147,6 +193,7 @@ const orderSchema = new mongoose.Schema(
         status: String,
         message: String,
         location: String,
+        date: String,
         timestamp: {
           type: Date,
           default: Date.now,

@@ -9,6 +9,14 @@ const productApprovalController = require('../../controllers/productApproval.con
 const router = express.Router();
 
 router.post(
+  '/generate-sku',
+  auth(),
+  upload.none(),
+  validate(productsController.generateSKUAPI.validation),
+  catchAsync(productsController.generateSKUAPI.handler)
+);
+
+router.post(
   '/create-product',
   auth(),
   upload.fields([

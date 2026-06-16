@@ -115,8 +115,13 @@ const saveKyc = {
 
       if (bank && bank.account_type) {
         try {
-          const at = await AccountType.findById(bank.account_type);
-          if (at) bank.account_type_name = at.type_name;
+          const mongoose = require('mongoose');
+          if (mongoose.Types.ObjectId.isValid(bank.account_type)) {
+            const at = await AccountType.findById(bank.account_type);
+            if (at) bank.account_type_name = at.type_name;
+          } else {
+            bank.account_type_name = bank.account_type;
+          }
         } catch (e) { }
       }
 
@@ -344,8 +349,13 @@ const getSingleKyc = {
 
       if (dataObj?.Bank?.account_type && !dataObj?.Bank?.account_type_name) {
         try {
-          const at = await AccountType.findById(dataObj.Bank.account_type);
-          if (at) dataObj.Bank.account_type_name = at.type_name;
+          const mongoose = require('mongoose');
+          if (mongoose.Types.ObjectId.isValid(dataObj.Bank.account_type)) {
+            const at = await AccountType.findById(dataObj.Bank.account_type);
+            if (at) dataObj.Bank.account_type_name = at.type_name;
+          } else {
+            dataObj.Bank.account_type_name = dataObj.Bank.account_type;
+          }
         } catch (e) { }
       }
       return res.status(200).json({
@@ -418,7 +428,8 @@ const listKyc = {
         .skip(skip)
         .limit(limit);
 
-      const ids = [...new Set(docs.map(d => (d.toJSON().Bank?.account_type || '')).filter(Boolean))];
+      const mongoose = require('mongoose');
+      const ids = [...new Set(docs.map(d => (d.toJSON().Bank?.account_type || '')).filter(Boolean).filter(id => mongoose.Types.ObjectId.isValid(id)))];
       let atMap = {};
       const validIds = ids.filter(id => mongoose.Types.ObjectId.isValid(id));
       if (validIds.length > 0) {
@@ -428,7 +439,11 @@ const listKyc = {
       const dataArr = docs.map((d) => {
         const obj = d.toJSON();
         if (obj?.Bank?.account_type && !obj?.Bank?.account_type_name) {
-          obj.Bank.account_type_name = atMap[String(obj.Bank.account_type)] || '';
+          if (mongoose.Types.ObjectId.isValid(obj.Bank.account_type)) {
+            obj.Bank.account_type_name = atMap[String(obj.Bank.account_type)] || '';
+          } else {
+            obj.Bank.account_type_name = obj.Bank.account_type;
+          }
         }
         return obj;
       });

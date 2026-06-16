@@ -12,6 +12,8 @@ const createOrderValidation = {
   body: Joi.object().keys({
     order_notes: Joi.string().allow('').optional(),
     payment_type: Joi.string().valid('full', '30_percent').default('full').optional(),
+    delivery_type: Joi.string().valid('face_to_face', 'shipping').default('face_to_face').optional(),
+    address_id: Joi.string().allow(null, '').optional(),
   }).options({ allowUnknown: true }),
 };
 

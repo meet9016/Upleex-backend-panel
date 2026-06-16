@@ -208,6 +208,50 @@ productSchema.pre('save', function(next) {
   if (this.product_type_id === '') {
     this.product_type_id = null;
   }
+
+  // Generate unique slug
+  if (this.isModified('product_name') || !this.slug) {
+    let baseSlug = generateSlug(this.product_name);
+    let uniqueSlug = baseSlug;
+    let counter = 1;
+
+    //use constructor to access the model
+    const ProductModel = this.constructor;
+    while (true) {
+      const existingProduct = await ProductModel.findOne({ slug: uniqueSlug });
+      if (!existingProduct || existingProduct._id.equals(this._id)) {
+        break;
+      }
+      uniqueSlug = `${baseSlug}${counter}`;
+      counter++;
+    }
+    this.slug = uniqueSlug;
+  }
+
+  
+  if (this.product_type_name === 'Sell') {
+    this.is_out_of_stock = (this.available_quantity || 0) <= 0;
+  }
+  
+  next();
+});
+
+productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next) {
+  const update = this.getUpdate();
+  const setUpdate = update.$set || update;
+  
+  if (setUpdate.product_type_name || setUpdate.available_quantity) {
+    const productTypeName = setUpdate.product_type_name;
+    const availableQty = setUpdate.available_quantity;
+    
+    if (productTypeName === 'Sell' || availableQty !== undefined) {
+      const finalAvailableQty = availableQty !== undefined ? Number(availableQty) : undefined;
+      if (finalAvailableQty !== undefined) {
+        setUpdate.is_out_of_stock = finalAvailableQty <= 0;
+      }
+    }
+  }
+  
   next();
 });
 

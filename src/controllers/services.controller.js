@@ -68,12 +68,12 @@ const createService = {
 
       data.status = 'active';
       data.approval_status = 'pending';
-      
+
       // Set initial service expiry (1 month from creation for ₹29 service fee)
       const moment = require('moment');
       data.expires_at = moment().add(1, 'month').toDate();
       data.service_fee_paid = true;
-      
+
       // Set initial listing expiry (1 month from creation for ₹29 listing fee)
       data.listing_expires_at = moment().add(1, 'month').toDate();
       data.listing_fee_paid = true;
@@ -211,7 +211,7 @@ const getAllServices = {
           { description: searchRegex },
           { category_name: searchRegex },
         ];
-        
+
         if (query.$or) {
           query.$and = [{ $or: query.$or }, { $or: searchQuery }];
           delete query.$or;
@@ -244,13 +244,13 @@ const getAllServices = {
       const vendorIds = [...new Set(services.map((s) => s.vendor_id).filter((id) => !!id))];
       let vendorMap = {};
       if (vendorIds.length) {
-        const kycs = await VendorKyc.find({ 'ContactDetails.vendor_id': { $in: vendorIds } }, { 
-          'ContactDetails.vendor_id': 1, 
-          'ContactDetails.city_id': 1, 
-          'ContactDetails.city_name': 1, 
-          'ContactDetails.full_name': 1, 
+        const kycs = await VendorKyc.find({ 'ContactDetails.vendor_id': { $in: vendorIds } }, {
+          'ContactDetails.vendor_id': 1,
+          'ContactDetails.city_id': 1,
+          'ContactDetails.city_name': 1,
+          'ContactDetails.full_name': 1,
           'ContactDetails.address': 1,
-          'Identity.business_name': 1 
+          'Identity.business_name': 1
         });
         kycs.forEach((k) => {
           const contact = k.ContactDetails || {};
