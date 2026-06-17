@@ -231,7 +231,7 @@ const approveProduct = {
         return res.status(400).json({ message: 'Product is already approved' });
       }
 
-      let usedGeneralPlan = false;
+      let usedPlan = false;
       // If approving a paid product, check general plan quota, otherwise deduct money from wallet
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
         const isDemo = await walletService.isDemoVendor(product.vendor_id);
@@ -251,11 +251,24 @@ const approveProduct = {
             }
           }
 
+          if (!planToUse) {
+            const activeListingPlans = await ListingPlanPurchase.find({
+              vendor_id: product.vendor_id,
+              expire_at: { $gt: new Date() }
+            });
+            for (const p of activeListingPlans) {
+              if (p.is_unlimited || (p.product_ids || []).length < p.max_products) {
+                planToUse = p;
+                break;
+              }
+            }
+          }
+
           if (planToUse) {
             if (!planToUse.product_ids) planToUse.product_ids = [];
             planToUse.product_ids.push(product._id);
             await planToUse.save();
-            usedGeneralPlan = true;
+            usedPlan = true;
           } else {
             const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
             
@@ -385,8 +398,8 @@ const approveProduct = {
 
       let message = `Product ${newStatus} successfully`;
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
-         if (usedGeneralPlan) {
-            message = 'Product approved successfully. Slot used from General Plan.';
+         if (usedPlan) {
+            message = 'Product approved successfully. Slot used from active plan.';
          } else {
             message = 'Product approved successfully. ₹10 deducted from vendor wallet.';
          }
@@ -442,6 +455,19 @@ const bulkApproveProducts = {
             if ((p.product_ids || []).length < p.max_products) {
               planToUse = p;
               break;
+            }
+          }
+
+          if (!planToUse) {
+            const activeListingPlans = await ListingPlanPurchase.find({
+              vendor_id: product.vendor_id,
+              expire_at: { $gt: new Date() }
+            });
+            for (const p of activeListingPlans) {
+              if (p.is_unlimited || (p.product_ids || []).length < p.max_products) {
+                planToUse = p;
+                break;
+              }
             }
           }
 
@@ -576,7 +602,7 @@ const bulkApproveProducts = {
       const paidProductsCount = products.filter(p => p.pricing_type === 'paid').length;
       let message = `${product_ids.length} products approved successfully`;
       if (paidProductsCount > 0) {
-        message += `. ₹${totalDeductionsCount * 10} total deducted from vendor wallets. ${totalUsedQuotaCount} slots used from general plans.`;
+        message += `. ₹${totalDeductionsCount * 10} total deducted from vendor wallets. ${totalUsedQuotaCount} slots used from active plans.`;
       }
 
       res.status(200).json({
