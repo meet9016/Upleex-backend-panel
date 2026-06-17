@@ -232,8 +232,23 @@ const approveProduct = {
       }
 
       let usedPlan = false;
-      // If approving a paid product, check general plan quota, otherwise deduct money from wallet
+      let alreadyPaid = false;
+
+      // Check if money was already deducted for this product in a previously failed transaction
       if (newStatus === 'approved' && product.pricing_type === 'paid') {
+        const Wallet = require('../models/wallet.model');
+        const wallet = await Wallet.findOne({ vendor_id: product.vendor_id });
+        if (wallet) {
+          alreadyPaid = wallet.transactions.some(tx => 
+            tx.type === 'debit' && 
+            tx.metadata?.purpose === 'paid_listing_fee' && 
+            String(tx.metadata?.product_id) === String(product._id)
+          );
+        }
+      }
+
+      // If approving a paid product, check general plan quota, otherwise deduct money from wallet
+      if (newStatus === 'approved' && product.pricing_type === 'paid' && !alreadyPaid) {
         const isDemo = await walletService.isDemoVendor(product.vendor_id);
         if (!isDemo) {
           const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
@@ -438,10 +453,32 @@ const bulkApproveProducts = {
       let totalUsedQuotaCount = 0;
       const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
 
+      const successfulProductIds = [];
+      const failedProductNames = [];
+
       for (const product of products) {
         if (product.approval_status !== 'approved' && product.pricing_type === 'paid') {
           const isDemo = await walletService.isDemoVendor(product.vendor_id);
-          if (isDemo) continue;
+          if (isDemo) {
+            successfulProductIds.push(product._id);
+            continue;
+          }
+
+          const Wallet = require('../models/wallet.model');
+          const wallet = await Wallet.findOne({ vendor_id: product.vendor_id });
+          let alreadyPaid = false;
+          if (wallet) {
+            alreadyPaid = wallet.transactions.some(tx => 
+              tx.type === 'debit' && 
+              tx.metadata?.purpose === 'paid_listing_fee' && 
+              String(tx.metadata?.product_id) === String(product._id)
+            );
+          }
+
+          if (alreadyPaid) {
+            successfulProductIds.push(product._id);
+            continue;
+          }
 
           // Check for available quota
           const activePlans = await GeneralPlanPurchase.find({
@@ -476,13 +513,13 @@ const bulkApproveProducts = {
             planToUse.product_ids.push(product._id);
             await planToUse.save();
             totalUsedQuotaCount++;
+            successfulProductIds.push(product._id);
           } else {
             const hasBalance = await walletService.hasSufficientBalance(product.vendor_id, 10);
             
             if (!hasBalance) {
-              return res.status(httpStatus.BAD_REQUEST).json({
-                message: `Vendor ${product.vendor_name || product.vendor_id} has insufficient wallet balance for product: ${product.product_name}`
-              });
+              failedProductNames.push(product.product_name);
+              continue; // Skip this product, do not abort the whole request
             }
             
             try {
@@ -499,25 +536,34 @@ const bulkApproveProducts = {
                 }
               );
               totalDeductionsCount++;
+              successfulProductIds.push(product._id);
             } catch (walletError) {
-              return res.status(httpStatus.BAD_REQUEST).json({
-                message: `Failed to process wallet payment for product: ${product.product_name}. Please try again.`
-              });
+              failedProductNames.push(product.product_name);
+              continue; // Skip this product if wallet deduction fails
             }
           }
+        } else {
+          // Free product or already approved, add to successful
+          successfulProductIds.push(product._id);
         }
       }
 
-      // Update all products to approved
+      if (successfulProductIds.length === 0) {
+        return res.status(httpStatus.BAD_REQUEST).json({
+          message: 'Failed to approve any products. Vendors may have insufficient wallet balance.'
+        });
+      }
+
+      // Update successfully processed products to approved
       await Product.updateMany(
-        { _id: { $in: product_ids } },
+        { _id: { $in: successfulProductIds } },
         { $set: { approval_status: 'approved', rejection_reason: '' } }
       );
 
       // Send email notifications (background-ish)
       const sendEmails = async () => {
         try {
-          const approvedProducts = await Product.find({ _id: { $in: product_ids } });
+          const approvedProducts = await Product.find({ _id: { $in: successfulProductIds } });
           const vendorIds = [...new Set(approvedProducts.map(p => p.vendor_id))];
           
           // Fetch vendors from both models for robustness
@@ -589,7 +635,7 @@ const bulkApproveProducts = {
       };
       sendBulkApproveNotifications();
 
-      const vendors = await Product.find({ _id: { $in: product_ids } }, 'vendor_id').lean();
+      const vendors = await Product.find({ _id: { $in: successfulProductIds } }, 'vendor_id').lean();
       const vendorIds = [...new Set(vendors.map(v => String(v.vendor_id || '')))].filter(Boolean);
       const countsByVendor = {};
       for (const vid of vendorIds) {
@@ -600,9 +646,12 @@ const bulkApproveProducts = {
       }
 
       const paidProductsCount = products.filter(p => p.pricing_type === 'paid').length;
-      let message = `${product_ids.length} products approved successfully`;
+      let message = `${successfulProductIds.length} products approved successfully`;
+      if (failedProductNames.length > 0) {
+        message += `. ${failedProductNames.length} failed due to insufficient balance.`;
+      }
       if (paidProductsCount > 0) {
-        message += `. ₹${totalDeductionsCount * 10} total deducted from vendor wallets. ${totalUsedQuotaCount} slots used from active plans.`;
+        message += `. ₹${totalDeductionsCount * 10} deducted from wallets. ${totalUsedQuotaCount} slots used.`;
       }
 
       res.status(200).json({
