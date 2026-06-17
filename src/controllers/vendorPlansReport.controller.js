@@ -102,13 +102,18 @@ const getVendorPlansReportData = async (req) => {
   listingPurchases.forEach(purchase => {
     const rate = purchase.amount || 0;
     const tax = rate * 0.18;
+    
+    let deductedFrom = 'Listing Plan';
+    if (purchase.is_unlimited) deductedFrom = 'Unlimited Plan';
+    else if (purchase.is_extra_per_product) deductedFrom = 'Extra Product';
+
     rawCombinedData.push({
       id: purchase._id ? purchase._id.toString() : 'listing',
       originalCreatedAt: purchase.createdAt || new Date(),
       date: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-',
       transaction_type: 'Listing Plan',
       description: purchase.plan_type || '-',
-      deducted_from: '-',
+      deducted_from: deductedFrom,
       vendor_name: purchase.vendor_id?.full_name || '-',
       business_name: purchase.vendor_id?.business_name || '-',
       vendor_type: purchase.vendor_id?.vendor_type || '-',
@@ -123,13 +128,18 @@ const getVendorPlansReportData = async (req) => {
   priorityPurchases.forEach(purchase => {
     const rate = purchase.amount || 0;
     const tax = rate * 0.18;
+
+    let deductedFrom = 'Priority Plan';
+    if (purchase.is_unlimited || purchase.is_monthly_unlimited || purchase.is_yearly_unlimited) deductedFrom = 'Unlimited Plan';
+    else if (purchase.is_extra_per_product || purchase.is_monthly_extra || purchase.is_yearly_extra) deductedFrom = 'Extra Product';
+
     rawCombinedData.push({
       id: purchase._id ? purchase._id.toString() : 'priority',
       originalCreatedAt: purchase.createdAt || new Date(),
       date: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-',
       transaction_type: 'Priority Plan',
       description: purchase.plan_name || '-',
-      deducted_from: '-',
+      deducted_from: deductedFrom,
       vendor_name: purchase.vendor_id?.full_name || '-',
       business_name: purchase.vendor_id?.business_name || '-',
       vendor_type: purchase.vendor_id?.vendor_type || '-',
@@ -150,7 +160,7 @@ const getVendorPlansReportData = async (req) => {
       date: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-',
       transaction_type: 'Rental Boost',
       description: purchase.plan_name || '-',
-      deducted_from: '-',
+      deducted_from: 'Rental Boost',
       vendor_name: purchase.vendor_name || purchase.vendor_id?.full_name || '-',
       business_name: purchase.vendor_id?.business_name || '-',
       vendor_type: purchase.vendor_id?.vendor_type || '-',
@@ -171,7 +181,7 @@ const getVendorPlansReportData = async (req) => {
       date: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : (purchase.created_at ? new Date(purchase.created_at).toLocaleDateString('en-GB') : '-'),
       transaction_type: 'General Plan',
       description: purchase.plan_type || '-',
-      deducted_from: '-',
+      deducted_from: 'General Plan',
       vendor_name: purchase.vendor_id?.full_name || '-',
       business_name: purchase.vendor_id?.business_name || '-',
       vendor_type: purchase.vendor_id?.vendor_type || '-',
@@ -192,9 +202,9 @@ const getVendorPlansReportData = async (req) => {
       id: tx._id ? tx._id.toString() : 'wallet',
       originalCreatedAt: tx.createdAt || new Date(),
       date: tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('en-GB') : '-',
-      transaction_type: '-',
+      transaction_type: 'Per Product Fee',
       description: tx.description || 'Product Addition',
-      deducted_from: 'Wallet',
+      deducted_from: 'Extra Product (Wallet)',
       vendor_name: vendor?.full_name || '-',
       business_name: vendor?.business_name || '-',
       vendor_type: vendor?.vendor_type || '-',
