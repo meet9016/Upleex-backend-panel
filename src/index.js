@@ -5,9 +5,8 @@ const socketService = require('./services/socket.service');
 const config = require('./config/config');
 const logger = require('./config/logger');
 const { initPaymentReleaseCron } = require('./utils/paymentCron');
-const { startKycReminderCron } = require('./services/cronJobs.service');
-const { initShiprocketTrackingCron } = require('./utils/shiprocketTrackingCron');
 const { startKycReminderCron, startAutoReleasePaymentsCron } = require('./services/cronJobs.service');
+const { initShiprocketTrackingCron } = require('./utils/shiprocketTrackingCron');
 // const { handleServiceExpiry } = require('./utils/serviceExpiryCron');
 
 require('node:dns').setServers(['1.1.1.1','8.8.8.8'])
