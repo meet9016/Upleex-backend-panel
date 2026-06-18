@@ -42,8 +42,9 @@ app.use(
 // Parse json request body
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
-// Parse urlencoded request body
-// app.use(express.urlencoded({ extended: true }));
+
+// Raw body for webhook verification (RazorpayX)
+app.use('/api/v1/webhooks/razorpayx', express.raw({ type: 'application/json' }));
 
 // Sanitize request data
 app.use(xss());

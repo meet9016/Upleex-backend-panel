@@ -45,6 +45,7 @@ const dynamicPageRoute = require('./dynamicPage.route');
 const settingsRoute = require('./settings.route');
 const addressRoute = require('./address.route');
 const shippingRoute = require('./shipping.route');
+const webhooksRoute = require('./webhooks.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -234,6 +235,10 @@ const defaultRoutes = [
   {
     path: '/shipping',
     route: shippingRoute,
+  },
+  {
+    path: '/webhooks',
+    route: webhooksRoute,
   },
 ];
 

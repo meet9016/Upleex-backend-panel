@@ -27,6 +27,8 @@ const envVarsSchema = Joi.object()
     BACKEND_URL: Joi.string().description('the backend url'),
     RAZORPAY_KEY_ID: Joi.string().description('Razorpay Key ID'),
     RAZORPAY_KEY_SECRET: Joi.string().description('Razorpay Key Secret'),
+    RAZORPAYX_ACCOUNT_NUMBER: Joi.string().description('RazorpayX Virtual Account Number for payouts'),
+    RAZORPAY_WEBHOOK_SECRET: Joi.string().description('RazorpayX Webhook Secret for payout status updates'),
     SMS_GATEWAY_HUB_API_KEY: Joi.string().description('SMS Gateway Hub API Key'),
     SMS_GATEWAY_HUB_SENDER_ID: Joi.string().description('SMS Gateway Hub Sender ID'),
     SMS_GATEWAY_HUB_ENTITY_ID: Joi.string().allow('').optional().description('DLT Entity ID'),
@@ -75,6 +77,10 @@ module.exports = {
   razorpay: {
     keyId: envVars.RAZORPAY_KEY_ID,
     keySecret: envVars.RAZORPAY_KEY_SECRET,
+  },
+  razorpayx: {
+    accountNumber: envVars.RAZORPAYX_ACCOUNT_NUMBER,
+    webhookSecret: envVars.RAZORPAY_WEBHOOK_SECRET,
   },
   sms: {
     apiKey: envVars.SMS_GATEWAY_HUB_API_KEY,

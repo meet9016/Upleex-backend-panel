@@ -51,6 +51,10 @@ const vendorKycSchema = new mongoose.Schema(
     completed_pages: { type: [String], default: [] },
     vendor_type: { type: String, default: 'both' },
     approved_at: { type: Date },
+    // RazorpayX fields for real money payouts
+    razorpayx_contact_id: { type: String, default: '' },
+    fund_account_id: { type: String, default: '' },
+    payout_enabled: { type: Boolean, default: false },
   },
   {
     timestamps: true,
