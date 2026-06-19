@@ -74,6 +74,10 @@ const productSchema = new mongoose.Schema(
     hsnCode: {
       type: String,
     },
+    gst: {
+      type: Number,
+      default: 0,
+    },
     description: {
       type: String,
     },

@@ -145,6 +145,8 @@ const createProduct = {
       sku: Joi.string().trim().allow(''),
       price: Joi.string().allow(''),
       cancel_price: Joi.string().allow(''),
+      hsnCode: Joi.string().allow(''),
+      gst: Joi.number().allow('').optional(),
       description: Joi.string().allow(''),
       product_main_image: Joi.string().allow(''),
       category_name: Joi.string().allow(''),
@@ -399,6 +401,7 @@ const createProduct = {
         if (subDoc) {
           data.sub_category_name = subDoc.name;
           data.hsnCode = data.hsnCode || (subDoc.hsnCodes && subDoc.hsnCodes.length > 0 ? subDoc.hsnCodes[0].code : '');
+          data.gst = data.gst !== undefined ? data.gst : (subDoc.gst || 0);
         }
       }
 
@@ -1297,6 +1300,8 @@ const updateProduct = {
         sku: Joi.string().trim().allow(''),
         price: Joi.string().allow(''),
         cancel_price: Joi.string().allow(''),
+        hsnCode: Joi.string().allow(''),
+        gst: Joi.number().allow('').optional(),
         description: Joi.string().allow(''),
         product_main_image: Joi.string().allow(''),
         category_name: Joi.string().allow(''),
@@ -1502,6 +1507,7 @@ const updateProduct = {
         if (subDoc) {
           body.sub_category_name = subDoc.name;
           body.hsnCode = body.hsnCode || subDoc.hsnCode || '';
+          body.gst = body.gst !== undefined ? body.gst : (subDoc.gst || 0);
         }
       }
 

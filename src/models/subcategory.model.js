@@ -37,6 +37,10 @@ const subCategorySchema = mongoose.Schema(
       materialType: { type: String, trim: true },
       code: { type: String, trim: true }
     }],
+    gst: {
+      type: Number,
+      default: 0,
+    },
     image: {
       type: String,
     },
