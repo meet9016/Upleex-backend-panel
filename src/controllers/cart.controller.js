@@ -80,7 +80,7 @@ const listCart = catchAsync(async (req, res) => {
     const priceNum = Number(p?.price || 0) || 0;
     const qty = Number(item.qty || 1) || 1;
     const subTotal = priceNum * qty;
-    const gstPer = 18; // 18% GST
+    const gstPer = Number(p?.gst) || 0;
     const gstAmount = (subTotal * gstPer) / 100;
     const finalAmount = subTotal + gstAmount;
 
@@ -99,6 +99,8 @@ const listCart = catchAsync(async (req, res) => {
       product_type_name: p?.product_type_name || '',
       available_quantity: p?.available_quantity || 0,
       is_out_of_stock: p?.is_out_of_stock || false,
+      sub_category_id: p?.sub_category_id?.toString() || '',
+      sub_category_name: p?.sub_category_name || '',
     };
   });
 
@@ -117,7 +119,6 @@ const listCart = catchAsync(async (req, res) => {
       total_items: mapped.length,
       subtotal: totalSubtotal.toFixed(2),
       gst_amount: totalGst.toFixed(2),
-      gst_percentage: '18',
       delivery_charges: deliveryCharges.toFixed(2),
       installation_charges: installationCharges.toFixed(2),
       grand_total: grandTotal.toFixed(2),
@@ -161,7 +162,7 @@ const updateCartItem = catchAsync(async (req, res) => {
   const priceNum = Number(p?.price || 0) || 0;
   const newQty = Number(cartItem.qty || 1) || 1;
   const subTotal = priceNum * newQty;
-  const gstPer = 18;
+  const gstPer = Number(p?.gst) || 0;
   const gstAmount = (subTotal * gstPer) / 100;
   const finalAmount = subTotal + gstAmount;
 
@@ -179,6 +180,8 @@ const updateCartItem = catchAsync(async (req, res) => {
     product_type_name: p?.product_type_name || '',
     available_quantity: p?.available_quantity || 0,
     is_out_of_stock: p?.is_out_of_stock || false,
+    sub_category_id: p?.sub_category_id?.toString() || '',
+    sub_category_name: p?.sub_category_name || '',
   };
 
   // Get all cart items and recalculate summary
@@ -192,7 +195,8 @@ const updateCartItem = catchAsync(async (req, res) => {
     const price = Number(prod?.price || 0) || 0;
     const quantity = Number(item.qty || 1) || 1;
     const sub = price * quantity;
-    const gst = (sub * 18) / 100;
+    const gstPer = Number(prod?.gst) || 0;
+    const gst = (sub * gstPer) / 100;
     const final = sub + gst;
 
     return {
@@ -201,7 +205,7 @@ const updateCartItem = catchAsync(async (req, res) => {
       price: String(prod?.price || '0'),
       qty: String(quantity),
       sub_total: sub.toFixed(2),
-      gst_per: '18',
+      gst_per: String(gstPer),
       gst_amount: gst.toFixed(2),
       final_amount: final.toFixed(2),
       image: prod?.product_main_image || '',
@@ -209,6 +213,8 @@ const updateCartItem = catchAsync(async (req, res) => {
       product_type_name: prod?.product_type_name || '',
       available_quantity: prod?.available_quantity || 0,
       is_out_of_stock: prod?.is_out_of_stock || false,
+      sub_category_id: prod?.sub_category_id?.toString() || '',
+      sub_category_name: prod?.sub_category_name || '',
     };
   });
 
@@ -227,7 +233,6 @@ const updateCartItem = catchAsync(async (req, res) => {
       total_items: mapped.length,
       subtotal: totalSubtotal.toFixed(2),
       gst_amount: totalGst.toFixed(2),
-      gst_percentage: '18',
       delivery_charges: deliveryCharges.toFixed(2),
       installation_charges: installationCharges.toFixed(2),
       grand_total: grandTotal.toFixed(2),
