@@ -74,6 +74,10 @@ const productSchema = new mongoose.Schema(
     hsnCode: {
       type: String,
     },
+    gst: {
+      type: Number,
+      default: 0,
+    },
     description: {
       type: String,
     },
@@ -206,11 +210,12 @@ productSchema.plugin(toJSON);
 
 // Helper to generate a URL-friendly slug
 const generateSlug = (text) => {
-  return text
+  const safeText = text || '';
+  return safeText
     .toString()
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '');
+    .replace(/[^a-z0-9]+/g, '') || `product-${Date.now()}`; // Fallback to avoid empty slug
 };
 
 // Pre-save hook to convert empty strings to null for ObjectId fields and generate slug

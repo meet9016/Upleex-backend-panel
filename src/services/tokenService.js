@@ -2,7 +2,19 @@ const jwt = require('jsonwebtoken');
 const { tokenTypes } = require('../config/tokens');
 const config = require('../config/config');
 
-const generateAuthTokens = async (user, userType = 'user') => {
+const generateAuthTokens = async (user, userType = 'user', rememberMe = false) => {
+  let expiresIn;
+  if (userType === 'vendor') {
+    // Vendor: fixed 48 hours
+    expiresIn = '48h';
+  } else if (rememberMe) {
+    // User with remember me: 15 days
+    expiresIn = '15d';
+  } else {
+    // Default: 1 day
+    expiresIn = '1d';
+  }
+
   const accessToken = jwt.sign(
     { 
       sub: user.id || user._id, 
@@ -11,7 +23,7 @@ const generateAuthTokens = async (user, userType = 'user') => {
       userType: userType
     },
     config.jwt.secret,
-    { expiresIn: '1d' }
+    { expiresIn }
   );
   return { access: accessToken };
 };

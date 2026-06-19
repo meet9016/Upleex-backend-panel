@@ -185,6 +185,7 @@ const createSubCategory = {
       id: Joi.string().required(),
       name: Joi.string().trim().required(),
       hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
+      gst: Joi.number().optional().default(0),
       image: Joi.string().allow(),
       seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
     }),
@@ -236,6 +237,7 @@ const createSubCategory = {
         categoryId: id,
         name: req.body.name,
         hsnCodes: parsedHsnCodes,
+        gst: req.body.gst || 0,
         image: imageUrl,
         seo_content: seoContent,
       });
@@ -248,6 +250,7 @@ const createSubCategory = {
           categoryId: subCategory.categoryId,
           name: subCategory.name,
           hsnCodes: subCategory.hsnCodes,
+          gst: subCategory.gst,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,
@@ -289,6 +292,8 @@ const getAllSubCategories = {
           categoryId: item.categoryId,
           name: item.name,
           hsnCode: item.hsnCode,
+          hsnCodes: item.hsnCodes,
+          gst: item.gst,
           image: item.image,
           created_at: item.createdAt,
           updated_at: item.updatedAt,
@@ -323,6 +328,7 @@ const getSubCategoryById = {
         categoryId: subCategory.categoryId,
         name: subCategory.name,
         hsnCodes: subCategory.hsnCodes,
+        gst: subCategory.gst,
         image: subCategory.image,
         created_at: subCategory.createdAt,
         updated_at: subCategory.updatedAt,
@@ -343,6 +349,7 @@ const updateSubCategory = {
         id: Joi.string().required(),
         name: Joi.string().trim().required(),
         hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
+        gst: Joi.number().optional(),
         image: Joi.string().allow(),
         seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
       })
@@ -424,6 +431,10 @@ const updateSubCategory = {
         }
         updateData.hsnCodes = parsedHsnCodes;
       }
+      
+      if (req.body.gst !== undefined) {
+        updateData.gst = req.body.gst;
+      }
 
       if (req.body.seo_content !== undefined) {
         updateData.seo_content = parseSeoContentInput(req.body.seo_content);
@@ -451,6 +462,7 @@ const updateSubCategory = {
           categoryId: subCategory.categoryId,
           name: subCategory.name,
           hsnCodes: subCategory.hsnCodes,
+          gst: subCategory.gst,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,

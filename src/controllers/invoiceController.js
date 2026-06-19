@@ -90,9 +90,8 @@ const generateInvoicePDF = async (req, res) => {
     const subTotal = isQuote ? (data.totalPrice || data.calculatedPrice || 0) : (data.totalAmount || 0);
     
     const paymentMethod = data.paymentMode || data.paymentMethod || (data.paymentStatus?.toLowerCase() === 'paid' ? 'Online/Prepaid' : 'Pending');
-    const gstRate = 18;
-    const totalGst = (subTotal * gstRate) / (100 + gstRate);
-    const subtotalExclGst = subTotal - totalGst;
+    const totalGst = data.gstAmount || data.gst_amount || (isQuote ? 0 : 0);
+    const subtotalExclGst = data.subTotal || data.subtotal || (subTotal - totalGst);
     
     const orderStatus = data.vendorStatus || data.status || 'Pending';
 
@@ -397,7 +396,7 @@ const generateInvoicePDF = async (req, res) => {
     doc.text(`Rs. ${Number(subtotalExclGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 70 });
     
     calcY += 18;
-    doc.text('Tax (IGST 18%)', calcX + 10, calcY);
+    doc.text('Tax (GST)', calcX + 10, calcY);
     doc.text(`Rs. ${Number(totalGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 70 });
     
     calcY += 18;

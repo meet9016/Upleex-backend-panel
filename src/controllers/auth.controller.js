@@ -54,6 +54,7 @@ const register = {
         'string.pattern.base': 'Phone number must be between 10 and 15 digits'
       }),
       password: Joi.string().required().min(6),
+      rememberMe: Joi.boolean().optional(),
     }),
   },
 
@@ -80,7 +81,7 @@ const register = {
       const newUser = await new User(req.body).save();
 
       // 3️⃣ Generate auth token
-      const token = await tokenService.generateAuthTokens(newUser, 'user');
+      const token = await tokenService.generateAuthTokens(newUser, 'user', req.body.rememberMe);
 
       // 4️⃣ Send welcome email
 
@@ -116,10 +117,11 @@ const login = {
       email: Joi.string().required().email(),
       password: Joi.string().required(),
       platform: Joi.string().valid('web', 'ios', 'android').optional(),
+      rememberMe: Joi.boolean().optional(),
     }),
   },
   handler: async (req, res) => {
-    const { email, password, platform } = req.body;
+    const { email, password, platform, rememberMe } = req.body;
 
     const user = await User.findOne({ email });
     if (!user || !(await user.isPasswordMatch(password))) {
@@ -132,7 +134,7 @@ const login = {
       await user.save();
     }
 
-    const token = await tokenService.generateAuthTokens(user, 'user');
+    const token = await tokenService.generateAuthTokens(user, 'user', rememberMe);
     return res.status(httpStatus.OK).send({
       token: token.access,
       user: {
@@ -336,11 +338,12 @@ const webLoginRegister = {
       email: Joi.string().optional(),
       url: Joi.string().optional(),
       platform: Joi.string().valid('web', 'ios', 'android').optional(),
+      rememberMe: Joi.boolean().optional(),
     }),
   },
   handler: async (req, res) => {
     try {
-      const { number, country_id, otp, name, email, url, platform: manualPlatform } = req.body;
+      const { number, country_id, otp, name, email, url, platform: manualPlatform, rememberMe } = req.body;
 
       const user = await User.findOne({ phone: number });
 
@@ -491,7 +494,7 @@ const webLoginRegister = {
           platform: detectedPlatform || 'web'
         });
 
-        const token = await tokenService.generateAuthTokens(newUser, 'user');
+        const token = await tokenService.generateAuthTokens(newUser, 'user', rememberMe);
 
         return res.status(200).send({
           status: 200,
@@ -520,7 +523,7 @@ const webLoginRegister = {
         await user.save();
       }
 
-      const token = await tokenService.generateAuthTokens(user, 'user');
+      const token = await tokenService.generateAuthTokens(user, 'user', rememberMe);
 
       return res.status(200).send({
         status: 200,

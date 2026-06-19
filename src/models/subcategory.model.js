@@ -37,6 +37,10 @@ const subCategorySchema = mongoose.Schema(
       materialType: { type: String, trim: true },
       code: { type: String, trim: true }
     }],
+    gst: {
+      type: Number,
+      default: 0,
+    },
     image: {
       type: String,
     },
@@ -75,11 +79,12 @@ subCategorySchema.plugin(toJSON);
 
 // Helper to generate a URL-friendly slug
 const generateSlug = (text) => {
-  return text
+  const safeText = text || '';
+  return safeText
     .toString()
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, ''); 
+    .replace(/[^a-z0-9]+/g, '') || `subcategory-${Date.now()}`; // Fallback to avoid empty slug
 };
 
 // Pre-save hook to generate slug
