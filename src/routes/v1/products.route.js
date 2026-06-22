@@ -19,6 +19,13 @@ router.post(
   catchAsync(productsController.createProduct.handler)
 );
 
+router.post(
+  '/generate-sku',
+  auth(),
+  validate(productsController.generateSku.validation),
+  catchAsync(productsController.generateSku.handler)
+);
+
 router.get(
   '/getall',
   auth(true), // Optional auth to detect vendor if logged in

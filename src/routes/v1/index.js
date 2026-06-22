@@ -212,6 +212,10 @@ const defaultRoutes = [
     route: require('./vendorPlansReport.route'),
   },
   {
+    path: '/admin/service-plans-report',
+    route: require('./servicePlansReport.route'),
+  },
+  {
     path: '/app-version',
     route: appVersionRoute,
   },

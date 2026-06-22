@@ -123,28 +123,48 @@ const createPurchase = {
 const getAllPurchases = {
   handler: async (req, res) => {
     try {
-      const vendor_id = req.user.id || req.user._id;
-      const purchases = await ServicePriorityPlanPurchase.find({ vendor_id })
+      const vendor_id = req.query.vendor_id;
+      const query = {};
+
+      if (req.user && req.user.userType === 'vendor') {
+        query.vendor_id = req.user.id || req.user._id;
+      } else if (vendor_id) {
+        query.vendor_id = vendor_id;
+      }
+
+      const { q: searchText } = req.query;
+
+      const purchases = await ServicePriorityPlanPurchase.find(query)
         .populate('service_ids', 'service_name image is_priority priority_expires_at')
         .populate('plan_id', 'monthly_price yearly_price')
+        .populate('vendor_id', 'full_name business_name email')
         .sort({ createdAt: -1 });
 
       // Enhance purchase data with current status
-      const enhancedPurchases = purchases.map(purchase => {
+      let enhancedPurchases = purchases.map(purchase => {
         const now = new Date();
         const isActive = purchase.expire_at > now;
         const daysRemaining = isActive ? Math.ceil((purchase.expire_at - now) / (1000 * 60 * 60 * 24)) : 0;
         
+        const purchaseObj = purchase.toObject();
+        const vendorName = purchaseObj.vendor_id?.business_name || purchaseObj.vendor_id?.full_name || 'Unknown Vendor';
+        
         return {
-          ...purchase.toObject(),
+          ...purchaseObj,
+          vendor_name: vendorName,
           is_active: isActive,
           days_remaining: daysRemaining,
           status: isActive ? 'active' : 'expired',
-          affected_services_count: purchase.service_ids ? purchase.service_ids.length : 0
+          affected_services_count: purchaseObj.service_ids ? purchaseObj.service_ids.length : 0
         };
       });
 
-      res.status(200).json({ success: true, data: enhancedPurchases });
+      if (searchText) {
+        const s = String(searchText).toLowerCase();
+        enhancedPurchases = enhancedPurchases.filter(e => (e.vendor_name || '').toLowerCase().includes(s));
+      }
+
+      res.status(200).json({ success: true, data: enhancedPurchases, total: enhancedPurchases.length });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ 
         message: error.message || 'Failed to fetch purchase history' 

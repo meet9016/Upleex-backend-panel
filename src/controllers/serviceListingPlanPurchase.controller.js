@@ -194,23 +194,46 @@ const createPurchase = {
 
 const getAllPurchases = {
   handler: async (req, res) => {
-    const vendor_id = req.user.id || req.user._id;
-    const data = await ServiceListingPlanPurchase.find({ vendor_id })
+    const vendor_id = req.query.vendor_id;
+    const query = {};
+
+    if (req.user && req.user.userType === 'vendor') {
+      query.vendor_id = req.user.id || req.user._id;
+    } else if (vendor_id) {
+      query.vendor_id = vendor_id;
+    }
+
+    const { plan_type, amount, q: searchText } = req.query;
+    if (plan_type) query.plan_type = plan_type;
+    if (amount) query.amount = { $eq: Number(amount) };
+
+    const data = await ServiceListingPlanPurchase.find(query)
       .populate('service_ids', 'service_name category_name image')
+      .populate('vendor_id', 'full_name business_name email')
       .sort({ createdAt: -1 });
-    
-    // For each service in the purchase, add the plan_name and expire_at
-    const formattedData = data.map(purchase => {
-      const purchaseObj = purchase.toObject();
-      purchaseObj.service_ids = purchaseObj.service_ids.map(service => ({
-        ...service,
-        active_plan_name: purchaseObj.plan_name,
-        expires_at: purchaseObj.expire_at,
-      }));
+
+    let formattedData = data.map(purchase => {
+      const purchaseObj = purchase.toObject ? purchase.toObject() : purchase;
+      if (purchaseObj.service_ids && Array.isArray(purchaseObj.service_ids)) {
+        purchaseObj.service_ids = purchaseObj.service_ids.map(service => ({
+          ...service,
+          active_plan_name: purchaseObj.plan_name,
+          expires_at: purchaseObj.expire_at,
+        }));
+      }
+      
+      const vendorName = purchaseObj.vendor_id?.business_name || purchaseObj.vendor_id?.full_name || 'Unknown Vendor';
+      purchaseObj.vendor_name = vendorName;
+      
       return purchaseObj;
     });
 
-    return res.status(200).json({ success: true, data: formattedData });
+    if (searchText) {
+      const s = String(searchText).toLowerCase();
+      formattedData = formattedData.filter(e => (e.vendor_name || '').toLowerCase().includes(s));
+    }
+
+    return res.status(200).json({ success: true, data: formattedData, total: formattedData.length });
   },
 };
 

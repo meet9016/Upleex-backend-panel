@@ -25,6 +25,8 @@ const {
   exportPriorityPurchasesToPDF,
   exportServicePriorityPurchasesToExcel,
   exportServicePriorityPurchasesToPDF,
+  exportServiceListingPurchasesToExcel,
+  exportServiceListingPurchasesToPDF,
   exportRentalBoostPurchasesToExcel,
   exportRentalBoostPurchasesToPDF,
   exportAllPlanPurchasesToExcel,
@@ -82,6 +84,11 @@ const vendorPlansReportController = require('../../controllers/vendorPlansReport
 router.get('/vendor-plans-report/excel', auth('admin'), vendorPlansReportController.exportVendorPlansReportExcel);
 router.get('/vendor-plans-report/pdf', auth('admin'), vendorPlansReportController.exportVendorPlansReportPDF);
 
+// Service Plans Report export
+const servicePlansReportController = require('../../controllers/servicePlansReport.controller');
+router.get('/service-plans-report/excel', auth('admin'), servicePlansReportController.exportServicePlansReportExcel);
+router.get('/service-plans-report/pdf', auth('admin'), servicePlansReportController.exportServicePlansReportPDF);
+
 // Listing Plans export routes
 router.get('/listing-plans/excel', auth('admin'), exportListingPlansToExcel.handler);
 router.get('/listing-plans/pdf', auth('admin'), exportListingPlansToPDF.handler);
@@ -95,6 +102,10 @@ router.get('/priority-purchases/pdf', auth('admin'), exportPriorityPurchasesToPD
 // Service Priority Purchases export routes
 router.get('/service-priority-purchases/excel', auth('admin'), exportServicePriorityPurchasesToExcel.handler);
 router.get('/service-priority-purchases/pdf', auth('admin'), exportServicePriorityPurchasesToPDF.handler);
+
+// Service Listing Purchases export routes
+router.get('/service-listing-purchases/excel', auth('admin'), exportServiceListingPurchasesToExcel.handler);
+router.get('/service-listing-purchases/pdf', auth('admin'), exportServiceListingPurchasesToPDF.handler);
 
 // Rental Boost Purchases export routes
 router.get('/rental-boost-purchases/excel', auth('admin'), exportRentalBoostPurchasesToExcel.handler);

@@ -12,6 +12,7 @@ const mongoose = require('mongoose');
 const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
 const ServicePriorityPlanPurchase = require('../models/servicePriorityPlanPurchase.model');
+const ServiceListingPlanPurchase = require('../models/serviceListingPlanPurchase.model');
 const RentalBoostPlanPurchase = require('../models/rentalBoostPlanPurchase.model');
 const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
 const User = require('../models/user.model');
@@ -1616,6 +1617,153 @@ const exportPriorityPurchasesToPDF = {
   }
 };
 
+// Export Service Listing Purchases to Excel
+const exportServiceListingPurchasesToExcel = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_type, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_type) {
+        query.plan_name = plan_type;
+      }
+
+      if (amount) {
+        query.amount = Number(amount);
+      }
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ServiceListingPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name email')
+        .sort({ createdAt: -1 });
+
+      const columns = [
+        { header: 'Vendor Name', key: 'vendor_name', width: 20 },
+        { header: 'Business Name', key: 'business_name', width: 20 },
+        { header: 'Plan Name', key: 'plan_name', width: 20 },
+        { header: 'Months', key: 'months', width: 10 },
+        { header: 'Max Services', key: 'max_services', width: 15 },
+        { header: 'Amount (₹)', key: 'amount', width: 15 },
+        { header: 'Services', key: 'services_count', width: 12 },
+        { header: 'Start Date', key: 'start_at', width: 15 },
+        { header: 'Expire Date', key: 'expire_at', width: 15 },
+        { header: 'Created At', key: 'createdAt', width: 15 }
+      ];
+
+      const data = purchases.map(purchase => ({
+        vendor_name: purchase.vendor_id?.full_name || 'N/A',
+        business_name: purchase.vendor_id?.business_name || 'N/A',
+        plan_name: purchase.plan_name || 'N/A',
+        months: purchase.months || 0,
+        max_services: purchase.max_services || 0,
+        amount: purchase.amount ? `₹${Number(purchase.amount).toFixed(2)}` : '₹0.00',
+        services_count: purchase.service_ids?.length || 0,
+        start_at: purchase.start_at ? new Date(purchase.start_at).toLocaleDateString('en-GB') : '-',
+        expire_at: purchase.expire_at ? new Date(purchase.expire_at).toLocaleDateString('en-GB') : '-',
+        createdAt: purchase.createdAt ? new Date(purchase.createdAt).toLocaleDateString('en-GB') : '-'
+      }));
+
+      const filename = `service_listing_purchases_${new Date().toISOString().split('T')[0]}.xlsx`;
+      await exportToExcel(res, data, columns, filename, 'Service Listing Plan Purchases');
+
+    } catch (error) {
+      res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+    }
+  }
+};
+
+// Export Service Listing Purchases to PDF
+const exportServiceListingPurchasesToPDF = {
+  handler: async (req, res) => {
+    try {
+      const { q, plan_type, amount, start_month, expire_month } = req.query;
+
+      const query = {};
+
+      if (q) {
+        const searchRegex = new RegExp(q.trim(), 'i');
+        const vendors = await Vendor.find({
+          $or: [
+            { full_name: searchRegex },
+            { business_name: searchRegex },
+            { email: searchRegex }
+          ]
+        }).select('_id');
+        const vendorIds = vendors.map(v => v._id);
+        if (vendorIds.length > 0) {
+          query.vendor_id = { $in: vendorIds };
+        }
+      }
+
+      if (plan_type) query.plan_name = plan_type;
+      if (amount) query.amount = Number(amount);
+
+      if (start_month) {
+        const year = parseInt(start_month.split('-')[0]);
+        const month = parseInt(start_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.start_at = { $gte: startDate, $lte: endDate };
+      }
+
+      if (expire_month) {
+        const year = parseInt(expire_month.split('-')[0]);
+        const month = parseInt(expire_month.split('-')[1]) - 1;
+        const startDate = new Date(year, month, 1);
+        const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.expire_at = { $gte: startDate, $lte: endDate };
+      }
+
+      const purchases = await ServiceListingPlanPurchase.find(query)
+        .populate('vendor_id', 'full_name business_name')
+        .sort({ createdAt: -1 });
+
+      const filename = `service_listing_purchases_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = 'Service Listing Plan Purchases Report';
+
+      await exportToTreePDF(res, purchases, filename, title);
+
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
+      } else {
+        res.destroy();
+      }
+    }
+  }
+};
+
 // Export Service Priority Purchases to Excel
 const exportServicePriorityPurchasesToExcel = {
   handler: async (req, res) => {
@@ -2292,6 +2440,8 @@ module.exports = {
   exportPriorityPurchasesToPDF,
   exportServicePriorityPurchasesToExcel,
   exportServicePriorityPurchasesToPDF,
+  exportServiceListingPurchasesToExcel,
+  exportServiceListingPurchasesToPDF,
   exportRentalBoostPurchasesToExcel,
   exportRentalBoostPurchasesToPDF,
   exportAllPlanPurchasesToExcel,

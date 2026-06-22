@@ -2484,6 +2484,42 @@ const getRentAvailability = {
   }
 };
 
+const generateSku = {
+  validation: {
+    body: Joi.object().keys({
+      category_id: Joi.string().required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const { category_id } = req.body;
+      const vendorId = req.user._id || req.user.id;
+
+      const category = await Category.findById(category_id);
+      if (!category) {
+        return res.status(404).json({ success: false, message: 'Category not found' });
+      }
+
+      const vendorKyc = await VendorKyc.findOne({ user_id: vendorId }).lean();
+      let businessName = 'VND';
+      if (vendorKyc && vendorKyc.business_name) {
+        businessName = vendorKyc.business_name;
+      } else if (vendorKyc && vendorKyc.Identity && vendorKyc.Identity.business_name) {
+        businessName = vendorKyc.Identity.business_name;
+      }
+
+      const categoryName = category.categories_name || category.name || 'CAT';
+      const counter = await getNextSKUCounter(vendorId);
+      
+      const sku = generateSKU(categoryName, businessName, counter);
+
+      res.status(200).json({ success: true, data: { sku } });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -2498,6 +2534,7 @@ module.exports = {
   webProductSuggestionList,
   webSearchProductList,
   bulkDeactivateProducts,
+  generateSku,
   bulkDeleteProducts,
   purchaseListingPlan,
   updateProductStock,
