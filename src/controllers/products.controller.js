@@ -871,10 +871,13 @@ const getAllProducts = {
 
       const normalizedRaw = await Promise.all(data.map(async (p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
+        const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
+        const productUrl = p.slug ? `${baseUrl}/${p.sub_category_slug || 'product'}/${p.slug}` : `${baseUrl}/product/${p._id}`;
         return {
           ...p.toObject(),
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+          url: productUrl,
           vendor: {
             vendor_id: p.vendor_id,
             vendor_name: p.vendor_name || v.vendor_name || '',
@@ -1153,12 +1156,15 @@ const getVendorProducts = {
       const normalized = data.map((p) => {
         const cat = catMap[p.category_id] || {};
         const sub = subMap[p.sub_category_id] || {};
+        const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
+        const productUrl = p.slug ? `${baseUrl}/${sub.slug || 'product'}/${p.slug}` : `${baseUrl}/product/${p._id}`;
         return {
           ...p.toObject(),
           category_name: p.category_name || cat.name || '',
           category_slug: cat.slug || '',
           sub_category_name: p.sub_category_name || sub.name || '',
           sub_category_slug: sub.slug || '',
+          url: productUrl,
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -1291,6 +1297,9 @@ const getProductById = {
           const contact = vendorKyc.ContactDetails || {};
           const identity = vendorKyc.Identity || {};
           const productObj = product.toObject();
+          const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
+          const productUrl = product.slug ? `${baseUrl}/${product.sub_category_slug || 'product'}/${product.slug}` : `${baseUrl}/product/${product._id}`;
+          productObj.url = productUrl;
           productObj.vendor = {
             vendor_id: product.vendor_id,
             vendor_address: contact.address || '',
@@ -1306,6 +1315,9 @@ const getProductById = {
       }
 
       const productObj = product.toObject();
+      const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
+      const productUrl = product.slug ? `${baseUrl}/${product.sub_category_slug || 'product'}/${product.slug}` : `${baseUrl}/product/${product._id}`;
+      productObj.url = productUrl;
       productObj.is_wishlist = is_wishlist;
       res.status(200).json({ status: 200, data: productObj });
     } catch (error) {
@@ -2017,6 +2029,7 @@ const webSearchProductList = {
       ...p.toObject(),
       category_name: p.category_name || catMap[p.category_id] || '',
       sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
+      url: `${process.env.FRONTEND_URL || 'https://upleex.com'}/${p.sub_category_slug || 'product'}/${p.slug || p._id}`,
       is_wishlist: userWishlistSet.has(p._id.toString()),
     }));
     
@@ -2447,6 +2460,7 @@ const getRelatedProducts = {
         success: true,
         data: finalPool.slice(0, 4).map(p => ({
           ...p,
+          url: `${process.env.FRONTEND_URL || 'https://upleex.com'}/${p.sub_category_slug || 'product'}/${p.slug || p._id}`,
           is_wishlist: userWishlistSet.has(p._id.toString())
         }))
       });
