@@ -63,7 +63,7 @@ const generateProductSKU = async (vendorId, categoryId) => {
     
     // Get category name
     const category = await Category.findById(categoryId);
-    const categoryName = category?.categories_name || 'Category';
+    const categoryName = category?.categories_name
     
     // Get next counter
     const counter = await getNextSKUCounter(vendorId);
@@ -132,6 +132,34 @@ const productListingTypeIdSchema = Joi.object().keys({
 const productMonthIdSchema = Joi.object().keys({
   id: Joi.string().required(),
 });
+
+  const generateSKUAPI = {
+  validation: {
+    body: Joi.object().keys({
+      category_id: Joi.string().required(),
+    }),
+  },
+  handler: async (req, res) => {
+    try {
+      const vendorId = req.user?.id || req.user?._id;
+      if (!vendorId) {
+        return res.status(401).json({ success: false, message: 'Vendor authentication required' });
+      }
+
+      const sku = await generateProductSKU(vendorId, req.body.category_id);
+      
+      return res.status(200).json({
+        success: true,
+        data: { sku },
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  },
+};
 
 const createProduct = {
   validation: {
@@ -438,8 +466,9 @@ const createProduct = {
       data.approval_status = 'pending'; // Set to pending for admin approval
       
       // Set initial stock status
-      if (data.product_type_name === 'Sell' && data.available_quantity) {
-        data.is_out_of_stock = Number(data.available_quantity) <= 0;
+      if (data.product_type_name === 'Sell') {
+        const availableQty = Number(data.available_quantity) || 0;
+        data.is_out_of_stock = availableQty <= 0;
       }
 
       const product = await Product.create(data);
@@ -1541,6 +1570,12 @@ const updateProduct = {
         ...body,
       };
 
+      const productTypeName = body.product_type_name || existing.product_type_name;
+      if (productTypeName === 'Sell') {
+        const availableQty = Number(body.available_quantity !== undefined ? body.available_quantity : existing.available_quantity) || 0;
+        updateData.is_out_of_stock = availableQty <= 0;
+      }
+
       const product = await Product.findByIdAndUpdate(_id, updateData, {
         new: true,
       });
@@ -2542,4 +2577,5 @@ module.exports = {
   toggleProductVisibility,
   getRelatedProducts,
   getRentAvailability,
+  generateSKUAPI,
 };

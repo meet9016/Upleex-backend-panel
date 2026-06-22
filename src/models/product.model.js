@@ -252,6 +252,30 @@ productSchema.pre('save', async function(next) {
     this.slug = uniqueSlug;
   }
 
+  
+  if (this.product_type_name === 'Sell') {
+    this.is_out_of_stock = (this.available_quantity || 0) <= 0;
+  }
+  
+  next();
+});
+
+productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next) {
+  const update = this.getUpdate();
+  const setUpdate = update.$set || update;
+  
+  if (setUpdate.product_type_name || setUpdate.available_quantity) {
+    const productTypeName = setUpdate.product_type_name;
+    const availableQty = setUpdate.available_quantity;
+    
+    if (productTypeName === 'Sell' || availableQty !== undefined) {
+      const finalAvailableQty = availableQty !== undefined ? Number(availableQty) : undefined;
+      if (finalAvailableQty !== undefined) {
+        setUpdate.is_out_of_stock = finalAvailableQty <= 0;
+      }
+    }
+  }
+  
   next();
 });
 
