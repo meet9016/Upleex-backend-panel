@@ -25,6 +25,7 @@ const envVarsSchema = Joi.object()
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     FILE_UPLOAD_PATH: Joi.string().description('the path where the files will be uploaded'),
     BACKEND_URL: Joi.string().description('the backend url'),
+    FRONTEND_URL: Joi.string().description('the frontend url'),
     RAZORPAY_KEY_ID: Joi.string().description('Razorpay Key ID'),
     RAZORPAY_KEY_SECRET: Joi.string().description('Razorpay Key Secret'),
     SMS_GATEWAY_HUB_API_KEY: Joi.string().description('SMS Gateway Hub API Key'),
@@ -54,6 +55,7 @@ module.exports = {
   },
   fileUploadPath: envVars.FILE_UPLOAD_PATH,
   backendUrl: envVars.BACKEND_URL,
+  frontendUrl: envVars.FRONTEND_URL,
   jwt: {
     secret: envVars.JWT_SECRET,
     accessExpirationMinutes: envVars.JWT_ACCESS_EXPIRATION_MINUTES,

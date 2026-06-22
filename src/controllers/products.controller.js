@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const Joi = require('joi');
 const mongoose = require('mongoose');
 const path = require('path');
+const config = require('../config/config');
 const {
   Product,
   ProductType,
@@ -802,7 +803,7 @@ const getAllProducts = {
       
       const subMap = {};
       subs.forEach((s) => {
-        subMap[s._id.toString()] = s.name;
+        subMap[s._id.toString()] = { name: s.name, slug: s.slug };
       });
       
       // Enrich with vendor KYC details: city_id and city_name
@@ -871,13 +872,17 @@ const getAllProducts = {
 
       const normalizedRaw = await Promise.all(data.map(async (p) => {
         const v = vendorMap[String(p.vendor_id)] || {};
-        const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
-        const productUrl = p.slug ? `${baseUrl}/${p.sub_category_slug || 'product'}/${p.slug}` : `${baseUrl}/product/${p._id}`;
+        const sub = subMap[p.sub_category_id] || {};
+        const urlSlug = p.slug || '';
+        const subCatSlug = sub.slug || '';
+        const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
+        const frontendUrl = config.frontendUrl || '';
         return {
           ...p.toObject(),
           category_name: p.category_name || catMap[p.category_id] || '',
-          sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-          url: productUrl,
+          sub_category_name: p.sub_category_name || sub.name || '',
+          sub_category_slug: sub.slug || '',
+          url: frontendUrl + productUrl,
           vendor: {
             vendor_id: p.vendor_id,
             vendor_name: p.vendor_name || v.vendor_name || '',
@@ -1156,8 +1161,9 @@ const getVendorProducts = {
       const normalized = data.map((p) => {
         const cat = catMap[p.category_id] || {};
         const sub = subMap[p.sub_category_id] || {};
-        const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
-        const productUrl = p.slug ? `${baseUrl}/${sub.slug || 'product'}/${p.slug}` : `${baseUrl}/product/${p._id}`;
+        const urlSlug = p.slug || '';
+        const subCatSlug = sub.slug || '';
+        const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
         return {
           ...p.toObject(),
           category_name: p.category_name || cat.name || '',
@@ -1275,6 +1281,13 @@ const getProductById = {
         is_wishlist = !!wishlistEntry;
       }
 
+      // Fetch sub_category_slug from SubCategory
+      let subCatSlug = '';
+      if (product.sub_category_id) {
+        const subDoc = await SubCategory.findById(product.sub_category_id).select('slug');
+        subCatSlug = subDoc?.slug || '';
+      }
+
       // Add vendor address from KYC data
       if (product.vendor_id) {
         // Check if vendor has active priority plan
@@ -1297,9 +1310,8 @@ const getProductById = {
           const contact = vendorKyc.ContactDetails || {};
           const identity = vendorKyc.Identity || {};
           const productObj = product.toObject();
-          const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
-          const productUrl = product.slug ? `${baseUrl}/${product.sub_category_slug || 'product'}/${product.slug}` : `${baseUrl}/product/${product._id}`;
-          productObj.url = productUrl;
+          const urlSlug = product.slug || '';
+          productObj.url = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
           productObj.vendor = {
             vendor_id: product.vendor_id,
             vendor_address: contact.address || '',
@@ -1315,9 +1327,8 @@ const getProductById = {
       }
 
       const productObj = product.toObject();
-      const baseUrl = process.env.FRONTEND_URL || 'https://upleex.com';
-      const productUrl = product.slug ? `${baseUrl}/${product.sub_category_slug || 'product'}/${product.slug}` : `${baseUrl}/product/${product._id}`;
-      productObj.url = productUrl;
+      const urlSlug = product.slug || '';
+      productObj.url = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
       productObj.is_wishlist = is_wishlist;
       res.status(200).json({ status: 200, data: productObj });
     } catch (error) {
@@ -2005,7 +2016,7 @@ const webSearchProductList = {
     });
     const subMap = {};
     subs.forEach((s) => {
-      subMap[s._id.toString()] = s.name;
+      subMap[s._id.toString()] = { name: s.name, slug: s.slug };
     });
       // Auto-draft expired listings
       const now = new Date();
@@ -2023,15 +2034,20 @@ const webSearchProductList = {
       const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: data.map(p => p._id) } });
       wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
     }
-    const normalized = data.map((p) => ({
-    
-
-      ...p.toObject(),
-      category_name: p.category_name || catMap[p.category_id] || '',
-      sub_category_name: p.sub_category_name || subMap[p.sub_category_id] || '',
-      url: `${process.env.FRONTEND_URL || 'https://upleex.com'}/${p.sub_category_slug || 'product'}/${p.slug || p._id}`,
-      is_wishlist: userWishlistSet.has(p._id.toString()),
-    }));
+    const normalized = data.map((p) => {
+      const sub = subMap[p.sub_category_id] || {};
+      const urlSlug = p.slug || '';
+      const subCatSlug = sub.slug || '';
+      const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
+      return {
+        ...p.toObject(),
+        category_name: p.category_name || catMap[p.category_id] || '',
+        sub_category_name: p.sub_category_name || sub.name || '',
+        sub_category_slug: sub.slug || '',
+        url: productUrl,
+        is_wishlist: userWishlistSet.has(p._id.toString()),
+      };
+    });
     
     return res.status(200).json({
       success: true,
@@ -2458,11 +2474,16 @@ const getRelatedProducts = {
 
       res.status(200).json({
         success: true,
-        data: finalPool.slice(0, 4).map(p => ({
-          ...p,
-          url: `${process.env.FRONTEND_URL || 'https://upleex.com'}/${p.sub_category_slug || 'product'}/${p.slug || p._id}`,
-          is_wishlist: userWishlistSet.has(p._id.toString())
-        }))
+        data: finalPool.slice(0, 4).map(p => {
+          const urlSlug = p.slug || '';
+          const subCatSlug = p.sub_category_slug || '';
+          const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
+          return {
+            ...p,
+            url: productUrl,
+            is_wishlist: userWishlistSet.has(p._id.toString())
+          };
+        })
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
