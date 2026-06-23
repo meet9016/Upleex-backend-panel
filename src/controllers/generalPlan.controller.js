@@ -55,6 +55,45 @@ const getAllPlans = {
     let q = GeneralPlan.find(query).sort({ createdAt: -1 });
     if (limit) q = q.skip(skip).limit(limit);
     const data = await q;
+
+    // Calculate remaining slots for vendor if authenticated
+    let planAggregates = {};
+    if (req.user && req.user._id) {
+      const vendor_id = req.user._id;
+      const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
+      
+      let purchases = await GeneralPlanPurchase.find({ vendor_id, status: 'active' })
+        .populate({
+          path: 'product_ids',
+          select: 'product_name category_name sub_category_name product_type_name',
+        });
+
+      // Filter invalid product_ids
+      purchases = purchases.map(purchase => {
+        const obj = purchase.toObject();
+        obj.product_ids = (obj.product_ids || []).filter(product => product && product._id);
+        return obj;
+      });
+
+      const now = new Date();
+      
+      purchases.forEach(purchase => {
+        if (new Date(purchase.expire_at) > now) {
+          const planType = purchase.plan_type;
+          
+          if (!planAggregates[planType]) {
+            planAggregates[planType] = {
+              total: 0,
+              used: 0,
+            };
+          }
+          
+          planAggregates[planType].total += purchase.max_products || 0;
+          planAggregates[planType].used += (purchase.product_ids || []).length;
+        }
+      });
+    }
+
     return res.status(200).json({
       success: true,
       total,
@@ -62,6 +101,7 @@ const getAllPlans = {
       limit: limit || total,
       totalPages: limit ? Math.ceil(total / limit) : 1,
       data,
+      planAggregates
     });
   },
 };
@@ -226,14 +266,46 @@ const getVendorPurchases = {
     const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
     
     // We populate product_ids to get their names etc.
-    const purchases = await GeneralPlanPurchase.find({ vendor_id })
+    let purchases = await GeneralPlanPurchase.find({ vendor_id })
       .populate({
         path: 'product_ids',
         select: 'product_name category_name sub_category_name product_type_name',
       })
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({ success: true, data: purchases });
+    // Filter out invalid product_ids and calculate remaining slots per purchase
+    purchases = purchases.map(purchase => {
+      const obj = purchase.toObject();
+      obj.product_ids = (obj.product_ids || []).filter(product => product && product._id);
+      obj.remaining_slots = Math.max(0, (obj.max_products || 0) - obj.product_ids.length);
+      return obj;
+    });
+
+    // Calculate remaining slots for each plan type
+    const planAggregates = {};
+    const now = new Date();
+    
+    purchases.forEach(purchase => {
+      if (new Date(purchase.expire_at) > now && purchase.status === 'active') {
+        const planType = purchase.plan_type;
+        
+        if (!planAggregates[planType]) {
+          planAggregates[planType] = {
+            total: 0,
+            used: 0,
+          };
+        }
+        
+        planAggregates[planType].total += purchase.max_products || 0;
+        planAggregates[planType].used += (purchase.product_ids || []).length;
+      }
+    });
+
+    return res.status(200).json({ 
+      success: true, 
+      data: purchases,
+      planAggregates 
+    });
   },
 };
 
@@ -296,27 +368,32 @@ const getAllPurchases = {
 
     const GeneralPlanPurchase = require('../models/generalPlanPurchase.model');
     const total = await GeneralPlanPurchase.countDocuments(query);
-    let qObj = GeneralPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email phone').sort({ createdAt: -1 });
+    let qObj = GeneralPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email phone').populate('product_ids', 'product_name category_name sub_category_name product_type_name').sort({ createdAt: -1 });
     if (limit) {
       qObj = qObj.skip(skip).limit(limit);
     }
     const data = await qObj;
 
-    const formattedData = data.map(purchase => ({
-      _id: purchase._id,
-      vendor_id: purchase.vendor_id?._id,
-      vendor_name: purchase.vendor_id?.full_name || 'N/A',
-      vendor_phone: purchase.vendor_id?.phone || '',
-      business_name: purchase.vendor_id?.business_name || '',
-      plan_type: purchase.plan_type,
-      months: 1,
-      max_products: purchase.max_products,
-      amount: purchase.amount,
-      product_ids: purchase.product_ids || [],
-      start_at: purchase.created_at || purchase.createdAt,
-      expire_at: purchase.expire_at,
-      createdAt: purchase.createdAt
-    }));
+    const formattedData = data.map(purchase => {
+      const obj = purchase.toObject();
+      obj.product_ids = (obj.product_ids || []).filter(product => product && product._id);
+      return {
+        _id: obj._id,
+        vendor_id: obj.vendor_id?._id,
+        vendor_name: obj.vendor_id?.full_name || 'N/A',
+        vendor_phone: obj.vendor_id?.phone || '',
+        business_name: obj.vendor_id?.business_name || '',
+        plan_type: obj.plan_type,
+        months: 1,
+        max_products: obj.max_products,
+        amount: obj.amount,
+        product_ids: obj.product_ids,
+        remaining_slots: Math.max(0, (obj.max_products || 0) - obj.product_ids.length),
+        start_at: obj.created_at || obj.createdAt,
+        expire_at: obj.expire_at,
+        createdAt: obj.createdAt
+      };
+    });
 
     return res.status(200).json({
       success: true,

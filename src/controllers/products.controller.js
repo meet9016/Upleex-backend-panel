@@ -74,7 +74,7 @@ const generateProductSKU = async (vendorId, categoryId) => {
     
     // Check if SKU already exists (rare case)
     const existingSKU = await Product.findOne({ sku });
-    if (existingSKU) {
+    if (  existingSKU) {
       // If exists, try with next counter
       const nextCounter = counter + 1;
       return generateSKU(categoryName, businessName, nextCounter);
@@ -1158,6 +1158,7 @@ const getVendorProducts = {
         wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
       }
 
+      const frontendUrl = config.frontendUrl || '';
       const normalized = data.map((p) => {
         const cat = catMap[p.category_id] || {};
         const sub = subMap[p.sub_category_id] || {};
@@ -1170,7 +1171,7 @@ const getVendorProducts = {
           category_slug: cat.slug || '',
           sub_category_name: p.sub_category_name || sub.name || '',
           sub_category_slug: sub.slug || '',
-          url: productUrl,
+          url: frontendUrl + productUrl,
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -1311,7 +1312,8 @@ const getProductById = {
           const identity = vendorKyc.Identity || {};
           const productObj = product.toObject();
           const urlSlug = product.slug || '';
-          productObj.url = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
+          const frontendUrl = config.frontendUrl || '';
+          productObj.url = frontendUrl + (urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '');
           productObj.vendor = {
             vendor_id: product.vendor_id,
             vendor_address: contact.address || '',
@@ -1328,7 +1330,8 @@ const getProductById = {
 
       const productObj = product.toObject();
       const urlSlug = product.slug || '';
-      productObj.url = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
+      const frontendUrl = config.frontendUrl || '';
+      productObj.url = frontendUrl + (urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '');
       productObj.is_wishlist = is_wishlist;
       res.status(200).json({ status: 200, data: productObj });
     } catch (error) {
@@ -2034,6 +2037,7 @@ const webSearchProductList = {
       const wishlistItems = await Wishlist.find({ user_id: userId, product_id: { $in: data.map(p => p._id) } });
       wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
     }
+    const frontendUrl = config.frontendUrl || '';
     const normalized = data.map((p) => {
       const sub = subMap[p.sub_category_id] || {};
       const urlSlug = p.slug || '';
@@ -2044,7 +2048,7 @@ const webSearchProductList = {
         category_name: p.category_name || catMap[p.category_id] || '',
         sub_category_name: p.sub_category_name || sub.name || '',
         sub_category_slug: sub.slug || '',
-        url: productUrl,
+        url: frontendUrl + productUrl,
         is_wishlist: userWishlistSet.has(p._id.toString()),
       };
     });
@@ -2472,6 +2476,7 @@ const getRelatedProducts = {
         wishlistItems.forEach(item => userWishlistSet.add(item.product_id.toString()));
       }
 
+      const frontendUrl = config.frontendUrl || '';
       res.status(200).json({
         success: true,
         data: finalPool.slice(0, 4).map(p => {
@@ -2480,7 +2485,7 @@ const getRelatedProducts = {
           const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
           return {
             ...p,
-            url: productUrl,
+            url: frontendUrl + productUrl,
             is_wishlist: userWishlistSet.has(p._id.toString())
           };
         })
