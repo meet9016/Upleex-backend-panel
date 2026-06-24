@@ -6,17 +6,26 @@ const PROJECT_NAME = 'upleex';
 const BASE_URL = 'https://service.digitalks.co.in';
 
 /**
- * Convert a byte value into a human-readable string (KB or MB)
- * - Anything under 1MB is shown in KB
- * - Anything 1MB or above is shown in MB
- * @param {number} bytes
- * @returns {string} e.g. "245.32 KB" or "3.45 MB"
+ * Convert bytes to MB or KB automatically.
+ * - Under 1MB → shown in KB
+ * - 1MB or above → shown in MB
+ * Use this everywhere EXCEPT the 3 pages where KB-only is needed.
  */
 const formatFileSize = (bytes) => {
   if (!bytes || bytes <= 0) return '0 KB';
-
   const KB = 1024;
+  const MB = 1024 * 1024;
+  if (bytes >= MB) return `${(bytes / MB).toFixed(2)} MB`;
   return `${(bytes / KB).toFixed(2)} KB`;
+};
+
+/**
+ * Always returns size in KB only.
+ * Use this only on the 3 specific pages where KB display is needed.
+ */
+const formatFileSizeKB = (bytes) => {
+  if (!bytes || bytes <= 0) return '0 KB';
+  return `${(bytes / 1024).toFixed(2)} KB`;
 };
 
 /**
@@ -67,8 +76,8 @@ const compressImage = async (file) => {
       compressedBuffer = await sharpInstance.webp({ quality: 80 }).toBuffer();
       mimetype = 'image/webp';
       const extIndex = file.originalname.lastIndexOf('.');
-      originalname = extIndex !== -1 
-        ? file.originalname.substring(0, extIndex) + '.webp' 
+      originalname = extIndex !== -1
+        ? file.originalname.substring(0, extIndex) + '.webp'
         : file.originalname + '.webp';
     }
 
@@ -141,12 +150,12 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
     if (response.data && response.data.status === 'success') {
       const sizeFormatted = formatFileSize(compressed.size);
       console.log(`Uploaded: ${compressed.originalname} - Size: ${sizeFormatted}`);
-      
+
       const fileUrl = response.data.file_url;
       const resultObj = new String(fileUrl);
       resultObj.file_url = fileUrl;
       resultObj.file_size = sizeFormatted;
-      
+
       return resultObj;
     }
     throw new Error(response.data.message || 'Upload failed');
@@ -201,7 +210,7 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
       const resultObj = new String(url);
       resultObj.file_url = url;
       resultObj.file_size = sizeFormatted;
-      
+
       return resultObj;
     }
     throw new Error(response.data.message || 'Update failed');
@@ -209,7 +218,7 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
     console.error('External update error:', {
       message: error.message,
       data: error.response?.data,
-      status: error.response?.status
+      status: error.response?.status,
     });
     throw new Error(error.response?.data?.message || error.message || 'Failed to update file on external service');
   }
@@ -244,4 +253,5 @@ module.exports = {
   updateFileOnExternalService,
   deleteFileFromExternalService,
   formatFileSize,
+  formatFileSizeKB, // ← Export this for 3 specific pages
 };

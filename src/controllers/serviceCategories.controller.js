@@ -33,7 +33,7 @@ const createCategory = {
       if (req.file) {
         const uploadResult = await uploadToExternalService(req.file, 'service_categories');
         imageUrl = uploadResult.file_url;
-        imageSize = uploadResult.file_size;
+        imageSize = uploadResult.file_size_kb;
       }
 
       const category = await ServiceCategory.create({

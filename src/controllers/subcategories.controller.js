@@ -218,7 +218,7 @@ const createSubCategory = {
       if (req.file) {
         const uploadResult = await uploadToExternalService(req.file, 'categories_image');
         imageUrl = uploadResult.file_url;
-        imageSize = uploadResult.file_size;
+        imageSize = uploadResult.file_size_kb;
       }
       const seoContent = parseSeoContentInput(req.body.seo_content);
 
