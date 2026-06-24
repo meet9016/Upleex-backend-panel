@@ -198,12 +198,13 @@ const createCategory = {
           .status(httpStatus.BAD_REQUEST)
           .json({ message: 'Category with this categories_name already exists' });
       }
-
       let imageUrl = req.body.image || '';
+      let imageSize = null;
       if (req.file) {
-        imageUrl = await uploadToExternalService(req.file, 'categories_image');
+        const uploadResult = await uploadToExternalService(req.file, 'categories_image');
+        imageUrl = uploadResult.file_url;
+        imageSize = uploadResult.file_size;
       }
-
       const seoContent = parseSeoContentInput(req.body.seo_content);
 
       const category = await Category.create({
@@ -231,10 +232,10 @@ const getAllCategories = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
-      
+
       // Build search query
       let query = {};
-      
+
       // Add search functionality
       if (req.query.search) {
         const searchRegex = new RegExp(req.query.search, 'i');
@@ -268,7 +269,7 @@ const getAllCategories = {
           const catId = cat.id || cat._id;
 
           // Build product count query
-          const productQuery = { 
+          const productQuery = {
             category_id: String(catId),
             approval_status: 'approved',
             is_visible: true
@@ -281,48 +282,48 @@ const getAllCategories = {
             if (raw !== 'Select City' && raw !== 'null' && raw !== 'undefined' && raw !== '') {
               isValidCity = true;
               const VendorKyc = require('../models').VendorKyc;
-                        const parts = raw.split('-');
-            const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
-            const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
-            
-            const vendors = await VendorKyc.find(
-              {
-                $or: [
-                  { 'ContactDetails.city_id': raw },
-                  { 'ContactDetails.city_id': { $regex: cityNameRegex } },
-                  { 'ContactDetails.city_name': cityNameRegex },
-                ],
-              },
-              { 'ContactDetails.vendor_id': 1 }
-            );
-            const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
-            
-            if (vendorIds.length > 0) {
-              productQuery.vendor_id = { $in: vendorIds };
-            } else {
-              // If no vendors in this city, return 0 count
-              const subcategories = await SubCategory.find({ categoryId: catId });
-              return {
-                categories_id: String(catId),
-                categories_name: cat.categories_name || cat.name || '',
-                slug: cat.slug || '',
-                image: cat.image || '',
-                product_count: '0',
-                created_at: cat.createdAt,
-                updated_at: cat.updatedAt,
-                subcategories: subcategories.map((sub) => ({
-                  subcategory_id: String(sub.id || sub._id),
-                  subcategory_name: sub.name || sub.subcategory_name || '',
-                  slug: sub.slug || '',
-                  image: sub.image || '',
-                  hsnCodes: sub.hsnCodes || [],
-                  gst: sub.gst || 0,
-                  created_at: sub.createdAt,
-                  updated_at: sub.updatedAt,
-                  seo_content: formatSeoContentResponse(sub.seo_content),
-                })),
-                seo_content: formatSeoContentResponse(cat.seo_content),
-              };
+              const parts = raw.split('-');
+              const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+              const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+
+              const vendors = await VendorKyc.find(
+                {
+                  $or: [
+                    { 'ContactDetails.city_id': raw },
+                    { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+                    { 'ContactDetails.city_name': cityNameRegex },
+                  ],
+                },
+                { 'ContactDetails.vendor_id': 1 }
+              );
+              const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+
+              if (vendorIds.length > 0) {
+                productQuery.vendor_id = { $in: vendorIds };
+              } else {
+                // If no vendors in this city, return 0 count
+                const subcategories = await SubCategory.find({ categoryId: catId });
+                return {
+                  categories_id: String(catId),
+                  categories_name: cat.categories_name || cat.name || '',
+                  slug: cat.slug || '',
+                  image: cat.image || '',
+                  product_count: '0',
+                  created_at: cat.createdAt,
+                  updated_at: cat.updatedAt,
+                  subcategories: subcategories.map((sub) => ({
+                    subcategory_id: String(sub.id || sub._id),
+                    subcategory_name: sub.name || sub.subcategory_name || '',
+                    slug: sub.slug || '',
+                    image: sub.image || '',
+                    hsnCodes: sub.hsnCodes || [],
+                    gst: sub.gst || 0,
+                    created_at: sub.createdAt,
+                    updated_at: sub.updatedAt,
+                    seo_content: formatSeoContentResponse(sub.seo_content),
+                  })),
+                  seo_content: formatSeoContentResponse(cat.seo_content),
+                };
               }
             }
           }
@@ -368,9 +369,9 @@ const getAllCategories = {
         data: transformedData,
       });
     } catch (error) {
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        message: error.message 
+        message: error.message
       });
     }
   },
@@ -389,7 +390,7 @@ const getCategoryById = {
       const catId = category.id || category._id;
 
       // Fetch approved product count for this category
-      const productCount = await Product.countDocuments({ 
+      const productCount = await Product.countDocuments({
         category_id: String(catId),
         approval_status: 'approved',
         is_visible: true
@@ -509,7 +510,7 @@ const deleteCategory = {
   },
 };
 
-const bulkDeleteCategories = {  
+const bulkDeleteCategories = {
   handler: async (req, res) => {
     const { ids } = req.body;
 
@@ -521,8 +522,8 @@ const bulkDeleteCategories = {
       if (category.image) {
         await deleteFileFromExternalService(category.image);
       } else {
-         await deleteFileFromExternalService(category.image);
-       }
+        await deleteFileFromExternalService(category.image);
+      }
     }
 
     await Category.deleteMany({ _id: { $in: objectIds } });

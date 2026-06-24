@@ -214,10 +214,12 @@ const createSubCategory = {
       }
 
       let imageUrl = req.body.image || '';
+      let imageSize = null;
       if (req.file) {
-        imageUrl = await uploadToExternalService(req.file, 'categories_image');
+        const uploadResult = await uploadToExternalService(req.file, 'categories_image');
+        imageUrl = uploadResult.file_url;
+        imageSize = uploadResult.file_size;
       }
-
       const seoContent = parseSeoContentInput(req.body.seo_content);
 
       let parsedHsnCodes = [];
@@ -408,7 +410,8 @@ const updateSubCategory = {
             req.file
           );
         } else {
-          imageUrl = await uploadToExternalService(req.file, 'categories_image');
+          const uploadResult = await uploadToExternalService(req.file, 'categories_image');
+          imageUrl = uploadResult.file_url;
         }
       }
 
@@ -431,7 +434,7 @@ const updateSubCategory = {
         }
         updateData.hsnCodes = parsedHsnCodes;
       }
-      
+
       if (req.body.gst !== undefined) {
         updateData.gst = req.body.gst;
       }
