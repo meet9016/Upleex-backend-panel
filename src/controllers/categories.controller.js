@@ -9,182 +9,11 @@ const {
   deleteFileFromExternalService,
 } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
-
-const parseLegacyBulletLine = (line) => {
-  let content = String(line || '').trim().replace(/^[●•\-*]\s+/, '');
-  const boldMatch = content.match(/^\*\*([^*]+)\*\*:?\s*(.*)$/s);
-  if (boldMatch) {
-    return {
-      label: boldMatch[1].trim(),
-      text: boldMatch[2].trim(),
-    };
-  }
-  const colonIndex = content.indexOf(':');
-  if (colonIndex > 0) {
-    return {
-      label: content.slice(0, colonIndex).replace(/\*\*/g, '').trim(),
-      text: content.slice(colonIndex + 1).trim(),
-    };
-  }
-  return { label: '', text: content };
-};
-
-const normalizeSeoSection = (section) => {
-  const heading = String(section?.heading || section?.h2 || '').trim();
-  const heading_level = section?.heading_level === 'h3' ? 'h3' : 'h2';
-
-  let bullets = [];
-  if (Array.isArray(section?.bullets)) {
-    bullets = section.bullets
-      .map((bullet) => {
-        const label = String(bullet?.label || '').trim();
-        const text = String(bullet?.text || '').trim();
-        const plain = Boolean(bullet?.plain) || (!label && Boolean(text));
-        return {
-          label: plain ? '' : label,
-          text,
-          plain,
-        };
-      })
-      .filter((bullet) => bullet.label || bullet.text);
-  }
-
-  if (!bullets.length && Array.isArray(section?.paragraphs)) {
-    bullets = section.paragraphs
-      .map((paragraph) => {
-        const parsed = parseLegacyBulletLine(paragraph);
-        const plain = !parsed.label && Boolean(parsed.text);
-        return { ...parsed, plain };
-      })
-      .filter((bullet) => bullet.label || bullet.text);
-  }
-
-  return { heading, heading_level, bullets };
-};
-
-const normalizeIntroParagraphs = (parsed) => {
-  if (Array.isArray(parsed?.intro_paragraphs) && parsed.intro_paragraphs.length > 0) {
-    return parsed.intro_paragraphs.map((p) => String(p || '').trim()).filter(Boolean);
-  }
-  const legacyIntro = String(parsed?.intro_text || '').trim();
-  return legacyIntro ? [legacyIntro] : [];
-};
-
-const normalizeSeoFaqs = (parsed) => {
-  if (!Array.isArray(parsed?.faqs)) return [];
-  return parsed.faqs
-    .map((faq) => ({
-      question: String(faq?.question || '').trim(),
-      answer: String(faq?.answer || '').trim(),
-    }))
-    .filter((faq) => faq.question || faq.answer);
-};
-
-const parseSeoContentInput = (raw) => {
-  if (!raw) {
-    return {
-      meta_title: '',
-      meta_description: '',
-      core_keyword: '',
-      secondary_keywords: '',
-      image_alt: '',
-      image_title: '',
-      anchor_tags: [],
-      faqs: [],
-      hero_title: '',
-      hero_text: '',
-      intro_heading: '',
-      intro_paragraphs: [],
-      sections: [],
-      main_text: '',
-      sub_text: '',
-    };
-  }
-
-  let parsed = raw;
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
-      parsed = {};
-    }
-  }
-
-  const sections = Array.isArray(parsed.sections)
-    ? parsed.sections.map((section) => normalizeSeoSection(section))
-    : [];
-
-  return {
-    meta_title: String(parsed.meta_title || '').trim(),
-    meta_description: String(parsed.meta_description || '').trim(),
-    core_keyword: String(parsed.core_keyword || '').trim(),
-    secondary_keywords: String(parsed.secondary_keywords || '').trim(),
-    image_alt: String(parsed.image_alt || '').trim(),
-    image_title: String(parsed.image_title || '').trim(),
-    anchor_tags: Array.isArray(parsed.anchor_tags)
-      ? parsed.anchor_tags.map((tag) => String(tag || '').trim()).filter(Boolean)
-      : [],
-    faqs: normalizeSeoFaqs(parsed),
-    hero_title: String(parsed.hero_title || '').trim(),
-    hero_text: String(parsed.hero_text || '').trim(),
-    intro_heading: String(parsed.intro_heading || '').trim(),
-    intro_paragraphs: normalizeIntroParagraphs(parsed),
-    sections,
-    main_text: String(parsed.main_text || '').trim(),
-    sub_text: String(parsed.sub_text || '').trim(),
-  };
-};
-
-const formatSeoContentResponse = (seo) => {
-  if (!seo) {
-    return {
-      meta_title: '',
-      meta_description: '',
-      core_keyword: '',
-      secondary_keywords: '',
-      image_alt: '',
-      image_title: '',
-      anchor_tags: [],
-      faqs: [],
-      hero_title: '',
-      hero_text: '',
-      intro_heading: '',
-      intro_paragraphs: [],
-      sections: [],
-      main_text: '',
-      sub_text: '',
-    };
-  }
-
-  const source = seo.toObject ? seo.toObject() : seo;
-
-  return {
-    meta_title: source.meta_title || '',
-    meta_description: source.meta_description || '',
-    core_keyword: source.core_keyword || '',
-    secondary_keywords: source.secondary_keywords || '',
-    image_alt: source.image_alt || '',
-    image_title: source.image_title || '',
-    anchor_tags: Array.isArray(source.anchor_tags) ? source.anchor_tags : [],
-    faqs: normalizeSeoFaqs(source),
-    hero_title: source.hero_title || '',
-    hero_text: source.hero_text || '',
-    intro_heading: source.intro_heading || '',
-    intro_paragraphs: normalizeIntroParagraphs(source),
-    sections: Array.isArray(source.sections)
-      ? source.sections.map((section) => normalizeSeoSection(section))
-      : [],
-    main_text: source.main_text || '',
-    sub_text: source.sub_text || '',
-  };
-};
-
 const createCategory = {
   validation: {
     body: Joi.object().keys({
       categories_name: Joi.string().trim().required(),
       image: Joi.string().allow(),
-      seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
     }),
   },
   handler: async (req, res) => {
@@ -198,19 +27,15 @@ const createCategory = {
           .status(httpStatus.BAD_REQUEST)
           .json({ message: 'Category with this categories_name already exists' });
       }
+
       let imageUrl = req.body.image || '';
-      let imageSize = null;
       if (req.file) {
-        const uploadResult = await uploadToExternalService(req.file, 'categories_image');
-        imageUrl = uploadResult.file_url;
-        imageSize = uploadResult.file_size_kb;
+        imageUrl = await uploadToExternalService(req.file, 'categories_image');
       }
-      const seoContent = parseSeoContentInput(req.body.seo_content);
 
       const category = await Category.create({
-        categories_name: categories_name.trim(),
+        ...req.body,
         image: imageUrl,
-        seo_content: seoContent,
       });
 
       return res.status(201).json({
@@ -232,10 +57,10 @@ const getAllCategories = {
       const page = parseInt(req.query.page) || 1;
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
-
+      
       // Build search query
       let query = {};
-
+      
       // Add search functionality
       if (req.query.search) {
         const searchRegex = new RegExp(req.query.search, 'i');
@@ -269,62 +94,52 @@ const getAllCategories = {
           const catId = cat.id || cat._id;
 
           // Build product count query
-          const productQuery = {
+          const productQuery = { 
             category_id: String(catId),
             approval_status: 'approved',
             is_visible: true
           };
 
           // If city is provided, filter by city
-          let isValidCity = false;
           if (req.query.city) {
+            const VendorKyc = require('../models').VendorKyc;
             const raw = String(req.query.city).trim();
-            if (raw !== 'Select City' && raw !== 'null' && raw !== 'undefined' && raw !== '') {
-              isValidCity = true;
-              const VendorKyc = require('../models').VendorKyc;
-              const parts = raw.split('-');
-              const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
-              const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
-
-              const vendors = await VendorKyc.find(
-                {
-                  $or: [
-                    { 'ContactDetails.city_id': raw },
-                    { 'ContactDetails.city_id': { $regex: cityNameRegex } },
-                    { 'ContactDetails.city_name': cityNameRegex },
-                  ],
-                },
-                { 'ContactDetails.vendor_id': 1 }
-              );
-              const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
-
-              if (vendorIds.length > 0) {
-                productQuery.vendor_id = { $in: vendorIds };
-              } else {
-                // If no vendors in this city, return 0 count
-                const subcategories = await SubCategory.find({ categoryId: catId });
-                return {
-                  categories_id: String(catId),
-                  categories_name: cat.categories_name || cat.name || '',
-                  slug: cat.slug || '',
-                  image: cat.image || '',
-                  product_count: '0',
-                  created_at: cat.createdAt,
-                  updated_at: cat.updatedAt,
-                  subcategories: subcategories.map((sub) => ({
-                    subcategory_id: String(sub.id || sub._id),
-                    subcategory_name: sub.name || sub.subcategory_name || '',
-                    slug: sub.slug || '',
-                    image: sub.image || '',
-                    hsnCodes: sub.hsnCodes || [],
-                    gst: sub.gst || 0,
-                    created_at: sub.createdAt,
-                    updated_at: sub.updatedAt,
-                    seo_content: formatSeoContentResponse(sub.seo_content),
-                  })),
-                  seo_content: formatSeoContentResponse(cat.seo_content),
-                };
-              }
+            const parts = raw.split('-');
+            const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
+            const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
+            
+            const vendors = await VendorKyc.find(
+              {
+                $or: [
+                  { 'ContactDetails.city_id': raw },
+                  { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+                  { 'ContactDetails.city_name': cityNameRegex },
+                ],
+              },
+              { 'ContactDetails.vendor_id': 1 }
+            );
+            const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+            
+            if (vendorIds.length > 0) {
+              productQuery.vendor_id = { $in: vendorIds };
+            } else {
+              // If no vendors in this city, return 0 count
+              const subcategories = await SubCategory.find({ categoryId: catId });
+              return {
+                categories_id: String(catId),
+                categories_name: cat.categories_name || cat.name || '',
+                image: cat.image || '',
+                product_count: '0',
+                created_at: cat.createdAt,
+                updated_at: cat.updatedAt,
+                subcategories: subcategories.map((sub) => ({
+                  subcategory_id: String(sub.id || sub._id),
+                  subcategory_name: sub.name || sub.subcategory_name || '',
+                  image: sub.image || '',
+                  created_at: sub.createdAt,
+                  updated_at: sub.updatedAt,
+                })),
+              };
             }
           }
 
@@ -337,7 +152,6 @@ const getAllCategories = {
           return {
             categories_id: String(catId),
             categories_name: cat.categories_name || cat.name || '',
-            slug: cat.slug || '',
             image: cat.image || '',
             product_count: String(productCount),
             created_at: cat.createdAt,
@@ -345,20 +159,13 @@ const getAllCategories = {
             subcategories: subcategories.map((sub) => ({
               subcategory_id: String(sub.id || sub._id),
               subcategory_name: sub.name || sub.subcategory_name || '',
-              slug: sub.slug || '',
               image: sub.image || '',
-              hsnCodes: sub.hsnCodes || [],
-              gst: sub.gst || 0,
               created_at: sub.createdAt,
               updated_at: sub.updatedAt,
-              seo_content: formatSeoContentResponse(sub.seo_content),
             })),
-            seo_content: formatSeoContentResponse(cat.seo_content),
           };
         })
       );
-
-      transformedData.sort((a, b) => Number(b.product_count || 0) - Number(a.product_count || 0));
 
       res.status(200).json({
         success: true,
@@ -369,9 +176,9 @@ const getAllCategories = {
         data: transformedData,
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(500).json({ 
         success: false,
-        message: error.message
+        message: error.message 
       });
     }
   },
@@ -390,7 +197,7 @@ const getCategoryById = {
       const catId = category.id || category._id;
 
       // Fetch approved product count for this category
-      const productCount = await Product.countDocuments({
+      const productCount = await Product.countDocuments({ 
         category_id: String(catId),
         approval_status: 'approved',
         is_visible: true
@@ -402,7 +209,6 @@ const getCategoryById = {
       res.status(200).json({
         categories_id: String(catId),
         categories_name: category.categories_name || category.name || '',
-        slug: category.slug || '',
         image: category.image || '',
         product_count: String(productCount),
         created_at: category.createdAt,
@@ -410,15 +216,10 @@ const getCategoryById = {
         subcategories: subcategories.map((sub) => ({
           subcategory_id: String(sub.id || sub._id),
           subcategory_name: sub.name || sub.subcategory_name || '',
-          slug: sub.slug || '',
           image: sub.image || '',
-          hsnCodes: sub.hsnCodes || [],
-          gst: sub.gst || 0,
           created_at: sub.createdAt,
           updated_at: sub.updatedAt,
-          seo_content: formatSeoContentResponse(sub.seo_content),
         })),
-        seo_content: formatSeoContentResponse(category.seo_content),
       });
     } catch (error) {
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
@@ -432,7 +233,6 @@ const updateCategory = {
       .keys({
         categories_name: Joi.string().trim().required(),
         image: Joi.string().allow(),
-        seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
       })
       .prefs({ convert: true }),
   },
@@ -470,13 +270,9 @@ const updateCategory = {
     }
 
     const updateData = {
-      categories_name: req.body.categories_name?.trim() || categoryExist.categories_name,
+      ...req.body,
       image: imageUrl,
     };
-
-    if (req.body.seo_content !== undefined) {
-      updateData.seo_content = parseSeoContentInput(req.body.seo_content);
-    }
 
     const category = await Category.findByIdAndUpdate(_id, updateData, {
       new: true,
@@ -510,7 +306,7 @@ const deleteCategory = {
   },
 };
 
-const bulkDeleteCategories = {
+const bulkDeleteCategories = {  
   handler: async (req, res) => {
     const { ids } = req.body;
 
@@ -522,8 +318,8 @@ const bulkDeleteCategories = {
       if (category.image) {
         await deleteFileFromExternalService(category.image);
       } else {
-        await deleteFileFromExternalService(category.image);
-      }
+         await deleteFileFromExternalService(category.image);
+       }
     }
 
     await Category.deleteMany({ _id: { $in: objectIds } });
@@ -532,33 +328,11 @@ const bulkDeleteCategories = {
   },
 };
 
-const migrateSlugs = {
-  handler: async (req, res) => {
-    try {
-      let catCount = 0, subCount = 0, prodCount = 0;
-
-      const categories = await Category.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-      for (const cat of categories) { await cat.save(); catCount++; }
-
-      const subCategories = await SubCategory.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-      for (const sub of subCategories) { await sub.save(); subCount++; }
-
-      const products = await Product.find({ $or: [{ slug: { $exists: false } }, { slug: null }, { slug: '' }] });
-      for (const prod of products) { await prod.save(); prodCount++; }
-
-      res.status(200).json({ success: true, message: `Migrated ${catCount} categories, ${subCount} subcategories, and ${prodCount} products.` });
-    } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
-};
-
 module.exports = {
   createCategory,
   getAllCategories,
   getCategoryById,
   updateCategory,
   deleteCategory,
-  bulkDeleteCategories,
-  migrateSlugs
+  bulkDeleteCategories
 };

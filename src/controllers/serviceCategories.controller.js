@@ -29,11 +29,8 @@ const createCategory = {
       }
 
       let imageUrl = req.body.image || '';
-      let imageSize = null;
       if (req.file) {
-        const uploadResult = await uploadToExternalService(req.file, 'service_categories');
-        imageUrl = uploadResult.file_url;
-        imageSize = uploadResult.file_size_kb;
+        imageUrl = await uploadToExternalService(req.file, 'service_categories');
       }
 
       const category = await ServiceCategory.create({
@@ -61,9 +58,9 @@ const getAllCategories = {
       const limit = req.query.limit ? parseInt(req.query.limit) : 100;
       const skip = (page - 1) * limit;
       const { city } = req.query;
-
+      
       let query = {};
-
+      
       if (req.query.search) {
         const searchRegex = new RegExp(req.query.search, 'i');
         query = { name: searchRegex };
@@ -78,9 +75,9 @@ const getAllCategories = {
       const transformedData = await Promise.all(
         categories.map(async (cat) => {
           const catId = cat.id || cat._id;
-
+          
           // Build service count query
-          const serviceQuery = {
+          const serviceQuery = { 
             category_id: String(catId),
             approval_status: 'approved'
           };
@@ -92,7 +89,7 @@ const getAllCategories = {
             const parts = raw.split('-');
             const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
             const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
-
+            
             const vendors = await VendorKyc.find(
               {
                 $or: [
@@ -104,7 +101,7 @@ const getAllCategories = {
               { 'ContactDetails.vendor_id': 1 }
             );
             const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
-
+            
             if (vendorIds.length > 0) {
               serviceQuery.vendor_id = { $in: vendorIds };
             } else {
@@ -142,9 +139,9 @@ const getAllCategories = {
         data: transformedData,
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(500).json({ 
         success: false,
-        message: error.message
+        message: error.message 
       });
     }
   },
@@ -203,8 +200,7 @@ const updateCategory = {
         if (categoryExist.image) {
           imageUrl = await updateFileOnExternalService(categoryExist.image, req.file);
         } else {
-          const uploadResult = await uploadToExternalService(req.file, 'service_categories');
-          imageUrl = uploadResult.file_url;
+          imageUrl = await uploadToExternalService(req.file, 'service_categories');
         }
       }
 
@@ -249,7 +245,7 @@ const deleteCategory = {
   },
 };
 
-const bulkDeleteCategories = {
+const bulkDeleteCategories = {  
   handler: async (req, res) => {
     try {
       const { ids } = req.body;
