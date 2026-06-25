@@ -23,8 +23,18 @@ const vendorPaymentSchema = new mongoose.Schema(
     },
     payment_status: {
       type: String,
-      enum: ['pending', 'released', 'failed', 'cancelled'],
+      enum: ['pending', 'processing', 'released', 'failed', 'cancelled'],
       default: 'pending',
+    },
+    // RazorpayX payout fields
+    payout_id: {
+      type: String,
+      default: null,
+    },
+    payout_status: {
+      type: String,
+      enum: ['pending', 'queued', 'processing', 'processed', 'failed', 'reversed', 'cancelled'],
+      default: null,
     },
     delivered_at: {
       type: Date,
