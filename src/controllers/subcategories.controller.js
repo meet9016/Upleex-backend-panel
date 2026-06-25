@@ -10,12 +10,184 @@ const {
   deleteFileFromExternalService,
 } = require('../utils/fileUpload');
 
+const parseLegacyBulletLine = (line) => {
+  let content = String(line || '').trim().replace(/^[●•\-*]\s+/, '');
+  const boldMatch = content.match(/^\*\*([^*]+)\*\*:?\s*(.*)$/s);
+  if (boldMatch) {
+    return {
+      label: boldMatch[1].trim(),
+      text: boldMatch[2].trim(),
+    };
+  }
+  const colonIndex = content.indexOf(':');
+  if (colonIndex > 0) {
+    return {
+      label: content.slice(0, colonIndex).replace(/\*\*/g, '').trim(),
+      text: content.slice(colonIndex + 1).trim(),
+    };
+  }
+  return { label: '', text: content };
+};
+
+const normalizeSeoSection = (section) => {
+  const heading = String(section?.heading || section?.h2 || '').trim();
+  const heading_level = section?.heading_level === 'h3' ? 'h3' : 'h2';
+
+  let bullets = [];
+  if (Array.isArray(section?.bullets)) {
+    bullets = section.bullets
+      .map((bullet) => {
+        const label = String(bullet?.label || '').trim();
+        const text = String(bullet?.text || '').trim();
+        const plain = Boolean(bullet?.plain) || (!label && Boolean(text));
+        return {
+          label: plain ? '' : label,
+          text,
+          plain,
+        };
+      })
+      .filter((bullet) => bullet.label || bullet.text);
+  }
+
+  if (!bullets.length && Array.isArray(section?.paragraphs)) {
+    bullets = section.paragraphs
+      .map((paragraph) => {
+        const parsed = parseLegacyBulletLine(paragraph);
+        const plain = !parsed.label && Boolean(parsed.text);
+        return { ...parsed, plain };
+      })
+      .filter((bullet) => bullet.label || bullet.text);
+  }
+
+  return { heading, heading_level, bullets };
+};
+
+const normalizeIntroParagraphs = (parsed) => {
+  if (Array.isArray(parsed?.intro_paragraphs) && parsed.intro_paragraphs.length > 0) {
+    return parsed.intro_paragraphs.map((p) => String(p || '').trim()).filter(Boolean);
+  }
+  const legacyIntro = String(parsed?.intro_text || '').trim();
+  return legacyIntro ? [legacyIntro] : [];
+};
+
+const normalizeSeoFaqs = (parsed) => {
+  if (!Array.isArray(parsed?.faqs)) return [];
+  return parsed.faqs
+    .map((faq) => ({
+      question: String(faq?.question || '').trim(),
+      answer: String(faq?.answer || '').trim(),
+    }))
+    .filter((faq) => faq.question || faq.answer);
+};
+
+const parseSeoContentInput = (raw) => {
+  if (!raw) {
+    return {
+      meta_title: '',
+      meta_description: '',
+      core_keyword: '',
+      secondary_keywords: '',
+      image_alt: '',
+      image_title: '',
+      anchor_tags: [],
+      faqs: [],
+      hero_title: '',
+      hero_text: '',
+      intro_heading: '',
+      intro_paragraphs: [],
+      sections: [],
+      main_text: '',
+      sub_text: '',
+    };
+  }
+
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      parsed = {};
+    }
+  }
+
+  const sections = Array.isArray(parsed.sections)
+    ? parsed.sections.map((section) => normalizeSeoSection(section))
+    : [];
+
+  return {
+    meta_title: String(parsed.meta_title || '').trim(),
+    meta_description: String(parsed.meta_description || '').trim(),
+    core_keyword: String(parsed.core_keyword || '').trim(),
+    secondary_keywords: String(parsed.secondary_keywords || '').trim(),
+    image_alt: String(parsed.image_alt || '').trim(),
+    image_title: String(parsed.image_title || '').trim(),
+    anchor_tags: Array.isArray(parsed.anchor_tags)
+      ? parsed.anchor_tags.map((tag) => String(tag || '').trim()).filter(Boolean)
+      : [],
+    faqs: normalizeSeoFaqs(parsed),
+    hero_title: String(parsed.hero_title || '').trim(),
+    hero_text: String(parsed.hero_text || '').trim(),
+    intro_heading: String(parsed.intro_heading || '').trim(),
+    intro_paragraphs: normalizeIntroParagraphs(parsed),
+    sections,
+    main_text: String(parsed.main_text || '').trim(),
+    sub_text: String(parsed.sub_text || '').trim(),
+  };
+};
+
+const formatSeoContentResponse = (seo) => {
+  if (!seo) {
+    return {
+      meta_title: '',
+      meta_description: '',
+      core_keyword: '',
+      secondary_keywords: '',
+      image_alt: '',
+      image_title: '',
+      anchor_tags: [],
+      faqs: [],
+      hero_title: '',
+      hero_text: '',
+      intro_heading: '',
+      intro_paragraphs: [],
+      sections: [],
+      main_text: '',
+      sub_text: '',
+    };
+  }
+
+  const source = seo.toObject ? seo.toObject() : seo;
+
+  return {
+    meta_title: source.meta_title || '',
+    meta_description: source.meta_description || '',
+    core_keyword: source.core_keyword || '',
+    secondary_keywords: source.secondary_keywords || '',
+    image_alt: source.image_alt || '',
+    image_title: source.image_title || '',
+    anchor_tags: Array.isArray(source.anchor_tags) ? source.anchor_tags : [],
+    faqs: normalizeSeoFaqs(source),
+    hero_title: source.hero_title || '',
+    hero_text: source.hero_text || '',
+    intro_heading: source.intro_heading || '',
+    intro_paragraphs: normalizeIntroParagraphs(source),
+    sections: Array.isArray(source.sections)
+      ? source.sections.map((section) => normalizeSeoSection(section))
+      : [],
+    main_text: source.main_text || '',
+    sub_text: source.sub_text || '',
+  };
+};
+
 const createSubCategory = {
   validation: {
     body: Joi.object().keys({
       id: Joi.string().required(),
       name: Joi.string().trim().required(),
+      hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
+      gst: Joi.number().optional().default(0),
       image: Joi.string().allow(),
+      seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
     }),
   },
   handler: async (req, res) => {
@@ -46,10 +218,28 @@ const createSubCategory = {
         imageUrl = await uploadToExternalService(req.file, 'categories_image');
       }
 
+      const seoContent = parseSeoContentInput(req.body.seo_content);
+
+      let parsedHsnCodes = [];
+      if (req.body.hsnCodes) {
+        if (typeof req.body.hsnCodes === 'string') {
+          try {
+            parsedHsnCodes = JSON.parse(req.body.hsnCodes);
+          } catch (e) {
+            parsedHsnCodes = [];
+          }
+        } else {
+          parsedHsnCodes = req.body.hsnCodes;
+        }
+      }
+
       const subCategory = await SubCategory.create({
         categoryId: id,
         name: req.body.name,
+        hsnCodes: parsedHsnCodes,
+        gst: req.body.gst || 0,
         image: imageUrl,
+        seo_content: seoContent,
       });
 
       return res.status(201).json({
@@ -59,9 +249,12 @@ const createSubCategory = {
           id: subCategory.id,
           categoryId: subCategory.categoryId,
           name: subCategory.name,
+          hsnCodes: subCategory.hsnCodes,
+          gst: subCategory.gst,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,
+          seo_content: formatSeoContentResponse(subCategory.seo_content),
         },
       });
     } catch (error) {
@@ -78,7 +271,16 @@ const getAllSubCategories = {
     const query = {};
 
     if (categoryId) {
-      query.categoryId = categoryId;
+      if (mongoose.Types.ObjectId.isValid(categoryId)) {
+        query.categoryId = categoryId;
+      } else {
+        const cat = await Category.findOne({ slug: categoryId });
+        if (cat) {
+          query.categoryId = cat._id;
+        } else {
+          query.categoryId = new mongoose.Types.ObjectId(); // dummy id to return empty
+        }
+      }
     }
 
     const originalJson = res.json.bind(res);
@@ -86,12 +288,16 @@ const getAllSubCategories = {
     res.json = (payload) => {
       if (payload && Array.isArray(payload.data)) {
         payload.data = payload.data.map((item) => ({
-          id: item.id,
+          id: item.id || item._id,
           categoryId: item.categoryId,
           name: item.name,
+          hsnCode: item.hsnCode,
+          hsnCodes: item.hsnCodes,
+          gst: item.gst,
           image: item.image,
           created_at: item.createdAt,
           updated_at: item.updatedAt,
+          seo_content: formatSeoContentResponse(item.seo_content),
         }));
       }
       return originalJson(payload);
@@ -121,9 +327,12 @@ const getSubCategoryById = {
         id: subCategory.id,
         categoryId: subCategory.categoryId,
         name: subCategory.name,
+        hsnCodes: subCategory.hsnCodes,
+        gst: subCategory.gst,
         image: subCategory.image,
         created_at: subCategory.createdAt,
         updated_at: subCategory.updatedAt,
+        seo_content: formatSeoContentResponse(subCategory.seo_content),
       });
     } catch (error) {
       res
@@ -139,7 +348,10 @@ const updateSubCategory = {
       .keys({
         id: Joi.string().required(),
         name: Joi.string().trim().required(),
+        hsnCodes: Joi.alternatives().try(Joi.string(), Joi.array()).optional(),
+        gst: Joi.number().optional(),
         image: Joi.string().allow(),
+        seo_content: Joi.alternatives().try(Joi.string(), Joi.object()).optional(),
       })
       .prefs({ convert: true }),
   },
@@ -206,6 +418,28 @@ const updateSubCategory = {
         image: imageUrl,
       };
 
+      if (req.body.hsnCodes !== undefined) {
+        let parsedHsnCodes = [];
+        if (typeof req.body.hsnCodes === 'string') {
+          try {
+            parsedHsnCodes = JSON.parse(req.body.hsnCodes);
+          } catch (e) {
+            parsedHsnCodes = [];
+          }
+        } else {
+          parsedHsnCodes = req.body.hsnCodes;
+        }
+        updateData.hsnCodes = parsedHsnCodes;
+      }
+      
+      if (req.body.gst !== undefined) {
+        updateData.gst = req.body.gst;
+      }
+
+      if (req.body.seo_content !== undefined) {
+        updateData.seo_content = parseSeoContentInput(req.body.seo_content);
+      }
+
       const subCategory = await SubCategory.findByIdAndUpdate(
         _id,
         updateData,
@@ -227,9 +461,12 @@ const updateSubCategory = {
           id: subCategory.id,
           categoryId: subCategory.categoryId,
           name: subCategory.name,
+          hsnCodes: subCategory.hsnCodes,
+          gst: subCategory.gst,
           image: subCategory.image,
           created_at: subCategory.createdAt,
           updated_at: subCategory.updatedAt,
+          seo_content: formatSeoContentResponse(subCategory.seo_content),
         },
       });
     } catch (error) {
@@ -239,6 +476,7 @@ const updateSubCategory = {
     }
   },
 };
+
 
 const deleteSubCategory = {
   handler: async (req, res) => {

@@ -34,7 +34,7 @@ const uploadToExternalService = async (file, folderName = 'sample') => {
       contentType: file.mimetype,
     });
 
-    const response = await axios.post(${BASE_URL}/upload-file, formData, {
+    const response = await axios.post(`${BASE_URL}/upload-file`, formData, {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       timeout: 300000, // 5 minutes
@@ -78,7 +78,7 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
       contentType: newFile.mimetype,
     });
 
-    const response = await axios.put(${BASE_URL}/update-file-by-url, formData, {
+    const response = await axios.put(`${BASE_URL}/update-file-by-url`, formData, {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       timeout: 300000, // 5 minutes
@@ -111,7 +111,7 @@ const deleteFileFromExternalService = async (fileUrl) => {
   try {
     if (!fileUrl) return;
 
-    const response = await axios.delete(${BASE_URL}/delete-file-by-url, {
+    const response = await axios.delete(`${BASE_URL}/delete-file-by-url`, {
       data: { file_url: fileUrl },
       headers: {
         accept: 'application/json',
