@@ -5,7 +5,7 @@ const socketService = require('./services/socket.service');
 const config = require('./config/config');
 const logger = require('./config/logger');
 const { initPaymentReleaseCron } = require('./utils/paymentCron');
-const { startKycReminderCron } = require('./services/cronJobs.service');
+const { startKycReminderCron, startAutoReleasePaymentsCron } = require('./services/cronJobs.service');
 const { initShiprocketTrackingCron } = require('./utils/shiprocketTrackingCron');
 // const { handleServiceExpiry } = require('./utils/serviceExpiryCron');
 
@@ -20,6 +20,8 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   startKycReminderCron();
   // Initialize Shiprocket tracking cron job
   initShiprocketTrackingCron();
+  // Initialize auto-release vendor payments cron job
+  startAutoReleasePaymentsCron();
   // // Initialize service expiry cron job
   // handleServiceExpiry();
 

@@ -4,6 +4,8 @@ const ApiError = require('../utils/ApiError');
 const VendorPayment = require('../models/vendorPayment.model');
 const Order = require('../models/order.model');
 const Vendor = require('../models/vendor/vendor.model');
+const VendorKyc = require('../models/vendor/vendorKyc.model');
+const { processVendorPayout } = require('../services/razorpayx.service');
 
 // Get vendor payments (for vendor panel)
 const getVendorPayments = {
@@ -167,11 +169,11 @@ const getAllVendorPayments = {
   })
 };
 
-// Release payment manually (admin only)
+// Release payment manually (admin only) - Now with Real Money Transfer
 const releasePayment = {
   handler: catchAsync(async (req, res) => {
     const { paymentId } = req.params;
-    const { notes } = req.body;
+    const { notes, use_real_payout = false, demo_mode = false } = req.body;
     
     const payment = await VendorPayment.findById(paymentId)
       .populate('order_id')
@@ -184,11 +186,139 @@ const releasePayment = {
       throw new ApiError(httpStatus.NOT_FOUND, 'Payment not found');
     }
     
-    if (payment.payment_status !== 'pending') {
+    if (payment.payment_status !== 'pending' && payment.payment_status !== 'processing') {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Payment already processed');
     }
     
-    // Admin can release payment anytime, regardless of release date
+    // Get vendor KYC for bank details
+    const vendorKyc = await VendorKyc.findOne({ vendor_id: payment.vendor_id });
+    
+    if (!vendorKyc) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor KYC not found. Cannot process payout.');
+    }
+    
+    // Check if bank details are complete
+    const bankDetails = vendorKyc.Bank;
+    if (!bankDetails?.account_number || !bankDetails?.ifsc_code || !bankDetails?.account_holder_name) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor bank details incomplete. Please update bank details in KYC.');
+    }
+    
+    // Get product info for notifications
+    let productName = 'Product';
+    let productType = 'Order';
+    
+    if (payment.quote_id) {
+      productName = payment.quote_id.product_id?.product_name || 'Product';
+      productType = payment.quote_id.product_id?.product_type_name || 'Rent';
+    } else if (payment.order_id) {
+      const vendorItems = payment.order_id.items?.filter(i => String(i.vendor_id) === String(payment.vendor_id)) || [];
+      if (vendorItems.length > 0) {
+        productName = vendorItems[0].product_name;
+        if (vendorItems.length > 1) productName += ` (+${vendorItems.length - 1} more)`;
+      }
+      productType = 'Sell';
+    }
+    
+    // DEMO MODE - Simulate payout without RazorpayX
+    if (demo_mode) {
+      console.log('[Demo Mode] Simulating payout for payment:', payment._id);
+      
+      // Simulate payout processing
+      payment.payment_status = 'processing';
+      payment.payout_id = `demo_payout_${Date.now()}`;
+      payment.payout_status = 'processing';
+      payment.released_at = new Date();
+      payment.released_by = 'admin';
+      payment.notes = notes || 'Demo payout - simulated';
+      await payment.save();
+      
+      // Simulate webhook delay (in real scenario this takes 24-48 hours)
+      // For demo, we auto-complete after 5 seconds
+      setTimeout(async () => {
+        try {
+          payment.payment_status = 'released';
+          payment.payout_status = 'processed';
+          payment.notes = 'Demo payout completed successfully (simulated)';
+          await payment.save();
+          
+          // Notify vendor
+          const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+          await sendNotificationToVendor(
+            payment.vendor_id,
+            'Payment Received! 💰',
+            `Your payment of ₹${payment.vendor_amount} for ${productType} "<b>${productName}</b>" has been successfully transferred to your bank account.`,
+            'payment_update',
+            { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+          );
+          
+          console.log('[Demo Mode] Payout completed for payment:', payment._id);
+        } catch (err) {
+          console.error('[Demo Mode] Error completing payout:', err);
+        }
+      }, 5000);
+      
+      // Notify vendor about payout initiation
+      try {
+        const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+        await sendNotificationToVendor(
+          payment.vendor_id,
+          'Payment Processing! 💸',
+          `Your payment of ₹${payment.vendor_amount} for ${productType} "<b>${productName}</b>" is being transferred to your bank account.`,
+          'payment_update',
+          { paymentId: String(payment._id), amount: String(payment.vendor_amount) }
+        );
+      } catch (notifErr) {
+        console.error('Notification error:', notifErr);
+      }
+      
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        message: 'Demo payout initiated. Will complete in 5 seconds (simulating 24-48 hours).',
+        data: {
+          payment,
+          payout_id: payment.payout_id,
+          payout_status: payment.payout_status,
+          demo_mode: true
+        }
+      });
+    }
+    
+    // REAL PAYOUT - Process via RazorpayX
+    if (use_real_payout) {
+      const payoutResult = await processVendorPayout(payment, vendorKyc);
+      
+      if (!payoutResult.success) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Payout failed: ${payoutResult.error}`);
+      }
+      
+      // Notify vendor about payout initiation
+      try {
+        const { sendNotificationToVendor } = require('../services/vendorNotification.service');
+        await sendNotificationToVendor(
+          payment.vendor_id,
+          'Payment Processing! 💸',
+          `Your payment of ₹${payment.vendor_amount} for ${productType} "<b>${productName}</b>" is being transferred to your bank account. It will reflect in 24-48 hours.`,
+          'payment_update',
+          { paymentId: String(payment._id), amount: String(payment.vendor_amount), payoutId: payoutResult.payout_id }
+        );
+      } catch (notifErr) {
+        console.error('Payment processing notification error:', notifErr);
+      }
+      
+      return res.status(httpStatus.OK).json({
+        status: 200,
+        success: true,
+        message: 'Payout initiated successfully. Money will be transferred to vendor bank account in 24-48 hours.',
+        data: {
+          payment,
+          payout_id: payoutResult.payout_id,
+          payout_status: payoutResult.status
+        }
+      });
+    }
+    
+    // SIMPLE RELEASE - Just mark as released (for testing/manual)
     payment.payment_status = 'released';
     payment.released_at = new Date();
     payment.released_by = 'admin';
@@ -196,28 +326,12 @@ const releasePayment = {
     
     await payment.save();
 
-    // Notify vendor about payment release with dates
+    // Notify vendor about payment release
     try {
       const { sendNotificationToVendor } = require('../services/vendorNotification.service');
       const deliveredAt = payment.delivered_at ? new Date(payment.delivered_at) : new Date();
       const releaseDate = payment.release_date ? new Date(payment.release_date) : new Date();
       const fmt = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-      
-      // Get product name and type for notification
-      let productName = 'Product';
-      let productType = 'Order';
-      
-      if (payment.quote_id) {
-        productName = payment.quote_id.product_id?.product_name || 'Product';
-        productType = payment.quote_id.product_id?.product_type_name || 'Rent';
-      } else if (payment.order_id) {
-        const vendorItems = payment.order_id.items?.filter(i => String(i.vendor_id) === String(payment.vendor_id)) || [];
-        if (vendorItems.length > 0) {
-          productName = vendorItems[0].product_name;
-          if (vendorItems.length > 1) productName += ` (+${vendorItems.length - 1} more)`;
-        }
-        productType = 'Sell';
-      }
 
       await sendNotificationToVendor(
         payment.vendor_id,
@@ -233,7 +347,7 @@ const releasePayment = {
     res.status(httpStatus.OK).json({
       status: 200,
       success: true,
-      message: 'Payment released successfully',
+      message: 'Payment released successfully (manual release, no bank transfer)',
       data: { payment }
     });
   })
@@ -422,38 +536,62 @@ const cancelPayment = {
   })
 };
 
-// Release multiple payments (admin only)
+// Release multiple payments (admin only) - With Real Money Transfer
 const releaseBulkPayments = {
   handler: catchAsync(async (req, res) => {
-    const { paymentIds, notes } = req.body;
+    const { paymentIds, notes, use_real_payout = true } = req.body;
     
     if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'No payment IDs provided');
     }
     
-    const currentDate = new Date();
+    const results = {
+      success: [],
+      failed: []
+    };
     
-    // Update multiple payments
-    const result = await VendorPayment.updateMany(
-      { 
-        _id: { $in: paymentIds },
-        payment_status: 'pending' 
-      },
-      {
-        $set: {
-          payment_status: 'released',
-          released_at: currentDate,
-          released_by: 'admin',
-          notes: notes || 'Bulk released by admin'
+    for (const paymentId of paymentIds) {
+      try {
+        const payment = await VendorPayment.findById(paymentId);
+        
+        if (!payment || payment.payment_status !== 'pending') {
+          results.failed.push({ paymentId, reason: 'Payment not found or already processed' });
+          continue;
         }
+        
+        const vendorKyc = await VendorKyc.findOne({ vendor_id: payment.vendor_id });
+        
+        if (!vendorKyc || !vendorKyc.Bank?.account_number || !vendorKyc.Bank?.ifsc_code || !vendorKyc.Bank?.account_holder_name) {
+          results.failed.push({ paymentId, reason: 'Vendor bank details incomplete' });
+          continue;
+        }
+        
+        if (use_real_payout) {
+          const payoutResult = await processVendorPayout(payment, vendorKyc);
+          
+          if (payoutResult.success) {
+            results.success.push({ paymentId, payout_id: payoutResult.payout_id });
+          } else {
+            results.failed.push({ paymentId, reason: payoutResult.error });
+          }
+        } else {
+          payment.payment_status = 'released';
+          payment.released_at = new Date();
+          payment.released_by = 'admin';
+          payment.notes = notes || 'Bulk released by admin';
+          await payment.save();
+          results.success.push({ paymentId });
+        }
+      } catch (error) {
+        results.failed.push({ paymentId, reason: error.message });
       }
-    );
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,
       success: true,
-      message: `Successfully released ${result.modifiedCount} payments`,
-      data: { releasedCount: result.modifiedCount }
+      message: `Processed ${results.success.length} payments. ${results.failed.length} failed.`,
+      data: results
     });
   })
 };
