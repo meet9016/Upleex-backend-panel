@@ -233,6 +233,8 @@ const defaultRoutes = [
   {
     path: '/settings',
     route: settingsRoute,
+  },
+  {
     path: '/addresses',
     route: addressRoute,
   },
