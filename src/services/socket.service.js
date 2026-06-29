@@ -7,7 +7,7 @@ const adminSockets = new Set(); // set of admin socketIds
 
 const init = (server) => {
   io = new Server(server, {
-    path: process.env.SOCKET_PATH || '/api/socket.io',
+    path: process.env.SOCKET_PATH || '/socket.io',
     cors: {
       origin: function(origin, callback) {
         const allowedOrigins = [
