@@ -93,6 +93,19 @@ const updateFileOnExternalService = async (oldFileUrl, newFile) => {
     }
     throw new Error(response.data.message || 'Update failed');
   } catch (error) {
+    // If the old file is not found on the external service (404 / "detail":"Not Found"),
+    // fall back to a fresh upload instead of throwing a 500 error
+    const status = error.response?.status;
+    const detail = error.response?.data?.detail || error.response?.data?.message || '';
+    const isNotFound =
+      status === 404 ||
+      (typeof detail === 'string' && detail.toLowerCase().includes('not found'));
+
+    if (isNotFound) {
+      console.warn('Old file not found on external service, falling back to fresh upload:', oldFileUrl);
+      return await uploadToExternalService(newFile, 'categories_image');
+    }
+
     console.error('External update error:', {
       message: error.message,
       data: error.response?.data,

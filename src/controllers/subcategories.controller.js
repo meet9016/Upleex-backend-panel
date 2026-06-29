@@ -267,7 +267,7 @@ const createSubCategory = {
 
 const getAllSubCategories = {
   handler: async (req, res) => {
-    const { categoryId } = req.query;
+    const { categoryId, search } = req.query;
     const query = {};
 
     if (categoryId) {
@@ -281,6 +281,11 @@ const getAllSubCategories = {
           query.categoryId = new mongoose.Types.ObjectId(); // dummy id to return empty
         }
       }
+    }
+
+    // Search by subcategory name (case-insensitive)
+    if (search && search.trim()) {
+      query.name = { $regex: search.trim(), $options: 'i' };
     }
 
     const originalJson = res.json.bind(res);
@@ -306,6 +311,7 @@ const getAllSubCategories = {
     await handlePagination(SubCategory, req, res, query);
   },
 };
+
 
 const getSubCategoryById = {
   handler: async (req, res) => {
