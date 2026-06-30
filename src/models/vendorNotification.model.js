@@ -7,7 +7,7 @@ const vendorNotificationSchema = new mongoose.Schema(
     body: { type: String, required: true },
     type: {
       type: String,
-      enum: ['kyc_update', 'product_update', 'quote_request', 'order_request', 'payment_received', 'other', 'order_payment', 'quote_payment'],
+      enum: ['kyc_update', 'product_update', 'quote_request', 'order_request', 'payment_received', 'other', 'order_payment', 'quote_payment', 'payment_update'],
       default: 'other',
     },
     data: { type: Object, default: {} },

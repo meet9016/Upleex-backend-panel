@@ -1,12 +1,17 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const axios = require('axios');
 const config = require('../config/config');
 
-// Initialize RazorpayX instance
-const razorpayx = new Razorpay({
-  key_id: config.razorpay?.keyId || process.env.RAZORPAY_KEY_ID,
-  key_secret: config.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET,
-});
+const razorpayKeyId = config.razorpay?.keyId || process.env.RAZORPAY_KEY_ID;
+const razorpayKeySecret = config.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET;
+
+const getRazorpayXHeaders = () => {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`
+  };
+};
 
 // RazorpayX Account Number for payouts
 const RAZORPAYX_ACCOUNT_NUMBER = config.razorpayx?.accountNumber || process.env.RAZORPAYX_ACCOUNT_NUMBER;
@@ -24,7 +29,7 @@ const RAZORPAY_WEBHOOK_SECRET = config.razorpayx?.webhookSecret || process.env.R
  */
 const createContact = async (vendorData) => {
   try {
-    const contact = await razorpayx.contacts.create({
+    const response = await axios.post('https://api.razorpay.com/v1/contacts', {
       name: vendorData.name || vendorData.business_name,
       email: vendorData.email,
       contact: vendorData.phone || vendorData.mobile,
@@ -33,18 +38,20 @@ const createContact = async (vendorData) => {
       notes: {
         vendor_type: vendorData.vendor_type || 'vendor',
       },
-    });
+    }, { headers: getRazorpayXHeaders() });
 
+    const contact = response.data;
     return {
       success: true,
       contact_id: contact.id,
       data: contact,
     };
   } catch (error) {
-    console.error('[RazorpayX] Create Contact Error:', error.message);
+    const errorMsg = error.response?.data?.error?.description || error.message;
+    console.error('[RazorpayX] Create Contact Error:', errorMsg);
     return {
       success: false,
-      error: error.message,
+      error: errorMsg,
     };
   }
 };
@@ -57,7 +64,7 @@ const createContact = async (vendorData) => {
  */
 const createFundAccount = async (contactId, bankDetails) => {
   try {
-    const fundAccount = await razorpayx.fundAccount.create({
+    const response = await axios.post('https://api.razorpay.com/v1/fund_accounts', {
       contact_id: contactId,
       account_type: 'bank_account',
       bank_account: {
@@ -65,18 +72,20 @@ const createFundAccount = async (contactId, bankDetails) => {
         ifsc: bankDetails.ifsc_code,
         account_number: bankDetails.account_number,
       },
-    });
+    }, { headers: getRazorpayXHeaders() });
 
+    const fundAccount = response.data;
     return {
       success: true,
       fund_account_id: fundAccount.id,
       data: fundAccount,
     };
   } catch (error) {
-    console.error('[RazorpayX] Create Fund Account Error:', error.message);
+    const errorMsg = error.response?.data?.error?.description || error.message;
+    console.error('[RazorpayX] Create Fund Account Error:', errorMsg);
     return {
       success: false,
-      error: error.message,
+      error: errorMsg,
     };
   }
 };
@@ -96,7 +105,7 @@ const createPayout = async (payoutData) => {
       };
     }
 
-    const payout = await razorpayx.payouts.create({
+    const response = await axios.post('https://api.razorpay.com/v1/payouts', {
       account_number: RAZORPAYX_ACCOUNT_NUMBER, // Your RazorpayX virtual account
       fund_account_id: payoutData.fund_account_id,
       amount: Math.round(payoutData.amount * 100), // Convert to paise
@@ -110,8 +119,9 @@ const createPayout = async (payoutData) => {
         order_id: payoutData.order_id?.toString() || '',
         quote_id: payoutData.quote_id?.toString() || '',
       },
-    });
+    }, { headers: getRazorpayXHeaders() });
 
+    const payout = response.data;
     console.log('[RazorpayX] Payout created successfully:', payout.id);
 
     return {
@@ -121,10 +131,11 @@ const createPayout = async (payoutData) => {
       data: payout,
     };
   } catch (error) {
-    console.error('[RazorpayX] Create Payout Error:', error.message);
+    const errorMsg = error.response?.data?.error?.description || error.message;
+    console.error('[RazorpayX] Create Payout Error:', errorMsg);
     return {
       success: false,
-      error: error.error?.description || error.message,
+      error: errorMsg,
     };
   }
 };
@@ -136,17 +147,19 @@ const createPayout = async (payoutData) => {
  */
 const getPayoutStatus = async (payoutId) => {
   try {
-    const payout = await razorpayx.payouts.fetch(payoutId);
+    const response = await axios.get(`https://api.razorpay.com/v1/payouts/${payoutId}`, { headers: getRazorpayXHeaders() });
+    const payout = response.data;
     return {
       success: true,
       status: payout.status,
       data: payout,
     };
   } catch (error) {
-    console.error('[RazorpayX] Get Payout Status Error:', error.message);
+    const errorMsg = error.response?.data?.error?.description || error.message;
+    console.error('[RazorpayX] Get Payout Status Error:', errorMsg);
     return {
       success: false,
-      error: error.message,
+      error: errorMsg,
     };
   }
 };
