@@ -33,7 +33,14 @@ const startAutoReleasePaymentsCron = () => {
       for (const payment of paymentsToRelease) {
         try {
           // Get vendor KYC for bank details
-          const vendorKyc = await VendorKyc.findOne({ vendor_id: payment.vendor_id });
+          const vendorKyc = await VendorKyc.findOne({ 
+            $or: [
+              { 'ContactDetails.vendor_id': String(payment.vendor_id) },
+              { vendor_id: String(payment.vendor_id) },
+              { 'ContactDetails.vendor_id': payment.vendor_id },
+              { vendor_id: payment.vendor_id }
+            ]
+          });
           
           if (!vendorKyc) {
             console.log(`[Cron] No KYC found for vendor ${payment.vendor_id}, skipping auto-release`);
