@@ -190,19 +190,6 @@ const releasePayment = {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Payment already processed');
     }
     
-    // Get vendor KYC for bank details
-    const vendorKyc = await VendorKyc.findOne({ vendor_id: payment.vendor_id });
-    
-    if (!vendorKyc) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor KYC not found. Cannot process payout.');
-    }
-    
-    // Check if bank details are complete
-    const bankDetails = vendorKyc.Bank;
-    if (!bankDetails?.account_number || !bankDetails?.ifsc_code || !bankDetails?.account_holder_name) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor bank details incomplete. Please update bank details in KYC.');
-    }
-    
     // Get product info for notifications
     let productName = 'Product';
     let productType = 'Order';
@@ -286,6 +273,26 @@ const releasePayment = {
     
     // REAL PAYOUT - Process via RazorpayX
     if (use_real_payout) {
+      // Get vendor KYC for bank details
+      const vendorKyc = await VendorKyc.findOne({ 
+        $or: [
+          { 'ContactDetails.vendor_id': String(payment.vendor_id) },
+          { vendor_id: String(payment.vendor_id) },
+          { 'ContactDetails.vendor_id': payment.vendor_id },
+          { vendor_id: payment.vendor_id }
+        ]
+      });
+      
+      if (!vendorKyc) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor KYC not found. Cannot process payout.');
+      }
+      
+      // Check if bank details are complete
+      const bankDetails = vendorKyc.Bank;
+      if (!bankDetails?.account_number || !bankDetails?.ifsc_code || !bankDetails?.account_holder_name) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor bank details incomplete. Please update bank details in KYC.');
+      }
+
       const payoutResult = await processVendorPayout(payment, vendorKyc);
       
       if (!payoutResult.success) {
@@ -559,14 +566,21 @@ const releaseBulkPayments = {
           continue;
         }
         
-        const vendorKyc = await VendorKyc.findOne({ vendor_id: payment.vendor_id });
-        
-        if (!vendorKyc || !vendorKyc.Bank?.account_number || !vendorKyc.Bank?.ifsc_code || !vendorKyc.Bank?.account_holder_name) {
-          results.failed.push({ paymentId, reason: 'Vendor bank details incomplete' });
-          continue;
-        }
-        
         if (use_real_payout) {
+          const vendorKyc = await VendorKyc.findOne({ 
+            $or: [
+              { 'ContactDetails.vendor_id': String(payment.vendor_id) },
+              { vendor_id: String(payment.vendor_id) },
+              { 'ContactDetails.vendor_id': payment.vendor_id },
+              { vendor_id: payment.vendor_id }
+            ]
+          });
+          
+          if (!vendorKyc || !vendorKyc.Bank?.account_number || !vendorKyc.Bank?.ifsc_code || !vendorKyc.Bank?.account_holder_name) {
+            results.failed.push({ paymentId, reason: 'Vendor bank details incomplete' });
+            continue;
+          }
+
           const payoutResult = await processVendorPayout(payment, vendorKyc);
           
           if (payoutResult.success) {
