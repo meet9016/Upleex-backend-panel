@@ -80,7 +80,7 @@ const listCart = catchAsync(async (req, res) => {
     const priceNum = Number(p?.price || 0) || 0;
     const qty = Number(item.qty || 1) || 1;
     const subTotal = priceNum * qty;
-    const gstPer = (p?.gst === undefined || p?.gst === null || p?.gst === '') ? 18 : (Number(p.gst) || 0);
+    const gstPer = (p?.gst === undefined || p?.gst === null || p?.gst === '') ? 0 : (Number(p.gst) || 0);
     const gstAmount = (subTotal * gstPer) / 100;
     const finalAmount = subTotal + gstAmount;
 
@@ -162,7 +162,7 @@ const updateCartItem = catchAsync(async (req, res) => {
   const priceNum = Number(p?.price || 0) || 0;
   const newQty = Number(cartItem.qty || 1) || 1;
   const subTotal = priceNum * newQty;
-  const gstPer = (p?.gst === undefined || p?.gst === null || p?.gst === '') ? 18 : (Number(p.gst) || 0);
+  const gstPer = (p?.gst === undefined || p?.gst === null || p?.gst === '') ? 0 : (Number(p.gst) || 0);
   const gstAmount = (subTotal * gstPer) / 100;
   const finalAmount = subTotal + gstAmount;
 
@@ -195,7 +195,7 @@ const updateCartItem = catchAsync(async (req, res) => {
     const price = Number(prod?.price || 0) || 0;
     const quantity = Number(item.qty || 1) || 1;
     const sub = price * quantity;
-    const gstPer = (prod?.gst === undefined || prod?.gst === null || prod?.gst === '') ? 18 : (Number(prod.gst) || 0);
+    const gstPer = (prod?.gst === undefined || prod?.gst === null || prod?.gst === '') ? 0 : (Number(prod.gst) || 0);
     const gst = (sub * gstPer) / 100;
     const final = sub + gst;
 

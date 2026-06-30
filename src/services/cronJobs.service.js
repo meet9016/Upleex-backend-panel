@@ -9,8 +9,8 @@ const { processVendorPayout } = require('./razorpayx.service');
  * Runs every hour to check for payments ready for release
  */
 const startAutoReleasePaymentsCron = () => {
-  // Run every hour at minute 0
-  cron.schedule('0 * * * *', async () => {
+  // Run every 5 minutes to check for payments ready for release
+  cron.schedule('* * * * *', async () => {
     console.log('[Cron] Checking for auto-release payments...');
     try {
       const now = new Date();
@@ -92,7 +92,7 @@ const startAutoReleasePaymentsCron = () => {
     }
   });
   
-  console.log('[Cron] Auto-release payments cron started (runs every hour)');
+  console.log('[Cron] Auto-release payments cron started (runs every 5 minutes)');
 };
 
 // Run every hour to check for pending KYC notifications

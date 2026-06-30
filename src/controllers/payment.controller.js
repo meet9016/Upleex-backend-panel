@@ -102,8 +102,8 @@ const createOrder = catchAsync(async (req, res) => {
     const price = Number(product.price) || 0;
     const quantity = Number(cartItem.qty) || 1;
     const itemSubtotal = price * quantity;
-    const gstRate = (product.gst === undefined || product.gst === null || product.gst === '') ? 18 : (Number(product.gst) || 0);
-    const itemGst = Math.round(itemSubtotal * (gstRate / 100)); // Use product's GST rate
+    const gstRate = (product.gst === undefined || product.gst === null || product.gst === '') ? 0 : (Number(product.gst) || 0);
+    const itemGst = (itemSubtotal * gstRate) / 100; // Match cart controller exact calculation
     const itemFinalAmount = itemSubtotal + itemGst;
 
     subtotal += itemSubtotal;
