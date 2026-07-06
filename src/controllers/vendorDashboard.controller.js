@@ -123,18 +123,22 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
   const now = new Date();
   
   if (chartRange === 'weekly') {
-    // Weekly: current month from 1st to today
-    chartStart = new Date(now.getFullYear(), now.getMonth(), 1); chartStart.setHours(0, 0, 0, 0);
-    chartEnd = new Date(); chartEnd.setHours(23, 59, 59, 999);
+    // Weekly: Monday to Sunday of current week
+    const dayOfWeek = now.getDay() || 7;
+    chartStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+    chartStart.setHours(0, 0, 0, 0);
+    chartEnd = new Date(chartStart);
+    chartEnd.setDate(chartStart.getDate() + 6);
+    chartEnd.setHours(23, 59, 59, 999);
     chartGroupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } };
     chartSortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
     isChartDaily = true;
   } else if (chartRange === 'yearly') {
-    chartStart = new Date(); chartStart.setFullYear(chartStart.getFullYear() - 4, 0, 1); chartStart.setHours(0, 0, 0, 0);
-    chartEnd = new Date(); chartEnd.setHours(23, 59, 59, 999);
-    chartGroupId = { year: { $year: '$createdAt' } };
-    chartSortId = { '_id.year': 1 };
-    isChartYearly = true;
+    // Yearly: current year from Jan to Dec
+    chartStart = new Date(now.getFullYear(), 0, 1); chartStart.setHours(0, 0, 0, 0);
+    chartEnd = new Date(now.getFullYear(), 11, 31); chartEnd.setHours(23, 59, 59, 999);
+    chartGroupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };
+    chartSortId = { '_id.year': 1, '_id.month': 1 };
   } else if (chartRange === 'custom' && cStart && cEnd) {
     chartStart = new Date(cStart); chartEnd = new Date(cEnd); chartEnd.setHours(23, 59, 59, 999);
     const daysDiff = (chartEnd - chartStart) / (1000 * 3600 * 24);
@@ -151,11 +155,12 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
       isChartDaily = true;
     }
   } else {
-    // Monthly: current year from January to current month
-    chartStart = new Date(now.getFullYear(), 0, 1); chartStart.setHours(0, 0, 0, 0);
-    chartEnd = new Date(); chartEnd.setHours(23, 59, 59, 999);
-    chartGroupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };
-    chartSortId = { '_id.year': 1, '_id.month': 1 };
+    // Monthly: current month
+    chartStart = new Date(now.getFullYear(), now.getMonth(), 1); chartStart.setHours(0, 0, 0, 0);
+    chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0); chartEnd.setHours(23, 59, 59, 999);
+    chartGroupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } };
+    chartSortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
+    isChartDaily = true;
   }
 
   const chartDateFilter = { $gte: chartStart, $lte: chartEnd };
@@ -191,15 +196,51 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
   const findOrderBucket = (y, m, d) => chartOrdersRaw.find(o => o._id.year === y && (m === undefined || o._id.month === m) && (d === undefined || o._id.day === d));
   const findQuoteBucket = (y, m, d) => chartQuotesRaw.find(q => q._id.year === y && (m === undefined || q._id.month === m) && (d === undefined || q._id.day === d));
   
-  if (isChartYearly) {
+  if (chartRange === 'yearly' || isChartYearly) {
     const startY = chartStart.getFullYear(), endY = chartEnd.getFullYear();
-    for (let yr = startY; yr <= endY; yr++) {
-      chartLabels.push(String(yr));
-      const ob = findOrderBucket(yr); const qb = findQuoteBucket(yr);
-      sellData.push(ob ? Math.round(ob.sellAmount) : null);
-      ordersData.push(ob ? ob.orderCount : null);
-      rentData.push(qb ? Math.round(qb.rentAmount) : null);
-      quotesData.push(qb ? qb.quoteCount : null);
+    if (chartRange === 'yearly') {
+      for (let m = 0; m < 12; m++) {
+        chartLabels.push(monthNames[m]);
+        const ob = findOrderBucket(startY, m + 1); const qb = findQuoteBucket(startY, m + 1);
+        sellData.push(ob ? Math.round(ob.sellAmount) : null);
+        ordersData.push(ob ? ob.orderCount : null);
+        rentData.push(qb ? Math.round(qb.rentAmount) : null);
+        quotesData.push(qb ? qb.quoteCount : null);
+      }
+    } else {
+      for (let yr = startY; yr <= endY; yr++) {
+        chartLabels.push(String(yr));
+        const ob = findOrderBucket(yr); const qb = findQuoteBucket(yr);
+        sellData.push(ob ? Math.round(ob.sellAmount) : null);
+        ordersData.push(ob ? ob.orderCount : null);
+        rentData.push(qb ? Math.round(qb.rentAmount) : null);
+        quotesData.push(qb ? qb.quoteCount : null);
+      }
+    }
+  } else if (isChartDaily && chartRange === 'monthly') {
+    let currentWeek = 1;
+    let d = new Date(chartStart);
+    let weekSell = 0, weekOrder = 0, weekRent = 0, weekQuote = 0;
+    let weekHasData = false;
+    while (d <= chartEnd) {
+      const yr = d.getFullYear(), mo = d.getMonth() + 1, dy = d.getDate();
+      const ob = findOrderBucket(yr, mo, dy); const qb = findQuoteBucket(yr, mo, dy);
+      if (ob) { weekSell += ob.sellAmount; weekOrder += ob.orderCount; weekHasData = true; }
+      if (qb) { weekRent += qb.rentAmount; weekQuote += qb.quoteCount; weekHasData = true; }
+      
+      // End of week: Saturday (6) or last day of month
+      const isSaturday = d.getDay() === 6;
+      const isLastDay = d.getTime() >= chartEnd.getTime();
+      if (isSaturday || isLastDay) {
+        chartLabels.push(`Week ${currentWeek}`);
+        sellData.push(weekHasData ? Math.round(weekSell) : null);
+        ordersData.push(weekHasData ? weekOrder : null);
+        rentData.push(weekHasData ? Math.round(weekRent) : null);
+        quotesData.push(weekHasData ? weekQuote : null);
+        currentWeek++;
+        weekSell = 0; weekOrder = 0; weekRent = 0; weekQuote = 0; weekHasData = false;
+      }
+      d.setDate(d.getDate() + 1);
     }
   } else if (isChartDaily) {
     let d = new Date(chartStart);
@@ -214,7 +255,6 @@ const getDashboardMetrics = catchAsync(async (req, res) => {
       d.setDate(d.getDate() + 1);
     }
   } else {
-    // Monthly iteration — stop at current month
     let d = new Date(chartStart.getFullYear(), chartStart.getMonth(), 1);
     const endBound = new Date(chartEnd.getFullYear(), chartEnd.getMonth(), 1);
     while (d <= endBound && d <= now) {

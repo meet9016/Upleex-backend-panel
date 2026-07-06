@@ -10,78 +10,64 @@ const ListingPlan = require('../models/listingPlan.model');
 
 const getDashboardStats = async (req, res) => {
   try {
+    const now = new Date();
     // ─── Determine chart range BEFORE parallel queries ───────────────
     const range = req.query.range || 'monthly';
-    let chartStartDate = new Date();
-    let groupId = {};
-    let sortId = {};
+    let chartStartDate, chartEndDate, groupId, sortId;
+    let isChartDaily = false, isChartYearly = false;
 
-    let chartEndDate = new Date();
-
-    if (range === 'custom' && req.query.startDate && req.query.endDate) {
+    if (range === 'weekly') {
+      // Weekly: Monday to Sunday of current week
+      const dayOfWeek = now.getDay() || 7;
+      chartStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+      chartStartDate.setHours(0, 0, 0, 0);
+      chartEndDate = new Date(chartStartDate);
+      chartEndDate.setDate(chartStartDate.getDate() + 6);
+      chartEndDate.setHours(23, 59, 59, 999);
+      groupId = { year: { $year: '$transactions.createdAt' }, month: { $month: '$transactions.createdAt' }, day: { $dayOfMonth: '$transactions.createdAt' } };
+      sortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
+      isChartDaily = true;
+    } else if (range === 'yearly') {
+      // Yearly: current year from Jan to Dec
+      chartStartDate = new Date(now.getFullYear(), 0, 1); chartStartDate.setHours(0, 0, 0, 0);
+      chartEndDate = new Date(now.getFullYear(), 11, 31); chartEndDate.setHours(23, 59, 59, 999);
+      groupId = { year: { $year: '$transactions.createdAt' }, month: { $month: '$transactions.createdAt' } };
+      sortId = { '_id.year': 1, '_id.month': 1 };
+    } else if (range === 'custom' && req.query.startDate && req.query.endDate) {
       chartStartDate = new Date(req.query.startDate);
       chartEndDate = new Date(req.query.endDate);
       chartEndDate.setHours(23, 59, 59, 999);
-      // If range > 365 days, group by year; > 60 days group by month; else group by day
       const daysDiff = (chartEndDate.getTime() - chartStartDate.getTime()) / (1000 * 3600 * 24);
       if (daysDiff > 365) {
         groupId = { year: { $year: '$transactions.createdAt' } };
         sortId = { '_id.year': 1 };
+        isChartYearly = true;
       } else if (daysDiff > 60) {
-        groupId = {
-          year: { $year: '$transactions.createdAt' },
-          month: { $month: '$transactions.createdAt' }
-        };
+        groupId = { year: { $year: '$transactions.createdAt' }, month: { $month: '$transactions.createdAt' } };
         sortId = { '_id.year': 1, '_id.month': 1 };
       } else {
-        groupId = {
-          year: { $year: '$transactions.createdAt' },
-          month: { $month: '$transactions.createdAt' },
-          day: { $dayOfMonth: '$transactions.createdAt' }
-        };
+        groupId = { year: { $year: '$transactions.createdAt' }, month: { $month: '$transactions.createdAt' }, day: { $dayOfMonth: '$transactions.createdAt' } };
         sortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
+        isChartDaily = true;
       }
-    } else if (range === 'weekly') {
-      // Weekly: current month from 1st to today, grouped by days
-      chartStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      chartStartDate.setHours(0, 0, 0, 0);
-      chartEndDate = new Date();
-      chartEndDate.setHours(23, 59, 59, 999);
-      groupId = {
-        year: { $year: '$transactions.createdAt' },
-        month: { $month: '$transactions.createdAt' },
-        day: { $dayOfMonth: '$transactions.createdAt' }
-      };
-      sortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
-    } else if (range === 'yearly') {
-      chartStartDate.setFullYear(chartStartDate.getFullYear() - 4, 0, 1);
-      chartStartDate.setHours(0, 0, 0, 0);
-      groupId = { year: { $year: '$transactions.createdAt' } };
-      sortId = { '_id.year': 1 };
     } else {
-      // Monthly: current year from January to current month
-      chartStartDate = new Date(now.getFullYear(), 0, 1);
-      chartStartDate.setHours(0, 0, 0, 0);
-      chartEndDate = new Date();
-      chartEndDate.setHours(23, 59, 59, 999);
-      groupId = {
-        year: { $year: '$transactions.createdAt' },
-        month: { $month: '$transactions.createdAt' }
-      };
-      sortId = { '_id.year': 1, '_id.month': 1 };
+      // Monthly: current month
+      chartStartDate = new Date(now.getFullYear(), now.getMonth(), 1); chartStartDate.setHours(0, 0, 0, 0);
+      chartEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); chartEndDate.setHours(23, 59, 59, 999);
+      groupId = { year: { $year: '$transactions.createdAt' }, month: { $month: '$transactions.createdAt' }, day: { $dayOfMonth: '$transactions.createdAt' } };
+      sortId = { '_id.year': 1, '_id.month': 1, '_id.day': 1 };
+      isChartDaily = true;
     }
 
-    const isCustomYearly = range === 'custom' && sortId['_id.year'] && !sortId['_id.month'];
-    const isDaily = range === 'weekly' || (range === 'custom' && sortId['_id.day']);
-    const vendorGroupId = isDaily
+    const vendorGroupId = isChartDaily
       ? { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }
-      : (range === 'yearly' || isCustomYearly)
+      : isChartYearly
       ? { year: { $year: '$createdAt' } }
       : { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };
 
-    const vendorSortId = isDaily
+    const vendorSortId = isChartDaily
       ? { '_id.year': 1, '_id.month': 1, '_id.day': 1 }
-      : (range === 'yearly' || isCustomYearly)
+      : isChartYearly
       ? { '_id.year': 1 }
       : { '_id.year': 1, '_id.month': 1 };
 
@@ -384,88 +370,79 @@ const getDashboardStats = async (req, res) => {
     // range is already declared above — reuse it
     const chartCredits = [];
     const chartVendors = [];
-    const now = new Date();
     
-    if (range === 'weekly') {
-      // Weekly: current month from 1st to today, show days
-      let iterDate = new Date(chartStartDate);
-      while (iterDate <= chartEndDate) {
-        const year = iterDate.getFullYear();
-        const month = iterDate.getMonth() + 1;
-        const day = iterDate.getDate();
-        
-        const label = iterDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-        const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year && m._id.month === month && m._id.day === day);
-        chartCredits.push({ label, amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-        
-        const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year && m._id.month === month && m._id.day === day);
-        chartVendors.push({ label, count: fv ? fv.count : 0 });
-        
-        iterDate.setDate(iterDate.getDate() + 1);
-      }
-    } else if (range === 'yearly') {
-      for (let i = 4; i >= 0; i--) {
-        const year = now.getFullYear() - i;
-        const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year);
-        chartCredits.push({ label: String(year), amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-        
-        const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year);
-        chartVendors.push({ label: String(year), count: fv ? fv.count : 0 });
-      }
-    } else if (range === 'custom') {
-      const isCustomYearlyLocal = sortId['_id.year'] && !sortId['_id.month'];
-      const isDailyLocal = !!sortId['_id.day'];
-      let iterDate = new Date(chartStartDate);
-      
-      if (isCustomYearlyLocal) {
-        // Group by year
-        const startYear = chartStartDate.getFullYear();
-        const endYear = chartEndDate.getFullYear();
-        for (let year = startYear; year <= endYear; year++) {
-          const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year);
-          chartCredits.push({ label: String(year), amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-          const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year);
-          chartVendors.push({ label: String(year), count: fv ? fv.count : 0 });
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    if (range === 'yearly' || isChartYearly) {
+      const startY = chartStartDate.getFullYear(), endY = chartEndDate.getFullYear();
+      if (range === 'yearly') {
+        for (let m = 0; m < 12; m++) {
+          const fc = (monthlyWalletCredits || []).find(x => x._id && x._id.year === startY && x._id.month === m + 1);
+          const fv = (monthlyVendorStats || []).find(x => x._id && x._id.year === startY && x._id.month === m + 1);
+          chartCredits.push({ label: monthNames[m], amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
+          chartVendors.push({ label: monthNames[m], count: fv ? fv.count : 0 });
         }
       } else {
-        while (iterDate <= chartEndDate) {
-          const year = iterDate.getFullYear();
-          const month = iterDate.getMonth() + 1;
-          const day = iterDate.getDate();
-          
-          let label = '';
-          if (isDailyLocal) {
-            label = iterDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-            const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year && m._id.month === month && m._id.day === day);
-            chartCredits.push({ label, amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-            const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year && m._id.month === month && m._id.day === day);
-            chartVendors.push({ label, count: fv ? fv.count : 0 });
-            iterDate.setDate(iterDate.getDate() + 1);
-          } else {
-            label = iterDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-            const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year && m._id.month === month);
-            chartCredits.push({ label, amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-            const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year && m._id.month === month);
-            chartVendors.push({ label, count: fv ? fv.count : 0 });
-            iterDate.setMonth(iterDate.getMonth() + 1);
-          }
+        for (let yr = startY; yr <= endY; yr++) {
+          const fc = (monthlyWalletCredits || []).find(x => x._id && x._id.year === yr);
+          const fv = (monthlyVendorStats || []).find(x => x._id && x._id.year === yr);
+          chartCredits.push({ label: String(yr), amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
+          chartVendors.push({ label: String(yr), count: fv ? fv.count : 0 });
         }
       }
-    } else {
-      // Monthly: current year from January to current month
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      for (let i = 0; i <= now.getMonth(); i++) {
-        const d = new Date(now.getFullYear(), i, 1);
-        const year = d.getFullYear();
-        const month = d.getMonth() + 1;
+    } else if (isChartDaily && range === 'monthly') {
+      let currentWeek = 1;
+      let d = new Date(chartStartDate);
+      let weekCreditAmount = 0, weekCreditCount = 0, weekVendorCount = 0;
+      let weekHasData = false;
+      while (d <= chartEndDate) {
+        const yr = d.getFullYear(), mo = d.getMonth() + 1, dy = d.getDate();
+        const fc = (monthlyWalletCredits || []).find(x => x._id && x._id.year === yr && x._id.month === mo && x._id.day === dy);
+        const fv = (monthlyVendorStats || []).find(x => x._id && x._id.year === yr && x._id.month === mo && x._id.day === dy);
         
-        const label = monthNames[d.getMonth()];
+        if (fc) { weekCreditAmount += fc.totalAmount; weekCreditCount += fc.count; weekHasData = true; }
+        if (fv) { weekVendorCount += fv.count; weekHasData = true; }
         
-        const fc = (monthlyWalletCredits || []).find(m => m._id && m._id.year === year && m._id.month === month);
+        const isSaturday = d.getDay() === 6;
+        const isLastDay = d.getTime() >= chartEndDate.getTime();
+        
+        if (isSaturday || isLastDay) {
+        chartCredits.push({ label: `Week ${currentWeek}`, amount: weekHasData ? weekCreditAmount : 0, count: weekHasData ? weekCreditCount : 0 });
+        chartVendors.push({ label: `Week ${currentWeek}`, count: weekHasData ? weekVendorCount : 0 });
+          currentWeek++;
+          weekCreditAmount = 0; weekCreditCount = 0; weekVendorCount = 0; weekHasData = false;
+        }
+        d.setDate(d.getDate() + 1);
+      }
+    } else if (isChartDaily) {
+      let d = new Date(chartStartDate);
+      while (d <= chartEndDate) {
+        const yr = d.getFullYear(), mo = d.getMonth() + 1, dy = d.getDate();
+        const label = range === 'weekly' ? dayNames[d.getDay()] : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        
+        const fc = (monthlyWalletCredits || []).find(x => x._id && x._id.year === yr && x._id.month === mo && x._id.day === dy);
+        const fv = (monthlyVendorStats || []).find(x => x._id && x._id.year === yr && x._id.month === mo && x._id.day === dy);
+        
         chartCredits.push({ label, amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
-        
-        const fv = (monthlyVendorStats || []).find(m => m._id && m._id.year === year && m._id.month === month);
         chartVendors.push({ label, count: fv ? fv.count : 0 });
+        
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      let d = new Date(chartStartDate.getFullYear(), chartStartDate.getMonth(), 1);
+      const endBound = new Date(chartEndDate.getFullYear(), chartEndDate.getMonth(), 1);
+      while (d <= endBound && d <= now) {
+        const yr = d.getFullYear(), mo = d.getMonth() + 1;
+        const label = monthNames[d.getMonth()] + (yr !== now.getFullYear() ? ` ${yr}` : '');
+        
+        const fc = (monthlyWalletCredits || []).find(x => x._id && x._id.year === yr && x._id.month === mo);
+        const fv = (monthlyVendorStats || []).find(x => x._id && x._id.year === yr && x._id.month === mo);
+        
+        chartCredits.push({ label, amount: fc ? fc.totalAmount : 0, count: fc ? fc.count : 0 });
+        chartVendors.push({ label, count: fv ? fv.count : 0 });
+        
+        d.setMonth(d.getMonth() + 1);
       }
     }
 
