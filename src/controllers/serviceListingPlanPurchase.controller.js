@@ -72,12 +72,20 @@ const createPurchase = {
             newExpiryDate.setMonth(newExpiryDate.getMonth() + months30);
             newExpiryDate.setDate(newExpiryDate.getDate() + remainingDays);
           } else {
-            // If expired or no expiry, use existing purchase expiry
-            newExpiryDate = existingPurchase.expire_at;
+            // Service is in draft (fully expired) — start plan from now
+            const totalDays = existingPurchase.months * 30;
+            const months30 = Math.floor(totalDays / 30);
+            const remainingDays2 = totalDays % 30;
+            newExpiryDate = new Date();
+            newExpiryDate.setMonth(newExpiryDate.getMonth() + months30);
+            newExpiryDate.setDate(newExpiryDate.getDate() + remainingDays2);
           }
           
+          // IMPORTANT: Also reset expires_at so getAllServices doesn't immediately
+          // move this service back to draft on the next call
           await Service.findByIdAndUpdate(service._id, {
             status: 'active',
+            expires_at: newExpiryDate,
             listing_expires_at: newExpiryDate,
             listing_fee_paid: true
           });
@@ -133,38 +141,34 @@ const createPurchase = {
     expire.setMonth(expire.getMonth() + months30);
     expire.setDate(expire.getDate() + remainingDays);
 
-    // Update services - plan starts after service expiry date
+    // Update services — plan starts after service expiry if still valid, else from now
     const servicesToUpdate = await Service.find({ _id: { $in: service_ids }, vendor_id });
     
     for (const service of servicesToUpdate) {
-      let planStartDate;
       let newExpiryDate;
       
-      // Check if service has expiry date and is still valid
+      // Fixed 30-day counting for plan duration
+      const totalDays = plan.months * 30;
+      const months30 = Math.floor(totalDays / 30);
+      const remainingDays = totalDays % 30;
+
       if (service.expires_at && service.expires_at > new Date()) {
-        // Plan starts after service expiry - Fixed 30-day counting
-        const totalDays = plan.months * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        planStartDate = new Date(service.expires_at);
+        // Service still has time left — plan extends from current expires_at
         newExpiryDate = new Date(service.expires_at);
         newExpiryDate.setMonth(newExpiryDate.getMonth() + months30);
         newExpiryDate.setDate(newExpiryDate.getDate() + remainingDays);
       } else {
-        // Service already expired or no expiry, start plan immediately - Fixed 30-day counting
-        const totalDays = plan.months * 30;
-        const months30 = Math.floor(totalDays / 30);
-        const remainingDays = totalDays % 30;
-        
-        planStartDate = new Date();
+        // Service is expired/draft — start plan immediately from now
         newExpiryDate = new Date();
         newExpiryDate.setMonth(newExpiryDate.getMonth() + months30);
         newExpiryDate.setDate(newExpiryDate.getDate() + remainingDays);
       }
       
+      // IMPORTANT: Also update expires_at so getAllServices doesn't immediately
+      // move the service back to draft on the next call (since it checks expires_at < now)
       await Service.findByIdAndUpdate(service._id, {
         status: 'active',
+        expires_at: newExpiryDate,
         listing_expires_at: newExpiryDate,
         listing_fee_paid: true
       });
