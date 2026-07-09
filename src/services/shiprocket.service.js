@@ -240,6 +240,73 @@ const assignAwbToShipment = async (shipmentId, courierId) => {
 };
 
 /**
+ * Create a pickup location in Shiprocket
+ * @param {Object} locationData
+ * @returns {Promise<Object>}
+ */
+const createPickupLocation = async (locationData) => {
+  const token = await getShiprocketToken();
+  if (!token) {
+    throw new Error('Shiprocket API credentials are not set up or authentication failed.');
+  }
+
+  try {
+    console.log('[Shiprocket] Creating pickup location:', locationData.pickup_location);
+    const response = await axios.post(
+      'https://apiv2.shiprocket.in/v1/external/settings/company/addPickup',
+      locationData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log('[Shiprocket] Pickup location created successfully');
+    console.log('[Shiprocket] Pickup Location Response:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Shiprocket] Failed to create pickup location:', error.response ? error.response.data : error.message);
+    const apiErrorMsg = error.response && error.response.data && error.response.data.message
+      ? error.response.data.message
+      : (error.response && error.response.data && typeof error.response.data === 'string' ? error.response.data : '');
+    
+    throw new Error(apiErrorMsg ? `Shiprocket API Error: ${apiErrorMsg}` : 'Failed to create pickup location');
+  }
+};
+
+/**
+ * Get all pickup locations from Shiprocket
+ * @returns {Promise<Object>}
+ */
+const getPickupLocations = async () => {
+  const token = await getShiprocketToken();
+  if (!token) {
+    throw new Error('Shiprocket API credentials are not set up or authentication failed.');
+  }
+
+  try {
+    console.log('[Shiprocket] Fetching pickup locations...');
+    const response = await axios.get(
+      'https://apiv2.shiprocket.in/v1/external/settings/company/pickup',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log('[Shiprocket] Pickup locations fetched successfully');
+    return response.data;
+  } catch (error) {
+    console.error('[Shiprocket] Failed to fetch pickup locations:', error.response ? error.response.data : error.message);
+    throw new Error('Failed to fetch pickup locations');
+  }
+};
+
+/**
  * Generate pickup request
  * @param {Array|number|string} shipmentIds
  * @returns {Promise<Object>}
@@ -294,4 +361,6 @@ module.exports = {
   checkCourierServiceability,
   assignAwbToShipment,
   generatePickup,
+  createPickupLocation,
+  getPickupLocations,
 };

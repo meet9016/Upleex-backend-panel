@@ -101,6 +101,7 @@ const saveKyc = {
       const identity = extract('Identity');
       let bank = extract('Bank');
       const documents = extract('Documents');
+      const pickupAddress = extract('PickupAddress');
 
       // FIX: Extract Declaration data
       let declaration = null;
@@ -225,6 +226,11 @@ const saveKyc = {
         if (declaration) {
           doc.Declaration = { ...doc.Declaration.toObject(), ...declaration };
         }
+        
+        // Save PickupAddress
+        if (pickupAddress) {
+          doc.PickupAddress = { ...doc.PickupAddress?.toObject?.() || {}, ...pickupAddress };
+        }
 
         doc.completed_pages = pushPage(doc.completed_pages || []);
 
@@ -279,6 +285,7 @@ const saveKyc = {
           Bank: bank || {},
           Documents: documents || {},
           Declaration: declaration || { terms_conditions: false }, // FIX: Include Declaration
+          PickupAddress: pickupAddress || {},
           completed_pages: pushPage([]),
           status: 'pending',
           vendor_type

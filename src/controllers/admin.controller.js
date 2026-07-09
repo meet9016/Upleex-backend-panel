@@ -12,6 +12,8 @@ const {
   METADATA_JSON_PATH,
 } = require('../utils/metadataCsv');
 const User = require('../models/user.model');
+const catchAsync = require('../utils/catchAsync');
+const ApiError = require('../utils/ApiError');
 
 const register = {
   validation: {
@@ -390,6 +392,46 @@ const getAllUsers = {
   },
 };
 
+/**
+ * Sync vendor's pickup location to Shiprocket
+ * Called when vendor KYC is approved
+ */
+const syncVendorPickupLocation = {
+  handler: catchAsync(async (req, res) => {
+    const { vendorId } = req.params;
+    
+    if (!vendorId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Vendor ID is required');
+    }
+    
+    const vendorShiprocketService = require('../services/vendorShiprocket.service');
+    const profile = await vendorShiprocketService.syncVendorPickupLocation(vendorId);
+    
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      message: 'Vendor pickup location synced to Shiprocket',
+      data: profile,
+    });
+  }),
+};
+
+/**
+ * Get all vendor pickup profiles
+ */
+const getVendorPickupProfiles = {
+  handler: catchAsync(async (req, res) => {
+    const vendorShiprocketService = require('../services/vendorShiprocket.service');
+    const profiles = await vendorShiprocketService.getAllVendorPickupProfiles();
+    
+    res.status(httpStatus.OK).json({
+      status: 200,
+      success: true,
+      data: profiles,
+    });
+  }),
+};
+
 module.exports = {
   register,
   login,
@@ -400,5 +442,7 @@ module.exports = {
   uploadMetadataCsv,
   getMetadataJson,
   getAllUsers,
+  syncVendorPickupLocation,
+  getVendorPickupProfiles,
 };
 

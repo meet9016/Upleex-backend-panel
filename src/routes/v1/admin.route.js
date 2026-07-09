@@ -85,6 +85,19 @@ router.get(
   catchAsync(walletController.getVendorWalletTransactions)
 );
 
+// Vendor Shiprocket Pickup Locations
+router.post(
+  '/vendors/:vendorId/sync-pickup-location',
+  auth(),
+  catchAsync(adminController.syncVendorPickupLocation.handler)
+);
+
+router.get(
+  '/vendor-pickup-profiles',
+  auth(),
+  catchAsync(adminController.getVendorPickupProfiles.handler)
+);
+
 // Dashboard Stats
 router.get(
   '/dashboard-stats',

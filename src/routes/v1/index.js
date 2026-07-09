@@ -47,6 +47,7 @@ const addressRoute = require('./address.route');
 const shippingRoute = require('./shipping.route');
 const webhooksRoute = require('./webhooks.route');
 const topVendorsRoute = require('../vendor/topVendors.route');
+const vendorShiprocketRoute = require('./vendorShiprocket.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -250,6 +251,10 @@ const defaultRoutes = [
   {
     path: '/vendor',
     route: topVendorsRoute,
+  },
+  {
+    path: '/vendor/shiprocket',
+    route: vendorShiprocketRoute,
   },
 ];
 

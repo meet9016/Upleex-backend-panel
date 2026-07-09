@@ -36,3 +36,4 @@ module.exports.Notification = require('./notification.model');
 
 module.exports.Setting = require('./setting.model');
 module.exports.Address = require('./address.model');
+module.exports.VendorShiprocketProfile = require('./vendorShiprocketProfile.model');

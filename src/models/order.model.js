@@ -226,6 +226,27 @@ const orderSchema = new mongoose.Schema(
       released_at: Date,
       paid_at: Date,
     }],
+    // Vendor-specific Shiprocket shipments (for split orders)
+    vendor_shipments: [{
+      vendor_id: String,
+      shiprocket_order_id: String,
+      shiprocket_shipment_id: String,
+      pickup_location: String,
+      pickup_pincode: String,
+      awb_code: String,
+      courier_name: String,
+      status: {
+        type: String,
+        enum: ['created', 'pickup_generated', 'shipped', 'delivered', 'cancelled', 'failed'],
+        default: 'created',
+      },
+      tracking_updates: [{
+        status: String,
+        message: String,
+        location: String,
+        timestamp: Date,
+      }],
+    }],
   },
   {
     timestamps: true,

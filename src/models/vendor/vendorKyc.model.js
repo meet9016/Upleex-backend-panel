@@ -42,6 +42,17 @@ const vendorKycSchema = new mongoose.Schema(
     Declaration: {
       terms_conditions: { type: Boolean, default: false },
     },
+    // Pickup Address (optional - if different from contact address)
+    PickupAddress: {
+      address: { type: String, default: '' },
+      pincode: { type: String, default: '' },
+      city_id: { type: String, default: '' },
+      state_id: { type: String, default: '' },
+      country_id: { type: String, default: '' },
+      city_name: { type: String, default: '' },
+      state_name: { type: String, default: '' },
+      country_name: { type: String, default: '' },
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -79,6 +90,7 @@ vendorKycSchema.options.toJSON = {
       Bank: ret.Bank || {},
       Documents: ret.Documents || {},
       Declaration: ret.Declaration || {},
+      PickupAddress: ret.PickupAddress || {},
       status: ret.status || 'pending',
       completed_pages: ret.completed_pages || [],
       vendor_type: ret.vendor_type || 'both',
