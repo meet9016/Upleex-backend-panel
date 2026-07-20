@@ -83,17 +83,18 @@ const getAllVendors = {
         }
       });
 
-      // Add from Vendor (overrides VendorKyc if exists)
+      // Add from Vendor (fill missing info if not in VendorKyc)
       vendorsFromModel.forEach(v => {
         const vid = String(v._id) || v.vendor_id;
         if (vid) {
+          const existing = vendorInfoMap[vid] || {};
           vendorInfoMap[vid] = {
-            _id: v._id,
+            _id: existing._id || v._id,
             vendor_id: vid,
-            full_name: v.full_name || '',
-            business_name: v.business_name || '',
-            email: v.email || '',
-            number: v.mobile || ''
+            full_name: existing.full_name || v.full_name || '',
+            business_name: existing.business_name || v.business_name || '',
+            email: existing.email || v.email || '',
+            number: existing.number || v.mobile || ''
           };
         }
       });
