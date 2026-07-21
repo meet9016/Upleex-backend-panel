@@ -2,6 +2,8 @@ const PDFDocument = require('pdfkit');
 const moment = require('moment');
 const axios = require('axios');
 const https = require('https');
+const path = require('path');
+const fs = require('fs');
 
 /**
  * Convert snake_case to camelCase
@@ -496,6 +498,15 @@ const generatePlanInvoicePDF = async (req, res, rawData, vendorProfile) => {
       } catch (err) {
         console.error('Failed to load logo for PDF:', err.message, err.response?.status);
       }
+    }
+
+    try {
+      const upleexLogoPath = path.join(__dirname, '../../public/images/logo/logo.png');
+      if (fs.existsSync(upleexLogoPath)) {
+        doc.image(upleexLogoPath, 400, 40, { height: 80 });
+      }
+    } catch (err) {
+      console.error('Failed to load Upleex local logo for PDF:', err.message);
     }
 
     doc.font('Helvetica-Bold')
