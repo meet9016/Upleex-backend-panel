@@ -1,5 +1,7 @@
 const PDFDocument = require('pdfkit');
 const moment = require('moment');
+const axios = require('axios');
+const https = require('https');
 
 /**
  * Convert snake_case to camelCase
@@ -67,10 +69,14 @@ const numberToWords = (num) => {
 const generateInvoicePDF = async (req, res) => {
   try {
     const { data: rawData, vendorProfile, type = 'order' } = req.body;
-
+console.log(req.body,'req.body');
     if (!rawData) {
       console.error('No data provided in request');
       return res.status(400).json({ message: 'Invoice data is required' });
+    }
+    
+    if (type === 'plan') {
+      return generatePlanInvoicePDF(req, res, rawData, vendorProfile);
     }
     
     // Normalize _id → id, then convert all keys to camelCase
@@ -450,6 +456,160 @@ const generateInvoicePDF = async (req, res) => {
   } catch (error) {
     console.error('Error generating PDF:', error);
     console.error('Error stack:', error.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Failed to generate PDF', error: error.message });
+    }
+  }
+};
+
+const generatePlanInvoicePDF = async (req, res, rawData, vendorProfile) => {
+  try {
+    const camelData = convertToCamelCase(normalizeIds(rawData));
+    const camelVendorProfile = vendorProfile ? convertToCamelCase(normalizeIds(vendorProfile)) : {};
+    console.log(camelData,'camelData');
+    console.log(camelVendorProfile,'camelVendorProfile');
+    const data = camelData.items || camelData.data || (Array.isArray(camelData) ? camelData : [camelData]); 
+    if (!Array.isArray(data) || data.length === 0) throw new Error("No data items");
+    
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+    const billId = camelData.id || camelData._id || data[0]?.id || data[0]?._id || '000000';
+    const billNo = parseInt(String(billId).slice(-6), 16) || Math.floor(Math.random() * 1000000);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice-${billNo}.pdf`);
+    doc.pipe(res);
+
+    if (camelVendorProfile?.businessLogo) {
+      try {
+        console.log('Fetching logo from:', camelVendorProfile.businessLogo);
+        const response = await axios.get(camelVendorProfile.businessLogo, { 
+          responseType: 'arraybuffer',
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          }
+        });
+        doc.image(response.data, 50, 45, { height: 50 });
+        console.log('Logo loaded for PDF successfully');
+      } catch (err) {
+        console.error('Failed to load logo for PDF:', err.message, err.response?.status);
+      }
+    }
+
+    doc.font('Helvetica-Bold')
+       .fontSize(10)
+       .text('|| SHREE GANESHAY NAMAH ||', 0, 50, { align: 'center' });
+    
+    doc.fontSize(24)
+       .text('INVOICE', 0, 65, { align: 'center' });
+
+    const city = camelVendorProfile?.city || 'SURAT';
+    const pin = camelVendorProfile?.pincode || '395010';
+    const state = camelVendorProfile?.state || 'GUJARAT';
+    
+    const addressLine = camelVendorProfile?.address ? `${camelVendorProfile.address},\n` : '';
+    const fullAddress = `${addressLine}${city}-${pin}, ${state}`.toUpperCase();
+    
+    doc.font('Helvetica')
+       .fontSize(10)
+       .text(fullAddress, 0, 95, { align: 'center' });
+
+    let currentY = camelVendorProfile?.address ? 145 : 130;
+    
+    // Top border
+    doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
+    currentY += 10;
+    
+    // Customer Details
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text(`Customer : ${camelVendorProfile?.businessName || 'VENDOR'}`, 50, currentY);
+    doc.text(`Mob.No. : ${camelVendorProfile?.mobile || 'N/A'}`, 50, currentY + 15);
+    
+    doc.text(`Bill No: ${billNo}`, 400, currentY, { align: 'right', width: 145 });
+    doc.text(`Date : ${moment().format('DD/MM/YYYY')}`, 400, currentY + 15, { align: 'right', width: 145 });
+
+    currentY += 35;
+
+    const tableStartY = currentY;
+    
+    // Bottom border of customer details = top border of table header
+    doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
+    currentY += 10;
+
+    // Table Header
+    doc.text('No.', 55, currentY);
+    doc.text('Description', 90, currentY);
+    doc.text('Type', 250, currentY);
+    doc.text('Rate', 330, currentY, { width: 60, align: 'right' });
+    doc.text('Tax GST', 400, currentY, { width: 60, align: 'right' });
+    doc.text('Amount', 475, currentY, { width: 65, align: 'right' });
+
+    currentY += 15;
+    const headerBottomY = currentY;
+    doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
+    currentY += 10;
+    
+    doc.font('Helvetica');
+    
+    let totalAmount = 0;
+    
+    data.forEach((item, index) => {
+      const price = Number(item.price) || 0;
+      const total = Number(item.totalPrice) || price;
+      const gst = Number(item.gstAmount) || 0;
+      const rate = total - gst;
+      totalAmount += total;
+      
+      doc.text(`${index + 1}`, 55, currentY);
+      doc.text(item.productName || 'Plan', 90, currentY);
+      doc.text(item.productTypeName || 'Type', 250, currentY, { width: 70, align: 'center' });
+      doc.text(rate.toFixed(2), 330, currentY, { width: 60, align: 'right' });
+      doc.text(gst.toFixed(2), 400, currentY, { width: 60, align: 'right' });
+      doc.text(total.toFixed(2), 475, currentY, { width: 65, align: 'right' });
+      
+      currentY += 20;
+      if (index < data.length - 1) {
+         doc.moveTo(50, currentY - 5).lineTo(545, currentY - 5).stroke();
+      }
+    });
+
+    currentY += 5;
+    const preTotalY = currentY;
+    doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
+    currentY += 10;
+    
+    doc.font('Helvetica-Bold');
+    doc.text('Bill Total Amount :', 200, currentY, { width: 260, align: 'right' });
+    doc.text(totalAmount.toFixed(2), 475, currentY, { width: 65, align: 'right' });
+    
+    currentY += 15;
+    const tableEndY = currentY;
+    doc.moveTo(50, currentY).lineTo(545, currentY).stroke();
+    
+    // Draw vertical lines
+    doc.moveTo(50, tableStartY).lineTo(50, tableEndY).stroke();
+    doc.moveTo(85, tableStartY).lineTo(85, preTotalY).stroke();
+    doc.moveTo(250, tableStartY).lineTo(250, preTotalY).stroke();
+    doc.moveTo(330, tableStartY).lineTo(330, preTotalY).stroke();
+    doc.moveTo(400, tableStartY).lineTo(400, preTotalY).stroke();
+    doc.moveTo(470, tableStartY).lineTo(470, tableEndY).stroke();
+    doc.moveTo(545, tableStartY).lineTo(545, tableEndY).stroke();
+
+    currentY += 40;
+    
+    doc.font('Helvetica').fontSize(8);
+    doc.text('* Goods Once Sold will not be Refunded.', 50, currentY);
+    doc.text('* No Guarantee for Cloth, Colour & Work.', 50, currentY + 12);
+    doc.text('SUBJECT TO SURAT JURISDICTION', 50, currentY + 24);
+    
+    doc.moveTo(400, currentY + 24).lineTo(545, currentY + 24).stroke();
+    doc.text('For, UPLEEX', 400, currentY + 30, { width: 145, align: 'right' });
+
+    doc.end();
+  } catch (error) {
+    console.error('Error generating Plan PDF:', error);
     if (!res.headersSent) {
       res.status(500).json({ message: 'Failed to generate PDF', error: error.message });
     }
