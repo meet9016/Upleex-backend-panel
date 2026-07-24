@@ -267,18 +267,6 @@ const approveProduct = {
             }
           }
 
-          if (!planToUse) {
-            const activeListingPlans = await ListingPlanPurchase.find({
-              vendor_id: product.vendor_id,
-              expire_at: { $gt: new Date() }
-            });
-            for (const p of activeListingPlans) {
-              if (p.is_unlimited || (p.product_ids || []).length < p.max_products) {
-                planToUse = p;
-                break;
-              }
-            }
-          }
 
           if (planToUse) {
             if (!planToUse.product_ids) planToUse.product_ids = [];
@@ -496,18 +484,6 @@ const bulkApproveProducts = {
             }
           }
 
-          if (!planToUse) {
-            const activeListingPlans = await ListingPlanPurchase.find({
-              vendor_id: product.vendor_id,
-              expire_at: { $gt: new Date() }
-            });
-            for (const p of activeListingPlans) {
-              if (p.is_unlimited || (p.product_ids || []).length < p.max_products) {
-                planToUse = p;
-                break;
-              }
-            }
-          }
 
           if (planToUse) {
             if (!planToUse.product_ids) planToUse.product_ids = [];
