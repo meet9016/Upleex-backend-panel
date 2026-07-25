@@ -144,6 +144,9 @@ const getAllVendors = {
         );
       }
 
+      // Sort vendors by number of products (descending)
+      vendorList.sort((a, b) => (b.products?.length || 0) - (a.products?.length || 0));
+
       // Step 9: Apply pagination to vendor list
       const total = vendorList.length;
       const paginatedVendors = vendorList.slice(skip, skip + limitNum);

@@ -77,43 +77,53 @@ const getAllCategories = {
           const catId = cat.id || cat._id;
           
           // Build service count query
+          const now = new Date();
           const serviceQuery = { 
             category_id: String(catId),
-            approval_status: 'approved'
+            approval_status: 'approved',
+            status: 'active',
+            $or: [
+              { listing_expires_at: { $gt: now } },
+              { listing_expires_at: { $exists: false } }
+            ]
           };
 
           // If city is provided, filter by city
+          let isValidCity = false;
           if (city) {
-            const VendorKyc = require('../models').VendorKyc;
             const raw = String(city).trim();
+            if (raw !== 'Select City' && raw !== 'null' && raw !== 'undefined' && raw !== '') {
+              isValidCity = true;
+              const VendorKyc = require('../models').VendorKyc;
             const parts = raw.split('-');
             const cityName = parts.length > 1 ? parts[parts.length - 1] : raw;
             const cityNameRegex = new RegExp(String(cityName).trim(), 'i');
             
             const vendors = await VendorKyc.find(
-              {
-                $or: [
-                  { 'ContactDetails.city_id': raw },
-                  { 'ContactDetails.city_id': { $regex: cityNameRegex } },
-                  { 'ContactDetails.city_name': cityNameRegex },
-                ],
-              },
-              { 'ContactDetails.vendor_id': 1 }
-            );
-            const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
-            
-            if (vendorIds.length > 0) {
-              serviceQuery.vendor_id = { $in: vendorIds };
-            } else {
-              // If no vendors in this city, return 0 count
-              return {
-                categories_id: String(catId),
-                categories_name: cat.name,
-                image: cat.image || '',
-                service_count: '0',
-                created_at: cat.createdAt,
-                updated_at: cat.updatedAt,
-              };
+                {
+                  $or: [
+                    { 'ContactDetails.city_id': raw },
+                    { 'ContactDetails.city_id': { $regex: cityNameRegex } },
+                    { 'ContactDetails.city_name': cityNameRegex },
+                  ],
+                },
+                { 'ContactDetails.vendor_id': 1 }
+              );
+              const vendorIds = vendors.map(v => v.ContactDetails.vendor_id).filter(Boolean);
+              
+              if (vendorIds.length > 0) {
+                serviceQuery.vendor_id = { $in: vendorIds };
+              } else {
+                // If no vendors in this city, return 0 count
+                return {
+                  categories_id: String(catId),
+                  categories_name: cat.name,
+                  image: cat.image || '',
+                  service_count: '0',
+                  created_at: cat.createdAt,
+                  updated_at: cat.updatedAt,
+                };
+              }
             }
           }
 
