@@ -144,8 +144,12 @@ const getAllVendors = {
         );
       }
 
-      // Sort vendors by number of products (descending)
-      vendorList.sort((a, b) => (b.products?.length || 0) - (a.products?.length || 0));
+      // Sort vendors by most recently added product
+      vendorList.sort((a, b) => {
+        const aMostRecent = a.products && a.products.length > 0 ? a.products[0].createdAt : 0;
+        const bMostRecent = b.products && b.products.length > 0 ? b.products[0].createdAt : 0;
+        return new Date(bMostRecent) - new Date(aMostRecent);
+      });
 
       // Step 9: Apply pagination to vendor list
       const total = vendorList.length;

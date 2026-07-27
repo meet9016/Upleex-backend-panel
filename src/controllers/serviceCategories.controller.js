@@ -139,6 +139,8 @@ const getAllCategories = {
           };
         })
       );
+     // Sort by service count (descending)
+      transformedData.sort((a, b) => parseInt(b.service_count) - parseInt(a.service_count));
 
       res.status(200).json({
         success: true,
