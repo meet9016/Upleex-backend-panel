@@ -10,7 +10,7 @@ const { processVendorPayout } = require('./razorpayx.service');
  */
 const startAutoReleasePaymentsCron = () => {
   // Run every 5 minutes to check for payments ready for release
-  cron.schedule('* * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     console.log('[Cron] Checking for auto-release payments...');
     try {
       const now = new Date();
@@ -114,7 +114,66 @@ const startKycReminderCron = () => {
   });
 };
 
+const startProductExpiryCron = () => {
+  // Run every night at 2:00 AM
+  cron.schedule('0 2 * * *', async () => {
+    try {
+      const Product = require('../models/product.model');
+      const now = new Date();
+
+      // Move expired products to draft status
+      const expiredProductsResult = await Product.updateMany(
+        {
+          expires_at: { $lt: now },
+          status: { $in: ['active', 'inactive'] }
+        },
+        {
+          $set: { status: 'draft' }
+        }
+      );
+
+      if (expiredProductsResult.modifiedCount > 0) {
+        console.log(`[Cron] Moved ${expiredProductsResult.modifiedCount} expired products to draft status`);
+      }
+
+      // Reset expired priority status
+      const priorityProductsResult = await Product.updateMany(
+        {
+          is_priority: true,
+          priority_expiry: { $lt: now }
+        },
+        {
+          $set: { is_priority: false }
+        }
+      );
+
+      if (priorityProductsResult.modifiedCount > 0) {
+        console.log(`[Cron] Removed priority status from ${priorityProductsResult.modifiedCount} products`);
+      }
+
+      // Reset expired boost status
+      const boostedProductsResult = await Product.updateMany(
+        {
+          is_boosted: true,
+          boost_expiry: { $lt: now }
+        },
+        {
+          $set: { is_boosted: false }
+        }
+      );
+
+      if (boostedProductsResult.modifiedCount > 0) {
+        console.log(`[Cron] Removed boost status from ${boostedProductsResult.modifiedCount} products`);
+      }
+
+    } catch (error) {
+      console.error('[Cron] Error in product expiry cron job:', error);
+    }
+  });
+};
+
 module.exports = {
   startKycReminderCron,
-  startAutoReleasePaymentsCron
+  startAutoReleasePaymentsCron,
+  startProductExpiryCron
 };
