@@ -5,7 +5,7 @@ const VendorKyc = require('../models/vendor/vendorKyc.model');
 const Vendor = require('../models/vendor/vendor.model');
 const walletService = require('../services/wallet.service');
 
-// Get all vendors with pending service count and services
+// Get all vendors with pending service count
 const getAllVendors = {
   handler: async (req, res) => {
     try {
@@ -14,116 +14,55 @@ const getAllVendors = {
       const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
       const skip = (pageNum - 1) * limitNum;
 
-      // Step 1: Get ALL services
-      const allServices = await Service.find({}).sort({ createdAt: -1 });
-      const overallCount = allServices.length;
+      // Only fetch vendors who can provide services (vendor_type: 'service' or 'both')
+      const eligibleVendors = await Vendor.find(
+        { vendor_type: { $in: ['service', 'both'] } },
+        { _id: 1 }
+      ).lean();
+      const eligibleVendorIds = eligibleVendors.map(v => String(v._id));
 
-      // Step 2: Group services by vendor_id
-      const allServicesByVendor = {};
-      allServices.forEach(service => {
-        const vid = service.vendor_id;
-        if (!allServicesByVendor[vid]) allServicesByVendor[vid] = [];
-        allServicesByVendor[vid].push(service);
-      });
+      let query = { 'ContactDetails.vendor_id': { $in: eligibleVendorIds } };
 
-      const vendorIdsFromServices = Object.keys(allServicesByVendor);
-
-      // Step 3: Get vendor info from VendorKyc and Vendor
-      const [vendorKycs, vendorsFromModel] = await Promise.all([
-        VendorKyc.find({
-          $or: [
-            { 'ContactDetails.vendor_id': { $in: vendorIdsFromServices } },
-            { vendor_id: { $in: vendorIdsFromServices } }
-          ]
-        }),
-        Vendor.find({
-          $or: [
-            { _id: { $in: vendorIdsFromServices } },
-            { vendor_id: { $in: vendorIdsFromServices } }
-          ]
-        })
-      ]);
-
-      // Step 4: Create vendor info map
-      const vendorInfoMap = {};
-      vendorKycs.forEach(v => {
-        const vid = v.ContactDetails?.vendor_id || v.vendor_id;
-        if (vid) {
-          vendorInfoMap[vid] = {
-            _id: v._id,
-            vendor_id: vid,
-            full_name: v.ContactDetails?.full_name || '',
-            business_name: v.Identity?.business_name || '',
-            email: v.ContactDetails?.email || '',
-            number: v.ContactDetails?.mobile || ''
-          };
-        }
-      });
-
-      vendorsFromModel.forEach(v => {
-        const vid = String(v._id) || v.vendor_id;
-        if (vid) {
-          const existing = vendorInfoMap[vid] || {};
-          vendorInfoMap[vid] = {
-            _id: existing._id || v._id,
-            vendor_id: vid,
-            full_name: existing.full_name || v.full_name || '',
-            business_name: existing.business_name || v.business_name || '',
-            email: existing.email || v.email || '',
-            number: existing.number || v.mobile || ''
-          };
-        }
-      });
-
-      // Step 5: Build vendor list with services
-      let vendorList = [];
-      vendorIdsFromServices.forEach(vid => {
-        const vendorInfo = vendorInfoMap[vid] || {
-          _id: vid,
-          vendor_id: vid,
-          full_name: 'Unknown Vendor',
-          business_name: 'Unknown Business',
-          email: '',
-          number: ''
-        };
-
-        const services = allServicesByVendor[vid] || [];
-        const pending = services.filter(s => s.approval_status === 'pending').length;
-        const approved = services.filter(s => s.approval_status === 'approved').length;
-        const rejected = services.filter(s => s.approval_status === 'rejected').length;
-
-        vendorList.push({
-          ...vendorInfo,
-          pendingCount: pending,
-          services,
-          counts: { pending, approved, rejected }
-        });
-      });
-
-      if (search) {
-        const searchRegex = new RegExp(search, 'i');
-        vendorList = vendorList.filter(v => 
-          searchRegex.test(v.full_name) || searchRegex.test(v.business_name)
-        );
+      if (search && search.trim() !== '') {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        query.$or = [
+          { 'ContactDetails.full_name': searchRegex },
+          { 'Identity.business_name': searchRegex }
+        ];
       }
 
-      // Sort vendors by number of services (descending)
-      vendorList.sort((a, b) => (b.services?.length || 0) - (a.services?.length || 0));
+      const total = await VendorKyc.countDocuments(query);
 
-      // Step 6: Apply pagination
-      const total = vendorList.length;
-      const paginatedVendors = vendorList.slice(skip, skip + limitNum);
+      const vendors = await VendorKyc.find(query).skip(skip).limit(limitNum);
+
+      const vendorsWithCount = await Promise.all(
+        vendors.map(async (vendor) => {
+          const vendorId = vendor.ContactDetails?.vendor_id || '';
+          const pendingCount = await Service.countDocuments({
+            vendor_id: vendorId,
+            approval_status: 'pending'
+          });
+          
+          return {
+            _id: vendor._id,
+            vendor_id: vendorId,
+            full_name: vendor.ContactDetails?.full_name || '',
+            business_name: vendor.Identity?.business_name || '',
+            email: vendor.ContactDetails?.email || '',
+            number: vendor.ContactDetails?.mobile || '',
+            pendingCount
+          };
+        })
+      );
 
       res.status(200).json({
         status: 200,
-        data: paginatedVendors,
+        data: vendorsWithCount,
         total,
         page: pageNum,
-        totalPages: Math.ceil(total / limitNum),
-        overallCount
+        totalPages: Math.ceil(total / limitNum)
       });
     } catch (error) {
-      console.error('❌ [getAllVendors] Error:', error);
       res.status(httpStatus.INTERNAL_SERVER_ERROR).json({ message: error.message });
     }
   }
