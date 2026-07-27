@@ -240,57 +240,36 @@ const assignAwbToShipment = async (shipmentId, courierId) => {
 };
 
 /**
- * Create a pickup location in Shiprocket
- * @param {Object} locationData
+ * Calculate shipping charges based on weight and dimensions
+ * @param {Object} params - { pickup_postcode, delivery_postcode, weight, length, breadth, height, cod }
  * @returns {Promise<Object>}
  */
-const createPickupLocation = async (locationData) => {
+const calculateShippingCharges = async (params) => {
   const token = await getShiprocketToken();
   if (!token) {
     throw new Error('Shiprocket API credentials are not set up or authentication failed.');
   }
 
   try {
-    console.log('[Shiprocket] Creating pickup location:', locationData.pickup_location);
-    const response = await axios.post(
-      'https://apiv2.shiprocket.in/v1/external/settings/company/addPickup',
-      locationData,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const { pickup_postcode, delivery_postcode, weight = 0.5, length = 10, breadth = 10, height = 10, cod = 0 } = params;
 
-    console.log('[Shiprocket] Pickup location created successfully');
-    console.log('[Shiprocket] Pickup Location Response:', JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error('[Shiprocket] Failed to create pickup location:', error.response ? error.response.data : error.message);
-    const apiErrorMsg = error.response && error.response.data && error.response.data.message
-      ? error.response.data.message
-      : (error.response && error.response.data && typeof error.response.data === 'string' ? error.response.data : '');
-    
-    throw new Error(apiErrorMsg ? `Shiprocket API Error: ${apiErrorMsg}` : 'Failed to create pickup location');
-  }
-};
+    // Shiprocket serviceability API with dimensions
+    const queryParams = {
+      pickup_postcode,
+      delivery_postcode,
+      weight,
+      cod,
+      length,
+      breadth,
+      height,
+    };
 
-/**
- * Get all pickup locations from Shiprocket
- * @returns {Promise<Object>}
- */
-const getPickupLocations = async () => {
-  const token = await getShiprocketToken();
-  if (!token) {
-    throw new Error('Shiprocket API credentials are not set up or authentication failed.');
-  }
+    console.log('[Shiprocket] Calculating shipping charges with params:', queryParams);
 
-  try {
-    console.log('[Shiprocket] Fetching pickup locations...');
     const response = await axios.get(
-      'https://apiv2.shiprocket.in/v1/external/settings/company/pickup',
+      'https://apiv2.shiprocket.in/v1/external/courier/serviceability/',
       {
+        params: queryParams,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -298,11 +277,45 @@ const getPickupLocations = async () => {
       }
     );
 
-    console.log('[Shiprocket] Pickup locations fetched successfully');
-    return response.data;
+    const data = response.data;
+
+    // Extract best courier options
+    const couriers = data.data?.available_courier_companies || [];
+    
+    // Sort by rate (lowest first)
+    const sortedCouriers = couriers.sort((a, b) => a.rate - b.rate);
+    
+    // Get the cheapest option
+    const cheapestCourier = sortedCouriers[0];
+
+    console.log(`[Shiprocket] Found ${couriers.length} couriers. Cheapest: ₹${cheapestCourier?.rate || 'N/A'}`);
+
+    return {
+      success: true,
+      available_couriers: sortedCouriers,
+      cheapest_courier: cheapestCourier ? {
+        courier_id: cheapestCourier.courier_company_id,
+        courier_name: cheapestCourier.courier_name,
+        rate: cheapestCourier.rate,
+        cod_charges: cheapestCourier.cod_charges || 0,
+        estimated_delivery_days: cheapestCourier.estimated_delivery_days,
+        rating: cheapestCourier.rating,
+      } : null,
+      total_couriers: couriers.length,
+      weight_used: weight,
+      dimensions_used: { length, breadth, height },
+      weight_per_item: weight,
+      quantity: 1,
+    };
   } catch (error) {
-    console.error('[Shiprocket] Failed to fetch pickup locations:', error.response ? error.response.data : error.message);
-    throw new Error('Failed to fetch pickup locations');
+    console.error('[Shiprocket] Failed to calculate shipping:', error.response ? error.response.data : error.message);
+    
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message,
+      available_couriers: [],
+      cheapest_courier: null,
+    };
   }
 };
 
@@ -352,6 +365,79 @@ const generatePickup = async (shipmentIds) => {
   }
 };
 
+/**
+ * Create a pickup location
+ * @param {Object} pickupData - Pickup location details
+ * @returns {Promise<Object>}
+ */
+const createPickupLocation = async (pickupData) => {
+  const token = await getShiprocketToken();
+  if (!token) {
+    throw new Error('Shiprocket API credentials are not set up or authentication failed.');
+  }
+
+  try {
+    console.log('[Shiprocket] Creating pickup location:', pickupData.pickup_location);
+
+    const response = await axios.post(
+      'https://apiv2.shiprocket.in/v1/external/settings/company/addPickup',
+      pickupData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log('[Shiprocket] Pickup location created successfully');
+    console.log('[Shiprocket] Pickup Location Response:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error('[Shiprocket] Failed to create pickup location:', error.response ? error.response.data : error.message);
+    const apiErrorMsg = error.response && error.response.data && error.response.data.message
+      ? error.response.data.message
+      : (error.response && error.response.data && typeof error.response.data === 'string' ? error.response.data : '');
+    
+    throw new Error(apiErrorMsg ? `Shiprocket API Error: ${apiErrorMsg}` : 'Failed to create pickup location');
+  }
+};
+
+/**
+ * Get all pickup locations
+ * @returns {Promise<Object>}
+ */
+const getPickupLocations = async () => {
+  const token = await getShiprocketToken();
+  if (!token) {
+    throw new Error('Shiprocket API credentials are not set up or authentication failed.');
+  }
+
+  try {
+    console.log('[Shiprocket] Fetching pickup locations...');
+
+    const response = await axios.get(
+      'https://apiv2.shiprocket.in/v1/external/settings/company/pickup',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log('[Shiprocket] Pickup locations fetched successfully');
+    return response.data;
+  } catch (error) {
+    console.error('[Shiprocket] Failed to fetch pickup locations:', error.response ? error.response.data : error.message);
+    const apiErrorMsg = error.response && error.response.data && error.response.data.message
+      ? error.response.data.message
+      : (error.response && error.response.data && typeof error.response.data === 'string' ? error.response.data : '');
+    
+    throw new Error(apiErrorMsg ? `Shiprocket API Error: ${apiErrorMsg}` : 'Failed to fetch pickup locations');
+  }
+};
+
 module.exports = {
   getShiprocketToken,
   createShiprocketOrder,
@@ -359,6 +445,7 @@ module.exports = {
   trackShipment,
   getAvailableCouriers,
   checkCourierServiceability,
+  calculateShippingCharges,
   assignAwbToShipment,
   generatePickup,
   createPickupLocation,

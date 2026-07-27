@@ -411,6 +411,46 @@ const syncOrderToShiprocket = async (order) => {
         order.shipping_address?.state
       );
 
+      // Calculate total weight and dimensions from products (multiply by quantity)
+      let totalWeight = 0;
+      let totalLength = 0;
+      let totalBreadth = 0;
+      let totalHeight = 0;
+      let totalQuantity = 0;
+      
+      for (const item of order.items) {
+        try {
+          const product = await Product.findById(item.product_id);
+          if (product) {
+            const quantity = item.quantity || 1;
+            totalQuantity += quantity;
+            
+            // Multiply weight by quantity
+            const itemWeight = (product.weight || 0.5) * quantity;
+            totalWeight += itemWeight;
+            
+            // Multiply dimensions by quantity (volumetric calculation)
+            const itemLength = (product.length || 10) * quantity;
+            const itemBreadth = (product.breadth || 10) * quantity;
+            const itemHeight = (product.height || 10) * quantity;
+            
+            totalLength += itemLength;
+            totalBreadth += itemBreadth;
+            totalHeight += itemHeight;
+          }
+        } catch (err) {
+          console.error(`Error fetching product dimensions for ${item.product_id}:`, err);
+        }
+      }
+      
+      // Ensure minimum values
+      totalWeight = Math.max(totalWeight, 0.5);
+      totalLength = Math.max(totalLength || 10, 10);
+      totalBreadth = Math.max(totalBreadth || 10, 10);
+      totalHeight = Math.max(totalHeight || 10, 10);
+      
+      console.log(`[Shiprocket] Calculated dimensions - Weight: ${totalWeight}kg, L: ${totalLength}cm, B: ${totalBreadth}cm, H: ${totalHeight}cm, Qty: ${totalQuantity}`);
+
       const shiprocketPayload = {
         order_id: vendorOrderId,
         order_date: formattedDate,
@@ -455,11 +495,11 @@ const syncOrderToShiprocket = async (order) => {
         giftwrap_charges: 0,
         transaction_charges: 0,
         total_discount: 0,
-        sub_total: vendorSubtotal,
-        length: 10,
-        breadth: 10,
-        height: 10,
-        weight: 0.5,
+        sub_total: order.subtotal,
+        length: totalLength,
+        breadth: totalBreadth,
+        height: totalHeight,
+        weight: totalWeight,
         ewaybill_no: '',
         customer_gstin: '',
         invoice_number: vendorOrderId,
@@ -494,12 +534,20 @@ const syncOrderToShiprocket = async (order) => {
           const deliveryPostcode = order.shipping_address?.pincode;
           const cod = order.payment_method === 'cod' ? 1 : 0;
           
-          if (pickupPincode && deliveryPostcode) {
+          // Use calculated weight from products (already computed above)
+          const calculatedWeight = totalWeight;
+
+          if (deliveryPostcode) {
+            console.log(`[Shiprocket] Checking serviceability for ${pickupPostcode} → ${deliveryPostcode} (Weight: ${calculatedWeight}kg)`);
+            
             const serviceabilityParams = {
               pickup_postcode: pickupPincode,
               delivery_postcode: deliveryPostcode,
               cod: cod,
-              weight: 0.5
+              weight: calculatedWeight,
+              length: totalLength,
+              breadth: totalBreadth,
+              height: totalHeight
             };
 
             const serviceabilityResponse = await shiprocketService.checkCourierServiceability(serviceabilityParams);
