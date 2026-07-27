@@ -3,6 +3,7 @@ const validate = require('../../middlewares/validate');
 const catchAsync = require('../../utils/catchAsync');
 const auth = require('../../middlewares/auth');
 const paymentController = require('../../controllers/payment.controller');
+const { calculateShippingCharges } = require('../../services/shiprocket.service');
 const Joi = require('joi');
 
 const router = express.Router();
@@ -39,6 +40,18 @@ const cancelOrderValidation = {
   }),
   body: Joi.object().keys({
     reason: Joi.string().allow('').optional(),
+  }),
+};
+
+const calculateShippingValidation = {
+  body: Joi.object().keys({
+    pickup_postcode: Joi.string().required().pattern(/^[0-9]{6}$/).message('Pickup postcode must be 6 digits'),
+    delivery_postcode: Joi.string().required().pattern(/^[0-9]{6}$/).message('Delivery postcode must be 6 digits'),
+    weight: Joi.number().min(0.01).max(100).default(0.5).description('Weight in kg'),
+    length: Joi.number().min(1).max(200).default(10).description('Length in cm'),
+    breadth: Joi.number().min(1).max(200).default(10).description('Breadth in cm'),
+    height: Joi.number().min(1).max(200).default(10).description('Height in cm'),
+    cod: Joi.number().min(0).default(0).description('Cash on Delivery amount (0 for prepaid)'),
   }),
 };
 
@@ -123,6 +136,34 @@ router.put(
 router.post(
   '/webhook',
   catchAsync(paymentController.razorpayWebhook)
+);
+
+// Calculate shipping charges based on weight and dimensions
+router.post(
+  '/calculate-shipping',
+  auth(),
+  validate(calculateShippingValidation),
+  catchAsync(async (req, res) => {
+    const { pickup_postcode, delivery_postcode, weight, length, breadth, height, cod } = req.body;
+
+    const result = await calculateShippingCharges({
+      pickup_postcode,
+      delivery_postcode,
+      weight,
+      length,
+      breadth,
+      height,
+      cod,
+    });
+
+    res.status(200).json({
+      success: result.success,
+      message: result.success 
+        ? `Found ${result.total_couriers} couriers. Cheapest: ₹${result.cheapest_courier?.rate || 'N/A'}` 
+        : 'Failed to calculate shipping',
+      data: result,
+    });
+  })
 );
 
 module.exports = router;
