@@ -731,29 +731,47 @@ const getAllProducts = {
       const skip = (pageNum - 1) * limitNum;
 
       // Sorting
-      // Note: pricing_type: -1 (desc) puts "paid" before "free" alphabetically,
-      // ensuring free products always appear last within their tier.
-      let sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 }; // default sort
+      let sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 }; // default sort for public
+      
+      const isVendorPanel = req.user && req.user.userType === 'vendor';
+      if (isVendorPanel) {
+        sortOptions = { createdAt: -1 }; // Default for vendor panel
+      }
+
       if (customSortOptions) {
-        // Always include pricing_type tiebreaker so free products remain last
-        sortOptions = { is_priority: -1, ...customSortOptions, pricing_type: -1 };
+        if (isVendorPanel) {
+          sortOptions = { ...customSortOptions, createdAt: -1 };
+        } else {
+          // Always include pricing_type tiebreaker so free products remain last
+          sortOptions = { is_priority: -1, ...customSortOptions, pricing_type: -1 };
+        }
       } else if (sort_by) {
         const sortOrder = sort_order === 'asc' ? 1 : -1;
+        let publicSortOptions = {};
+        
         switch (sort_by) {
           case 'price':
-            sortOptions = { is_priority: -1, pricing_type: -1, price: sortOrder };
+            publicSortOptions = { is_priority: -1, pricing_type: -1, price: sortOrder };
+            if (isVendorPanel) sortOptions = { price: sortOrder, createdAt: -1 };
             break;
           case 'name':
-            sortOptions = { is_priority: -1, pricing_type: -1, product_name: sortOrder };
+            publicSortOptions = { is_priority: -1, pricing_type: -1, product_name: sortOrder };
+            if (isVendorPanel) sortOptions = { product_name: sortOrder, createdAt: -1 };
             break;
           case 'date':
-            sortOptions = { is_priority: -1, pricing_type: -1, createdAt: sortOrder };
+            publicSortOptions = { is_priority: -1, pricing_type: -1, createdAt: sortOrder };
+            if (isVendorPanel) sortOptions = { createdAt: sortOrder };
             break;
           case 'popularity':
-            sortOptions = { is_priority: -1, pricing_type: -1, views: sortOrder };
+            publicSortOptions = { is_priority: -1, pricing_type: -1, views: sortOrder };
+            if (isVendorPanel) sortOptions = { views: sortOrder, createdAt: -1 };
             break;
           default:
-            sortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 };
+            publicSortOptions = { is_priority: -1, pricing_type: -1, createdAt: -1 };
+        }
+        
+        if (!isVendorPanel) {
+          sortOptions = publicSortOptions;
         }
       }
 
