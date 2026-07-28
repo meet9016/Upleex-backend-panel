@@ -55,10 +55,27 @@ const getDynamicSitemapUrls = catchAsync(async (req, res) => {
   });
 
   // 4. Fetch service details
-  const services = await Service.find({ approval_status: 'approved' }).select('_id updatedAt');
+  const services = await Service.aggregate([
+    { $match: { approval_status: 'approved' } },
+    {
+      $lookup: {
+        from: 'vendors',
+        localField: 'vendor_id',
+        foreignField: 'vendor_id',
+        as: 'vendor'
+      }
+    },
+    { $unwind: { path: '$vendor', preserveNullAndEmptyArrays: true } },
+    { $project: { _id: 1, updatedAt: 1, slug: 1, location: 1, vendor_city_name: '$vendor.vendor_city_name' } }
+  ]);
+  
   services.forEach((service) => {
+    const serviceSlug = service.slug || service._id.toString();
+    let city = service.vendor_city_name || service.location || 'surat';
+    const citySlug = city.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
     urls.push({
-      url: `${baseUrl}/service/${service._id.toString()}`,
+      url: `${baseUrl}/service/${citySlug}/${serviceSlug}`,
       lastModified: service.updatedAt || new Date(),
       priority: 0.7,
     });

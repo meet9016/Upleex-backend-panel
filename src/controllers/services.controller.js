@@ -295,7 +295,14 @@ const getServiceById = {
   handler: async (req, res) => {
     try {
       const { id } = req.params;
-      let service = await Service.findById(id);
+      
+      // Determine if id is a valid MongoDB ObjectId
+      const isValidObjectId = mongoose.Types.ObjectId.isValid(id);
+      
+      // Query by slug or _id
+      const query = isValidObjectId ? { _id: id } : { slug: id };
+      
+      let service = await Service.findOne(query);
 
       if (!service) {
         return res.status(404).json({ message: 'Service not found' });
