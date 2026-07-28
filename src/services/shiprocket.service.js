@@ -69,14 +69,29 @@ const createShiprocketOrder = async (orderData) => {
     );
 
     console.log(`[Shiprocket] Order created successfully. Shipment ID: ${response.data?.shipment_id}`);
+    
+    // Shiprocket sometimes returns 200 OK with status_code 0 for errors
+    if (!response.data || !response.data.order_id || response.data.status_code === 0) {
+      const errorMsg = response.data?.message || 'Failed to create order. No order_id returned.';
+      const errorDetails = response.data?.errors ? JSON.stringify(response.data.errors) : '';
+      throw new Error(`Shiprocket API Error: ${errorMsg} ${errorDetails ? '- ' + errorDetails : ''}`);
+    }
+    
     return response.data;
   } catch (error) {
     console.error('[Shiprocket] Order creation failed:', error.response ? error.response.data : error.message);
-    const apiErrorMsg = error.response && error.response.data && error.response.data.message
-      ? error.response.data.message
-      : (error.response && error.response.data && typeof error.response.data === 'string' ? error.response.data : '');
+    let apiErrorMsg = '';
+    
+    if (error.response && error.response.data) {
+      apiErrorMsg = error.response.data.message || (typeof error.response.data === 'string' ? error.response.data : '');
+      if (error.response.data.errors) {
+        apiErrorMsg += ' - Details: ' + JSON.stringify(error.response.data.errors);
+      }
+    } else {
+      apiErrorMsg = error.message;
+    }
       
-    throw new Error(apiErrorMsg ? `Shiprocket API Error: ${apiErrorMsg}` : 'Failed to create order in Shiprocket');
+    throw new Error(apiErrorMsg ? (apiErrorMsg.includes('Shiprocket API Error') ? apiErrorMsg : `Shiprocket API Error: ${apiErrorMsg}`) : 'Failed to create order in Shiprocket');
   }
 };
 

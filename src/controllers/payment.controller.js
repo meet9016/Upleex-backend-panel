@@ -231,6 +231,11 @@ const syncOrderToShiprocket = async (order) => {
     console.log('[Shiprocket] ⏭ Skipped — delivery_type is not "shipping"');
     return;
   }
+  
+  if (!order.shipping_address || !order.shipping_address.pincode) {
+    console.error('[Shiprocket] ❌ ERROR: Shipping address or pincode missing');
+    return;
+  }
 
   const moment = require('moment');
   const shiprocketService = require('../services/shiprocket.service');
@@ -272,6 +277,9 @@ const syncOrderToShiprocket = async (order) => {
       // First check VendorShiprocketProfile (if vendor has explicitly set pickup location)
       const vendorProfile = await VendorShiprocketProfile.findOne({ vendor_id: vendorId });
       
+      console.log(`[Shiprocket]   Vendor Profile Found: ${!!vendorProfile}`);
+      console.log(`[Shiprocket]   Vendor Profile Active: ${vendorProfile?.is_active}`);
+      
       if (vendorProfile && vendorProfile.is_active) {
         pickupLocation = vendorProfile.pickup_location_name;
         pickupPincode = vendorProfile.address?.pincode || '';
@@ -283,6 +291,9 @@ const syncOrderToShiprocket = async (order) => {
         
         const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': vendorId });
         const vendor = await Vendor.findById(vendorId);
+        
+        console.log(`[Shiprocket]   Vendor KYC Found: ${!!vendorKyc}`);
+        console.log(`[Shiprocket]   Vendor Found: ${!!vendor}`);
         
         if (vendorKyc) {
           // PRIORITY: PickupAddress > ContactDetails
@@ -298,6 +309,9 @@ const syncOrderToShiprocket = async (order) => {
             pickupLocation = `${businessName}_PKP_${vendorShortId}`; // PKP = Pickup
             
             pickupAddress = {
+              contact_person: pickup.contact_person || vendorKyc.ContactDetails?.full_name || 'Vendor',
+              email: pickup.email || vendorKyc.ContactDetails?.email || vendor?.email || '',
+              phone: pickup.mobile || vendorKyc.ContactDetails?.mobile || '',
               address_line1: pickup.address || '',
               city: pickup.city_name || '',
               state: pickup.state_name || '',
@@ -328,56 +342,83 @@ const syncOrderToShiprocket = async (order) => {
             
             console.log(`[Shiprocket]   Using CONTACT address: ${pickupLocation}, Pincode: ${pickupPincode}`);
           }
+        }
+      }
+      
+      console.log(`[Shiprocket]   Attempting Pickup: ${pickupLocation}, Pincode: ${pickupPincode}`);
           
-          console.log(`[Shiprocket]   KYC Pickup: ${pickupLocation}, Pincode: ${pickupPincode}`);
-          
-          // Check if this pickup location exists in Shiprocket, if not create it
-          try {
-            const existingLocations = await shiprocketService.getPickupLocations();
-            const locationExists = existingLocations?.data?.shipping_address?.some(
-              loc => loc.pickup_location === pickupLocation
-            );
+      // ALWAYS Check if this pickup location exists in Shiprocket, if not create it
+      try {
+        const existingLocations = await shiprocketService.getPickupLocations();
+        
+        // Look for an exact name match OR match by pincode + (phone or email)
+        let matchedLocation = existingLocations?.data?.shipping_address?.find(
+          loc => {
+            if (loc.pickup_location === pickupLocation) return true;
+            if (String(loc.pin_code) !== String(pickupPincode)) return false;
             
-            if (!locationExists && pickupPincode) {
-              console.log(`[Shiprocket]   Creating new pickup location in Shiprocket...`);
-              
-              await shiprocketService.createPickupLocation({
-                pickup_location: pickupLocation,
-                name: pickupAddress.contact_person,
-                email: pickupAddress.email || 'vendor@upleex.com',
-                phone: pickupAddress.phone || '9999999999',
-                address: pickupAddress.address_line1,
-                address_2: '',
-                city: pickupAddress.city,
-                state: pickupAddress.state,
-                country: pickupAddress.country || 'India',
-                pin_code: pickupAddress.pincode,
-              });
-              
-              // Save to VendorShiprocketProfile for future use
-              await VendorShiprocketProfile.findOneAndUpdate(
-                { vendor_id: vendorId },
-                {
-                  $set: {
-                    pickup_location_name: pickupLocation,
-                    pickup_location_code: pickupLocation,
-                    address: pickupAddress,
-                    is_active: true,
-                    last_synced_at: new Date(),
-                    sync_error: '',
-                  },
-                },
-                { upsert: true }
-              );
-              
-              console.log(`[Shiprocket]   ✅ Pickup location created and saved`);
-            }
-          } catch (pickupErr) {
-            console.log(`[Shiprocket]   ⚠️ Pickup location creation failed: ${pickupErr.message}`);
-            // Continue with default location if creation fails
-            pickupLocation = config.shiprocket.pickupLocation || 'Primary';
+            const phoneMatches = pickupAddress.phone && loc.phone && loc.phone.includes(pickupAddress.phone.slice(-10));
+            const emailMatches = pickupAddress.email && loc.email && loc.email.toLowerCase() === pickupAddress.email.toLowerCase();
+            
+            return phoneMatches || emailMatches;
+          }
+        );
+        
+        // Fallback: If no match found by phone/email, just match by pincode
+        if (!matchedLocation && pickupPincode) {
+          matchedLocation = existingLocations?.data?.shipping_address?.find(
+            loc => String(loc.pin_code) === String(pickupPincode)
+          );
+          if (matchedLocation) {
+            console.log(`[Shiprocket]   Fallback match by pincode ONLY: Found ${matchedLocation.pickup_location} for pincode ${pickupPincode}`);
           }
         }
+        
+        const locationExists = !!matchedLocation;
+        
+        if (matchedLocation && matchedLocation.pickup_location !== pickupLocation) {
+          console.log(`[Shiprocket]   Found manually added pickup location: ${matchedLocation.pickup_location}`);
+          pickupLocation = matchedLocation.pickup_location;
+        }
+
+        if (!locationExists && pickupPincode) {
+          console.log(`[Shiprocket]   Creating new pickup location in Shiprocket...`);
+          
+          await shiprocketService.createPickupLocation({
+            pickup_location: pickupLocation,
+            name: pickupAddress.contact_person || 'Vendor',
+            email: pickupAddress.email || 'vendor@upleex.com',
+            phone: pickupAddress.phone || '9999999999',
+            address: pickupAddress.address_line1 || 'Vendor Address',
+            address_2: '',
+            city: pickupAddress.city || 'City',
+            state: pickupAddress.state || 'State',
+            country: pickupAddress.country || 'India',
+            pin_code: pickupAddress.pincode,
+          });
+          
+          // Save to VendorShiprocketProfile for future use
+          await VendorShiprocketProfile.findOneAndUpdate(
+            { vendor_id: vendorId },
+            {
+              $set: {
+                pickup_location_name: pickupLocation,
+                pickup_location_code: pickupLocation,
+                address: pickupAddress,
+                is_active: true,
+                last_synced_at: new Date(),
+                sync_error: '',
+              },
+            },
+            { upsert: true }
+          );
+          
+          console.log(`[Shiprocket]   ✅ Pickup location created and saved`);
+        }
+      } catch (pickupErr) {
+        console.log(`[Shiprocket]   ⚠️ Pickup location verification/creation failed: ${pickupErr.message}`);
+        // Continue with default location if creation fails
+        pickupLocation = config.shiprocket.pickupLocation || 'Primary';
       }
 
       // Calculate vendor-specific amounts
@@ -429,14 +470,14 @@ const syncOrderToShiprocket = async (order) => {
             const itemWeight = (product.weight || 0.5) * quantity;
             totalWeight += itemWeight;
             
-            // Multiply dimensions by quantity (volumetric calculation)
-            const itemLength = (product.length || 10) * quantity;
-            const itemBreadth = (product.breadth || 10) * quantity;
-            const itemHeight = (product.height || 10) * quantity;
+            // Dimension calculation - take MAX dimensions for length/breadth and stack height
+            const productLength = product.length || 10;
+            const productBreadth = product.breadth || 10;
+            const productHeight = product.height || 10;
             
-            totalLength += itemLength;
-            totalBreadth += itemBreadth;
-            totalHeight += itemHeight;
+            totalLength = Math.max(totalLength, productLength);
+            totalBreadth = Math.max(totalBreadth, productBreadth);
+            totalHeight = Math.max(totalHeight, productHeight * quantity);
           }
         } catch (err) {
           console.error(`Error fetching product dimensions for ${item.product_id}:`, err);
@@ -451,6 +492,13 @@ const syncOrderToShiprocket = async (order) => {
       
       console.log(`[Shiprocket] Calculated dimensions - Weight: ${totalWeight}kg, L: ${totalLength}cm, B: ${totalBreadth}cm, H: ${totalHeight}cm, Qty: ${totalQuantity}`);
 
+      const rawPhone = String(order.shipping_address?.phone || order.user_phone || '9999999999').replace(/\D/g, '');
+      const validPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+      
+      const firstName = order.shipping_address?.name?.split(' ')[0] || order.user_name?.split(' ')[0] || 'Customer';
+      let lastName = order.shipping_address?.name?.split(' ').slice(1).join(' ') || order.user_name?.split(' ').slice(1).join(' ') || '';
+      if (!lastName) lastName = firstName; // Shiprocket sometimes requires last name
+      
       const shiprocketPayload = {
         order_id: vendorOrderId,
         order_date: formattedDate,
@@ -458,8 +506,8 @@ const syncOrderToShiprocket = async (order) => {
         comment: `Upleex Order - Vendor: ${vendorId}`,
         reseller_name: '',
         company_name: 'Upleex',
-        billing_customer_name: order.shipping_address?.name?.split(' ')[0] || order.user_name?.split(' ')[0] || 'Customer',
-        billing_last_name: order.shipping_address?.name?.split(' ').slice(1).join(' ') || '',
+        billing_customer_name: firstName,
+        billing_last_name: lastName,
         billing_address: billingAddr1,
         billing_address_2: billingAddr2,
         billing_isd_code: '91',
@@ -468,11 +516,11 @@ const syncOrderToShiprocket = async (order) => {
         billing_state: order.shipping_address?.state || '',
         billing_country: order.shipping_address?.country || 'India',
         billing_email: order.user_email || 'customer@upleex.com',
-        billing_phone: order.shipping_address?.phone || order.user_phone || '9999999999',
-        billing_alternate_phone: order.shipping_address?.alternate_phone || '',
+        billing_phone: validPhone,
+        billing_alternate_phone: '',
         shipping_is_billing: 1,
-        shipping_customer_name: order.shipping_address?.name?.split(' ')[0] || order.user_name?.split(' ')[0] || 'Customer',
-        shipping_last_name: order.shipping_address?.name?.split(' ').slice(1).join(' ') || '',
+        shipping_customer_name: firstName,
+        shipping_last_name: lastName,
         shipping_address: billingAddr1,
         shipping_address_2: billingAddr2,
         shipping_city: order.shipping_address?.city || '',
@@ -480,22 +528,26 @@ const syncOrderToShiprocket = async (order) => {
         shipping_country: order.shipping_address?.country || 'India',
         shipping_state: order.shipping_address?.state || '',
         shipping_email: order.user_email || 'customer@upleex.com',
-        shipping_phone: order.shipping_address?.phone || order.user_phone || '9999999999',
-        order_items: vendorItems.map(item => ({
-          name: item.product_name,
-          sku: item.sku || `SKU-${item.product_id}`,
-          units: item.quantity,
-          selling_price: item.price,
-          discount: '0',
-          tax: String(item.gst_amount > 0 ? Math.round((item.gst_amount / item.subtotal) * 100) : 18),
-          hsn: item.hsn_code || '',
-        })),
+        shipping_phone: validPhone,
+        order_items: vendorItems.map(item => {
+          let cleanHsn = String(item.hsn_code || '').replace(/[^0-9]/g, '').substring(0, 8);
+          if (cleanHsn.length < 4) cleanHsn = ''; // HSN should be at least 4 digits if provided
+          return {
+            name: item.product_name,
+            sku: item.sku || `SKU-${item.product_id}`,
+            units: item.quantity,
+            selling_price: item.price,
+            discount: '0',
+            tax: String(item.gst_amount > 0 ? Math.round((item.gst_amount / item.subtotal) * 100) : 18),
+            hsn: cleanHsn,
+          };
+        }),
         payment_method: order.payment_method === 'cod' ? 'COD' : 'Prepaid',
         shipping_charges: vendorDeliveryCharge,
         giftwrap_charges: 0,
         transaction_charges: 0,
         total_discount: 0,
-        sub_total: order.subtotal,
+        sub_total: vendorSubtotal,
         length: totalLength,
         breadth: totalBreadth,
         height: totalHeight,
@@ -507,9 +559,23 @@ const syncOrderToShiprocket = async (order) => {
       };
 
       console.log(`[Shiprocket] Creating order with pickup: ${pickupLocation}`);
+      console.log(`[Shiprocket] Pickup Pincode: ${pickupPincode}`);
+      console.log(`[Shiprocket] Delivery Pincode: ${order.shipping_address?.pincode}`);
+      
+      // Validate pickup location
+      if (!pickupLocation || !pickupPincode) {
+        console.error(`[Shiprocket] ❌ ERROR: Pickup location or pincode missing for vendor ${vendorId}`);
+        vendorShiprocketData[vendorId] = {
+          error: 'Pickup location not configured for vendor',
+          status: 'failed'
+        };
+        continue; // Skip this vendor
+      }
       
       // Create Shiprocket order for this vendor
       const shiprocketRes = await shiprocketService.createShiprocketOrder(shiprocketPayload);
+      
+      console.log(`[Shiprocket] API Response:`, JSON.stringify(shiprocketRes, null, 2));
       
       if (shiprocketRes) {
         const shipmentId = shiprocketRes.shipment_id;
@@ -538,7 +604,7 @@ const syncOrderToShiprocket = async (order) => {
           const calculatedWeight = totalWeight;
 
           if (deliveryPostcode) {
-            console.log(`[Shiprocket] Checking serviceability for ${pickupPostcode} → ${deliveryPostcode} (Weight: ${calculatedWeight}kg)`);
+            console.log(`[Shiprocket] Checking serviceability for ${pickupPincode} → ${deliveryPostcode} (Weight: ${calculatedWeight}kg)`);
             
             const serviceabilityParams = {
               pickup_postcode: pickupPincode,
@@ -592,9 +658,12 @@ const syncOrderToShiprocket = async (order) => {
       }
     } catch (err) {
       console.error(`[Shiprocket] ❌ Vendor ${vendorId} failed: ${err.message}`);
+      console.error(`[Shiprocket] ❌ Full Error:`, err);
       vendorShiprocketData[vendorId] = {
         error: err.message,
-        status: 'failed'
+        stack: err.stack,
+        status: 'failed',
+        attempted_pickup_location: pickupLocation
       };
     }
   }
@@ -604,7 +673,8 @@ const syncOrderToShiprocket = async (order) => {
     ...order.shiprocket_response,
     vendor_shipments: vendorShiprocketData,
     split_order: true,
-    total_vendors: vendorIds.length
+    total_vendors: vendorIds.length,
+    synced_at: new Date()
   };
   
   // For backward compatibility, set the first vendor's data as main
@@ -614,7 +684,7 @@ const syncOrderToShiprocket = async (order) => {
     order.shiprocket_shipment_id = vendorShiprocketData[firstVendorId].shiprocket_shipment_id;
     
     if (vendorShiprocketData[firstVendorId].awb_code) {
-      order.delivery_tracking = order.delivery_tracking || {};
+      if (!order.delivery_tracking) order.delivery_tracking = {};
       order.delivery_tracking.tracking_number = vendorShiprocketData[firstVendorId].awb_code;
       order.delivery_tracking.courier_partner = vendorShiprocketData[firstVendorId].courier_name;
     }
@@ -1210,5 +1280,6 @@ module.exports = {
   getVendorOrders,
   getVendorPaymentHistory,
   cancelOrder,
-  razorpayWebhook
+  razorpayWebhook,
+  syncOrderToShiprocket
 };

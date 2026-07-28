@@ -18,3 +18,4 @@ module.exports.contactsController = require('./contacts.controller');
 module.exports.reviewController = require('./review.controller');
 module.exports.settingsController = require('./settings.controller');
 module.exports.addressController = require('./address.controller');
+module.exports.sitemapController = require('./sitemap.controller');

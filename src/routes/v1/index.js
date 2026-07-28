@@ -48,6 +48,7 @@ const shippingRoute = require('./shipping.route');
 const webhooksRoute = require('./webhooks.route');
 const topVendorsRoute = require('../vendor/topVendors.route');
 const vendorShiprocketRoute = require('./vendorShiprocket.route');
+const sitemapRoute = require('./sitemap.route');
 const auth = require('../../middlewares/auth');
 
 const router = express.Router();
@@ -115,6 +116,10 @@ const defaultRoutes = [
   {
     path: '/wishlist',
     route: wishlistRoute,
+  },
+  {
+    path: '/sitemap',
+    route: sitemapRoute,
   },
   {
     path: '/reviews',
