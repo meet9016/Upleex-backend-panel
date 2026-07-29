@@ -1341,8 +1341,19 @@ const createQuoteOrder = {
       }
 
       // Check Razorpay configuration
-      const razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
-      const razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
+      let razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
+      let razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
+
+      const userPhone = req.user.phone || req.user.mobile || '';
+      const isDemoUser = ['9909929293'].includes(userPhone);
+      
+      let razorpayInstance = razorpay;
+
+      if (isDemoUser) {
+        razorpayKeyId = 'rzp_test_SSeykWSXVtxipA';
+        razorpayKeySecret = 'rMB0bUjgqyrPwiNFC1lXCPcj';
+        razorpayInstance = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
+      }
 
       if (!razorpayKeyId || !razorpayKeySecret || razorpayKeyId.includes('your_key_id')) {
         return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
@@ -1353,7 +1364,7 @@ const createQuoteOrder = {
 
       try {
         // Create Razorpay order
-        const razorpayOrder = await razorpay.orders.create({
+        const razorpayOrder = await razorpayInstance.orders.create({
           amount: Math.round(amount * 100), // Amount in paise
           currency: 'INR',
           receipt: `QUOTE_${quote_id}`,
