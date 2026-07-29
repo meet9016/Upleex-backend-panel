@@ -1413,10 +1413,21 @@ const verifyQuotePayment = {
 
       // If using order-based payment (new method)
       if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
+        // Get user from quote to check phone
+        const existingQuoteTemp = await GetQuote.findById(quote_id).populate('user_id');
+        const userPhone = existingQuoteTemp?.user_id ? String(existingQuoteTemp.user_id.phone || existingQuoteTemp.user_id.mobile || '') : '';
+        const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
+
         // Verify signature
         const body = razorpay_order_id + '|' + razorpay_payment_id;
+        
+        let keySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
+        if (isDemoUser) {
+          keySecret = 'rMB0bUjgqyrPwiNFC1lXCPcj';
+        }
+
         const expectedSignature = crypto
-          .createHmac('sha256', config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET)
+          .createHmac('sha256', keySecret)
           .update(body.toString())
           .digest('hex');
 
