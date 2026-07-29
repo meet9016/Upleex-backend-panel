@@ -33,15 +33,20 @@ const createOrder = catchAsync(async (req, res) => {
 
   const { order_notes, payment_type, delivery_type, address_id, shipping_charge } = req.body;
 
-  // Get user email from database if not in request
+  // Get user from database to ensure we have email and phone
   let userEmail = req.user.email;
+  const User = require('../models/user.model');
+  const userFromDB = await User.findById(req.user.id);
+  
   if (!userEmail || !userEmail.includes('@')) {
-    const User = require('../models/user.model');
-    const userFromDB = await User.findById(req.user.id);
     if (userFromDB && userFromDB.email) {
       userEmail = userFromDB.email;
     }
   }
+  
+  // Extract phone from DB since req.user from JWT does not contain it
+  const userPhone = userFromDB ? String(userFromDB.phone || userFromDB.mobile || '') : '';
+
 
   // Get user's cart items
   const cartItems = await Cart.find({
@@ -162,8 +167,7 @@ const createOrder = catchAsync(async (req, res) => {
   let razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
   let razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
-  const userPhone = req.user.phone || req.user.mobile || '';
-  const isDemoUser = ['9909929293'].includes(userPhone);
+  const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
   
   let razorpayInstance = razorpay;
 

@@ -1344,8 +1344,10 @@ const createQuoteOrder = {
       let razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
       let razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
-      const userPhone = req.user.phone || req.user.mobile || '';
-      const isDemoUser = ['9909929293'].includes(userPhone);
+      const User = require('../models/user.model');
+      const userFromDB = await User.findById(req.user.id);
+      const userPhone = userFromDB ? String(userFromDB.phone || userFromDB.mobile || '') : '';
+      const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
       
       let razorpayInstance = razorpay;
 
