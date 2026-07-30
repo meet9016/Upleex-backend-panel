@@ -283,11 +283,13 @@ const syncOrderToShiprocket = async (order) => {
     console.log(`[Shiprocket]   Items: ${vendorItems.length}`);
     console.log(`[Shiprocket]   Vendor Order ID: ${vendorOrderId}`);
 
+    // Initialize outside try block to prevent ReferenceError in catch
+    let pickupLocation = config.shiprocket.pickupLocation || 'Primary';
+    let pickupPincode = '';
+    let pickupAddress = {};
+    
     try {
       // Get vendor's pickup location - PRIORITY: PickupAddress > ContactDetails
-      let pickupLocation = config.shiprocket.pickupLocation || 'Primary';
-      let pickupPincode = '';
-      let pickupAddress = {};
       
       // First check VendorShiprocketProfile (if vendor has explicitly set pickup location)
       const vendorProfile = await VendorShiprocketProfile.findOne({ vendor_id: vendorId });
