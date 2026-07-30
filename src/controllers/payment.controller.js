@@ -167,7 +167,7 @@ const createOrder = catchAsync(async (req, res) => {
   let razorpayKeyId = config.razorpay.keyId || process.env.RAZORPAY_KEY_ID;
   let razorpayKeySecret = config.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET;
 
-  const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
+  const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('8200199856');
   
   let razorpayInstance = razorpay;
 
@@ -729,7 +729,7 @@ const verifyPayment = catchAsync(async (req, res) => {
   const User = require('../models/user.model');
   const userFromDB = req.user ? await User.findById(req.user.id) : null;
   const userPhone = userFromDB ? String(userFromDB.phone || userFromDB.mobile || '') : '';
-  const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
+  const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('8200199856');
 
   // Verify signature
   const body = razorpay_order_id + '|' + razorpay_payment_id;

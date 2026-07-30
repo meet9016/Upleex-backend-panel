@@ -867,6 +867,13 @@ const updateQuote = {
       if (!existingQuote) {
         return res.status(httpStatus.NOT_FOUND).json({ message: 'Quote not found' });
       }
+      console.log(existingQuote.payment_status, 'existingQuote.payment_status');
+
+      // Validation: Prevent delivery status if payment is not paid
+      const incomingStatus = Array.isArray(updateData.status) ? updateData.status[0] : (updateData.status || '');
+      if (incomingStatus.toString().toLowerCase().includes('delivery') && (existingQuote.payment_status || '').toLowerCase() !== 'paid') {
+        return res.status(httpStatus.BAD_REQUEST).json({ status: 400, success: false, message: 'Cannot move to delivery. User payment is still pending.' });
+      }
 
       // Update the quote and get the populated result
       const quote = await GetQuote.findByIdAndUpdate(
@@ -1004,6 +1011,11 @@ const changeStatus = {
       const existingQuote = await GetQuote.findById(quote_id).lean();
       if (!existingQuote) {
         return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
+      }
+
+      // Validation: Prevent delivery status if payment is not paid
+      if (internal === 'delivery' && (existingQuote.payment_status || '').toLowerCase() !== 'paid') {
+        return res.status(httpStatus.BAD_REQUEST).json({ status: 400, success: false, message: 'Cannot move to delivery. User payment is still pending.' });
       }
 
       const updated = await GetQuote.findByIdAndUpdate(
@@ -1347,7 +1359,7 @@ const createQuoteOrder = {
       const User = require('../models/user.model');
       const userFromDB = await User.findById(req.user.id);
       const userPhone = userFromDB ? String(userFromDB.phone || userFromDB.mobile || '') : '';
-      const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
+      const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('8200199856');
       
       let razorpayInstance = razorpay;
 
@@ -1416,7 +1428,7 @@ const verifyQuotePayment = {
         // Get user from quote to check phone
         const existingQuoteTemp = await GetQuote.findById(quote_id).populate('user_id');
         const userPhone = existingQuoteTemp?.user_id ? String(existingQuoteTemp.user_id.phone || existingQuoteTemp.user_id.mobile || '') : '';
-        const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('820099856');
+        const isDemoUser = userPhone.includes('9909929293') || userPhone.includes('8200199856');
 
         // Verify signature
         const body = razorpay_order_id + '|' + razorpay_payment_id;
