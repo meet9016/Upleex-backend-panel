@@ -11,7 +11,7 @@ const addAddress = catchAsync(async (req, res) => {
   const { name, phone, alternate_phone, address_line1, address_line2, city, state, pincode, country, is_default } = req.body;
 
   if (is_default) {
-    // Set other addresses of this user to not default
+  
     await Address.updateMany({ user_id: req.user.id }, { is_default: false });
   }
 
