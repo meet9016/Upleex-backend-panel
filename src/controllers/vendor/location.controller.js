@@ -12,7 +12,7 @@ const countryList = {
     body: Joi.object().keys({
       search: Joi.string().allow(''),
       page: Joi.number().integer().min(1).default(1),
-      limit: Joi.number().integer().min(1).max(100).default(20),
+      limit: Joi.number().integer().min(1).max(10000).default(20),
     }),
   },
   handler: async (req, res) => {
@@ -43,7 +43,7 @@ const stateList = {
       country_id: Joi.string().allow(''),
       search: Joi.string().allow(''),
       page: Joi.number().integer().min(1).default(1),
-      limit: Joi.number().integer().min(1).max(100).default(20),
+      limit: Joi.number().integer().min(1).max(10000).default(20),
     }),
   },
   handler: async (req, res) => {
