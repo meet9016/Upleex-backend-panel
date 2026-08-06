@@ -7,36 +7,10 @@ const VendorKyc = require('../models/vendor/vendorKyc.model');
 const getServicePlansReportData = async (req) => {
   const { date_range, start_date, end_date, search } = req.query;
 
-  // Build query
-  const query = {};
-
-  if (date_range && date_range !== 'all') {
-    const now = new Date();
-    let startDate;
-
-    switch (date_range) {
-      case 'today': startDate = new Date(now.setHours(0, 0, 0, 0)); break;
-      case 'week': startDate = new Date(); startDate.setDate(now.getDate() - 7); break;
-      case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-      case '3months': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break;
-      case '6months': startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1); break;
-      case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-      case 'custom':
-        if (start_date || end_date) {
-          startDate = start_date ? new Date(start_date) : new Date(0);
-          const endDate = end_date ? new Date(end_date + 'T23:59:59.999Z') : new Date();
-          query.createdAt = { $gte: startDate, $lte: endDate };
-        }
-        break;
-    }
-    if (startDate && date_range !== 'custom') {
-      query.createdAt = { $gte: startDate, $lte: new Date() };
-    }
-  }
-
+  // Fetch all purchases without initial date filter so invoice numbers remain globally consistent
   const [listingPurchases, priorityPurchases, vendorKycs] = await Promise.all([
-    ServiceListingPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    ServicePriorityPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    ServiceListingPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    ServicePriorityPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
     VendorKyc.find({}).lean(),
   ]);
 
@@ -94,15 +68,57 @@ const getServicePlansReportData = async (req) => {
     });
   });
 
-  // Sort chronologically ascending to compute invoice numbers
+  // Sort chronologically ascending across ALL items to compute permanent invoice numbers
   rawCombinedData.sort((a, b) => new Date(a.originalCreatedAt) - new Date(b.originalCreatedAt));
 
-  // Compute Invoice Numbers
+  // Compute permanent Invoice Numbers
   let seq = 1;
   let combinedData = rawCombinedData.map(item => {
     item.invoice_no = `UPX-SRV-${String(seq++).padStart(4, '0')}`;
     return item;
   });
+
+  // Apply date range filter in memory so invoice numbers remain unchanged
+  if (date_range && date_range !== 'all') {
+    const now = new Date();
+    let startDate;
+    let endDate = new Date();
+
+    switch (date_range) {
+      case 'today':
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        break;
+      case 'week':
+        startDate = new Date();
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case '3months':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        break;
+      case '6months':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'custom':
+        if (start_date || end_date) {
+          startDate = start_date ? new Date(start_date) : new Date(0);
+          endDate = end_date ? new Date(end_date.includes('T') ? end_date : end_date + 'T23:59:59.999Z') : new Date();
+        }
+        break;
+    }
+
+    if (startDate) {
+      combinedData = combinedData.filter(item => {
+        const itemDate = new Date(item.originalCreatedAt);
+        return itemDate >= startDate && itemDate <= endDate;
+      });
+    }
+  }
 
   // Filter by search if provided
   if (search) {
@@ -111,7 +127,8 @@ const getServicePlansReportData = async (req) => {
       searchRegex.test(item.vendor_name) || 
       searchRegex.test(item.business_name) || 
       searchRegex.test(item.description) ||
-      searchRegex.test(item.transaction_type)
+      searchRegex.test(item.transaction_type) ||
+      searchRegex.test(item.invoice_no)
     );
   }
 

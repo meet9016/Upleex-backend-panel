@@ -14,45 +14,17 @@ const { exportToExcel, exportToPDF } = require('../utils/export.helper');
 const getVendorPlansReportData = async (req) => {
   const { date_range, start_date, end_date, search } = req.query;
 
-  // Build query
-  const query = {};
   const walletQuery = { 'transactions.type': 'debit', 'transactions.status': 'completed' };
-  const productQuery = { status: 'active' }; // To match products
 
-  if (date_range && date_range !== 'all') {
-    const now = new Date();
-    let startDate;
-
-    switch (date_range) {
-      case 'today': startDate = new Date(now.setHours(0, 0, 0, 0)); break;
-      case 'week': startDate = new Date(); startDate.setDate(now.getDate() - 7); break;
-      case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-      case '3months': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break;
-      case '6months': startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1); break;
-      case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-      case 'custom':
-        if (start_date || end_date) {
-          startDate = start_date ? new Date(start_date) : new Date(0);
-          const endDate = end_date ? new Date(end_date + 'T23:59:59.999Z') : new Date();
-          query.createdAt = { $gte: startDate, $lte: endDate };
-          productQuery.createdAt = { $gte: startDate, $lte: endDate };
-        }
-        break;
-    }
-    if (startDate && date_range !== 'custom') {
-      query.createdAt = { $gte: startDate, $lte: new Date() };
-      productQuery.createdAt = { $gte: startDate, $lte: new Date() };
-    }
-  }
-
+  // Fetch all purchases without initial date filter so invoice numbers remain globally consistent
   const [listingPurchases, priorityPurchases, rentalPurchases, generalPurchases, vendorKycs, wallets, productsAdded] = await Promise.all([
-    ListingPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    PriorityPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    RentalBoostPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
-    GeneralPlanPurchase.find(query).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    ListingPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    PriorityPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    RentalBoostPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
+    GeneralPlanPurchase.find({}).populate('vendor_id', 'full_name business_name email vendor_type').sort({ createdAt: -1 }),
     VendorKyc.find({}).lean(),
     Wallet.find(walletQuery).populate('vendor_id', 'full_name business_name email vendor_type'),
-    Product.find(productQuery).populate('category_id').populate('sub_category_id') // We might need vendor data for products, we can fetch later if needed, but products usually have vendor_name. Let's just fetch all products matching the query that were added via General Plan.
+    Product.find({ status: 'active' }).populate('category_id').populate('sub_category_id')
   ]);
 
   const gstMap = {};
@@ -68,12 +40,6 @@ const getVendorPlansReportData = async (req) => {
   wallets.forEach(wallet => {
     wallet.transactions.forEach(tx => {
       if (tx.type === 'debit' && tx.status === 'completed' && tx.metadata?.purpose === 'paid_listing_fee') {
-        // Apply date filter
-        if (query.createdAt) {
-          if (tx.createdAt < query.createdAt.$gte || tx.createdAt > query.createdAt.$lte) {
-            return;
-          }
-        }
         walletTransactions.push({
           wallet,
           transaction: tx
@@ -83,9 +49,7 @@ const getVendorPlansReportData = async (req) => {
   });
 
   // Extract products added via General Plan
-  // GeneralPlanPurchase has product_ids array.
-  // We need to fetch ALL general plan purchases to map products to them, not just the ones in the current date query!
-  const allGeneralPlans = await GeneralPlanPurchase.find({ product_ids: { $exists: true, $not: {$size: 0} } }).populate('vendor_id', 'full_name business_name email vendor_type');
+  const allGeneralPlans = await GeneralPlanPurchase.find({ product_ids: { $exists: true, $not: { $size: 0 } } }).populate('vendor_id', 'full_name business_name email vendor_type');
   const allGeneralPlanProductIds = new Set();
   const productToVendorMap = {};
   allGeneralPlans.forEach(plan => {
@@ -196,8 +160,9 @@ const getVendorPlansReportData = async (req) => {
   walletTransactions.forEach(item => {
     const tx = item.transaction;
     const vendor = item.wallet.vendor_id;
-    const rate = tx.amount || 0;
-    const tax = 0; // Usually paid listing fee is inclusive or doesn't list separate GST in wallet. Let's keep tax 0.
+    const totalAmount = tx.amount || 0;
+    const tax = totalAmount * 0.18;
+    const rate = totalAmount - tax;
     rawCombinedData.push({
       id: tx._id ? tx._id.toString() : 'wallet',
       originalCreatedAt: tx.createdAt || new Date(),
@@ -211,8 +176,8 @@ const getVendorPlansReportData = async (req) => {
       gst_number: vendor ? gstMap[vendor._id.toString()] || '-' : '-',
       rate: rate,
       taxable_amount: tax,
-      gst_percent: '0%',
-      total_amount: rate + tax
+      gst_percent: '18%',
+      total_amount: totalAmount
     });
   });
 
@@ -231,20 +196,62 @@ const getVendorPlansReportData = async (req) => {
       gst_number: vendor ? gstMap[vendor._id.toString()] || '-' : '-',
       rate: 0,
       taxable_amount: 0,
-      gst_percent: '0%',
+      gst_percent: '18%',
       total_amount: 0
     });
   });
 
-  // Sort chronologically ascending to compute invoice numbers
+  // Sort chronologically ascending across ALL items to assign permanent invoice numbers
   rawCombinedData.sort((a, b) => new Date(a.originalCreatedAt) - new Date(b.originalCreatedAt));
 
-  // Compute Invoice Numbers
+  // Compute permanent Invoice Numbers
   let seq = 1;
   let combinedData = rawCombinedData.map(item => {
     item.invoice_no = `UPX-${String(seq++).padStart(4, '0')}`;
     return item;
   });
+
+  // Apply date range filter in memory so invoice numbers remain unchanged
+  if (date_range && date_range !== 'all') {
+    const now = new Date();
+    let startDate;
+    let endDate = new Date();
+
+    switch (date_range) {
+      case 'today':
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+        break;
+      case 'week':
+        startDate = new Date();
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case '3months':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        break;
+      case '6months':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'custom':
+        if (start_date || end_date) {
+          startDate = start_date ? new Date(start_date) : new Date(0);
+          endDate = end_date ? new Date(end_date.includes('T') ? end_date : end_date + 'T23:59:59.999Z') : new Date();
+        }
+        break;
+    }
+
+    if (startDate) {
+      combinedData = combinedData.filter(item => {
+        const itemDate = new Date(item.originalCreatedAt);
+        return itemDate >= startDate && itemDate <= endDate;
+      });
+    }
+  }
 
   // Filter by search if provided
   if (search) {
@@ -253,7 +260,8 @@ const getVendorPlansReportData = async (req) => {
       searchRegex.test(item.vendor_name) || 
       searchRegex.test(item.business_name) || 
       searchRegex.test(item.description) ||
-      searchRegex.test(item.transaction_type)
+      searchRegex.test(item.transaction_type) ||
+      searchRegex.test(item.invoice_no)
     );
   }
 
