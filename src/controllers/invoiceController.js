@@ -1,3 +1,4 @@
+
 const PDFDocument = require('pdfkit');
 const moment = require('moment');
 const axios = require('axios');
@@ -139,43 +140,34 @@ console.log(req.body,'req.body');
     doc.moveDown(1);
     
     // Business Name (Left)
-    doc.fontSize(20)
+    doc.fontSize(18)
       .font('Helvetica-Bold')
       .fillColor('#111827')
       .text(camelVendorProfile?.businessName || '-', 50, currentY);
     
-    currentY += 25;
-
-    // Verified Vendor & Status badges
-    // doc.fontSize(8)
-    //   .font('Helvetica-Bold')
-    //   .fillColor('#2563EB')
-    //   .text('Verified Vendor', 50, currentY, { width: 80 });
-    
-    // const statusColor = ['delivered', 'success', 'complete', 'completed'].includes(orderStatus.toLowerCase()) ? '#059669' : '#2563EB';
-    // doc.fillColor(statusColor)
-    //   .text(orderStatus, 140, currentY, { width: 80 });
-    
-    currentY += 20;
+    currentY += 24;
 
     // Title (Right)
-    doc.fontSize(28)
+    doc.fontSize(22)
       .font('Helvetica-Bold')
       .fillColor('#111827')
-      .text(isQuote ? 'Quotation' : 'Tax Invoice', 350, 50, { align: 'right', width: 200 });
+      .text(isQuote ? 'Quotation' : 'Tax Invoice', 350, 48, { align: 'right', width: 200 });
     
-    doc.fontSize(9)
+    doc.fontSize(9.5)
       .font('Helvetica')
-      .fillColor('#6B7280')
-      .text(`${isQuote ? 'Quote' : 'Invoice'} : ${displayId?.slice(-8).toUpperCase()}`, 350, 80, { align: 'right', width: 200 });
+      .fillColor('#4B5563')
+      .text(`${isQuote ? 'Quote' : 'Invoice'} #: ${displayId?.slice(-8).toUpperCase()}`, 350, 75, { align: 'right', width: 200 });
     
-    doc.text(`Date: ${formattedDate}`, 350, 95, { align: 'right', width: 200 });
+    doc.fontSize(9.5)
+      .font('Helvetica')
+      .fillColor('#4B5563')
+      .text(`Date: ${formattedDate}`, 350, 90, { align: 'right', width: 200 });
 
-    currentY = 130;
+    currentY = 120;
 
     // Info Bars
     const barWidth = 115;
-    const barHeight = 35;
+    const barHeight = 38;
     const barGap = 10;
     const bars = [
       { label: 'Place of Supply', value: `${camelVendorProfile?.city || '-'} ${camelVendorProfile?.state || ''}` },
@@ -201,27 +193,27 @@ console.log(req.body,'req.body');
 
     bars.forEach((bar, index) => {
       const x = 50 + index * (barWidth + barGap);
-      drawRoundedRect(x, currentY, barWidth, barHeight, 3, '#F9FAFB');
+      drawRoundedRect(x, currentY, barWidth, barHeight, 4, '#F3F4F6');
       
-      doc.fontSize(7)
-        .font('Helvetica-Bold')
-        .fillColor('#9CA3AF')
-        .text(bar.label, x + 5, currentY + 5, { width: barWidth - 10 });
+      doc.fontSize(7.5)
+        .font('Helvetica')
+        .fillColor('#6B7280')
+        .text(bar.label.toUpperCase(), x + 6, currentY + 6, { width: barWidth - 12 });
       
-      doc.fontSize(8)
+      doc.fontSize(9.5)
         .font('Helvetica-Bold')
-        .fillColor('#374151')
-        .text(bar.value, x + 5, currentY + 18, { width: barWidth - 10 });
+        .fillColor('#111827')
+        .text(bar.value, x + 6, currentY + 18, { width: barWidth - 12 });
     });
 
-    currentY += 60;
+    currentY += 55;
 
     // Address Section
     // Seller
-    doc.fontSize(8)
+    doc.fontSize(8.5)
       .font('Helvetica-Bold')
-      .fillColor('#9CA3AF')
-      .text('Seller / Sold By', 50, currentY);
+      .fillColor('#6B7280')
+      .text('SELLER / SOLD BY', 50, currentY);
     
     currentY += 15;
     
@@ -234,7 +226,7 @@ console.log(req.body,'req.body');
     
     doc.fontSize(9)
       .font('Helvetica')
-      .fillColor('#6B7280')
+      .fillColor('#4B5563')
       .text(camelVendorProfile?.email || '', 50, currentY);
     
     currentY += 12;
@@ -247,21 +239,21 @@ console.log(req.body,'req.body');
     doc.text(`${camelVendorProfile?.city || ''}${camelVendorProfile?.city && camelVendorProfile?.state ? ', ' : ''}${camelVendorProfile?.state || ''} - ${camelVendorProfile?.pincode || ''}`, 50, currentY);
 
     if (camelVendorProfile?.gstNumber) {
-      currentY += 15;
-      doc.fontSize(7)
-        .font('Helvetica-Bold')
-        .fillColor('#6B7280')
+      currentY += 14;
+      doc.fontSize(8.5)
+        .font('Helvetica')
+        .fillColor('#374151')
         .text(`GSTIN: ${camelVendorProfile.gstNumber}`, 50, currentY);
     }
 
     // Buyer (Right side)
     const buyerX = 350;
-    let buyerY = 190;
+    let buyerY = 175;
     
-    doc.fontSize(8)
+    doc.fontSize(8.5)
       .font('Helvetica-Bold')
-      .fillColor('#9CA3AF')
-      .text('Buyer / Ship To', buyerX, buyerY, { align: 'right', width: 200 });
+      .fillColor('#6B7280')
+      .text('BUYER / SHIP TO', buyerX, buyerY, { align: 'right', width: 200 });
     
     buyerY += 15;
     
@@ -276,39 +268,43 @@ console.log(req.body,'req.body');
     if (customerEmail) {
       doc.fontSize(9)
         .font('Helvetica')
-        .fillColor('#6B7280')
+        .fillColor('#4B5563')
         .text(customerEmail, buyerX, buyerY, { align: 'right', width: 200 });
       buyerY += 12;
     }
     
     const customerPhone = customer.phone || customer.mobile || customer.number;
     if (customerPhone) {
-      doc.text(`+91 ${customerPhone}`, buyerX, buyerY, { align: 'right', width: 200 });
+      doc.fontSize(9)
+        .font('Helvetica')
+        .fillColor('#4B5563')
+        .text(`+91 ${customerPhone}`, buyerX, buyerY, { align: 'right', width: 200 });
       buyerY += 12;
     }
     
     if (data.shippingAddress) {
       doc.fontSize(9)
-        .fillColor('#3B82F6')
-        .text(data.shippingAddress, buyerX, buyerY, { align: 'right', width: 200 });
+        .font('Helvetica')
+        .fillColor('#2563EB')
+        .text(typeof data.shippingAddress === 'string' ? data.shippingAddress : (data.shippingAddress.addressLine1 || ''), buyerX, buyerY, { align: 'right', width: 200 });
     }
 
-    currentY = 290;
+    currentY = 285;
 
     // Product Table Header
-    drawRoundedRect(50, currentY, 510, 25, 3, '#111827');
+    drawRoundedRect(50, currentY, 500, 26, 4, '#111827');
     
     const headers = [
       { text: 'Item & Description', x: 55 },
-      { text: 'HSN', x: 235 },
-      { text: 'Type', x: 280 },
-      { text: 'Unit Price', x: 330 },
-      { text: 'Qty', x: 400 },
-      { text: 'Net Amount', x: 450 }
+      { text: 'HSN', x: 230 },
+      { text: 'Type', x: 275 },
+      { text: 'Unit Price', x: 325 },
+      { text: 'Qty', x: 395 },
+      { text: 'Net Amount', x: 445 }
     ];
 
     headers.forEach(header => {
-      doc.fontSize(8)
+      doc.fontSize(8.5)
         .font('Helvetica-Bold')
         .fillColor('#FFFFFF')
         .text(header.text, header.x, currentY + 7);
@@ -335,106 +331,109 @@ console.log(req.body,'req.body');
 
       // Alternate row background
       if (index % 2 === 0) {
-        drawRoundedRect(50, currentY - 3, 510, 40, 2, '#F9FAFB');
+        drawRoundedRect(50, currentY - 4, 500, 40, 3, '#F9FAFB');
       }
 
       doc.fontSize(10)
         .font('Helvetica-Bold')
         .fillColor('#111827')
-        .text(name || '', 55, currentY, { width: 175 });
+        .text(name || '', 55, currentY, { width: 170 });
       
-      doc.fontSize(7)
-        .font('Helvetica')
-        .fillColor('#9CA3AF')
-        .text(`SKU: ${sku}`, 55, currentY + 13, { width: 175 });
-
       doc.fontSize(8)
         .font('Helvetica')
-        .fillColor('#4B5563')
-        .text(hsn, 235, currentY + 5, { width: 40 });
+        .fillColor('#9CA3AF')
+        .text(`SKU: ${sku}`, 55, currentY + 14, { width: 170 });
+
+      doc.fontSize(8.5)
+        .font('Helvetica')
+        .fillColor('#374151')
+        .text(hsn, 230, currentY + 4, { width: 40 });
 
       // Type badge
       const typeColor = ['rent', 'rental'].includes(typeLabel.toLowerCase()) ? '#2563EB' : '#059669';
       doc.fillColor(typeColor)
-        .fontSize(8)
+        .fontSize(8.5)
         .font('Helvetica-Bold')
-        .text(typeLabel, 280, currentY + 5, { width: 45 });
+        .text(typeLabel, 275, currentY + 4, { width: 45 });
 
       doc.fontSize(9)
-        .font('Helvetica-Bold')
-        .fillColor('#4B5563')
-        .text(`Rs. ${Number(price || 0).toLocaleString()}`, 330, currentY + 5, { width: 65, align: 'left' });
-      
-      doc.text(`${qty}`, 400, currentY + 5, { width: 40, align: 'left' });
+        .font('Helvetica')
+        .fillColor('#374151')
+        .text(`Rs. ${Number(price || 0).toLocaleString()}`, 325, currentY + 4, { width: 65, align: 'left' });
       
       doc.fontSize(9)
+        .font('Helvetica')
+        .fillColor('#111827')
+        .text(`${qty}`, 395, currentY + 4, { width: 40, align: 'left' });
+      
+      doc.fontSize(9.5)
         .font('Helvetica-Bold')
         .fillColor('#111827')
-        .text(`Rs. ${Number(rowTotal || 0).toLocaleString()}`, 450, currentY + 5, { width: 80, align: 'left' });
+        .text(`Rs. ${Number(rowTotal || 0).toLocaleString()}`, 445, currentY + 4, { width: 80, align: 'left' });
 
-      currentY += 45;
+      currentY += 44;
     });
 
-    currentY += 20;
+    currentY += 15;
 
     // Amount in Words
-    drawRoundedRect(50, currentY, 320, 50, 5, '#F9FAFB');
+    drawRoundedRect(50, currentY, 300, 48, 6, '#F9FAFB');
     
-    doc.fontSize(8)
+    doc.fontSize(8.5)
       .font('Helvetica-Bold')
       .fillColor('#111827')
-      .text('Amount In Words', 60, currentY + 8);
+      .text('AMOUNT IN WORDS', 60, currentY + 7);
+    
+    doc.fontSize(9.5)
+      .font('Helvetica')
+      .fillColor('#374151')
+      .text(numberToWords(subTotal), 60, currentY + 22, { width: 280 });
+
+    // Calculation Box (Right)
+    const calcX = 370;
+    drawRoundedRect(calcX, currentY, 180, 95, 8, '#F9FAFB');
+    
+    let calcY = currentY + 8;
     
     doc.fontSize(9)
       .font('Helvetica')
-      .fillColor('#6B7280')
-      .text(numberToWords(subTotal).toLowerCase(), 60, currentY + 22, { width: 300 });
-
-    // Calculation Box (Right)
-    const calcX = 390;
-    drawRoundedRect(calcX, currentY, 170, 100, 8, '#F9FAFB');
-    
-    let calcY = currentY + 10;
-    
-    doc.fontSize(9)
-      .font('Helvetica-Bold')
-      .fillColor('#6B7280')
+      .fillColor('#4B5563')
       .text('Gross Amount', calcX + 10, calcY);
     
-    doc.text(`Rs. ${Number(subtotalExclGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 70 });
+    doc.text(`Rs. ${Number(subtotalExclGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 78 });
     
     calcY += 18;
     doc.text('Tax (GST)', calcX + 10, calcY);
-    doc.text(`Rs. ${Number(totalGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 70 });
+    doc.text(`Rs. ${Number(totalGst).toLocaleString(undefined, {minimumFractionDigits: 2})}`, calcX + 90, calcY, { align: 'right', width: 78 });
     
     calcY += 18;
     doc.text('Shipping', calcX + 10, calcY);
-    doc.text('Rs. 0.00', calcX + 90, calcY, { align: 'right', width: 70 });
+    doc.text('Rs. 0.00', calcX + 90, calcY, { align: 'right', width: 78 });
     
-    calcY += 22;
+    calcY += 20;
     doc.fontSize(11)
       .font('Helvetica-Bold')
       .fillColor('#111827')
       .text('Total Payable', calcX + 10, calcY);
     
-    doc.fontSize(14)
+    doc.fontSize(13)
       .font('Helvetica-Bold')
       .fillColor('#1D4ED8')
-      .text(`Rs. ${Number(subTotal).toLocaleString()}`, calcX + 90, calcY, { align: 'right', width: 70 });
+      .text(`Rs. ${Number(subTotal).toLocaleString()}`, calcX + 90, calcY, { align: 'right', width: 78 });
 
-    currentY += 130;
+    currentY += 120;
 
     // Declaration
-    doc.fontSize(7)
+    doc.fontSize(8)
       .font('Helvetica-Bold')
-      .fillColor('#9CA3AF')
-      .text('Declaration & Terms', 50, currentY);
+      .fillColor('#6B7280')
+      .text('DECLARATION & TERMS', 50, currentY);
     
     currentY += 12;
     
-    doc.fontSize(7)
+    doc.fontSize(8)
       .font('Helvetica')
-      .fillColor('#9CA3AF')
+      .fillColor('#6B7280')
       .text('• This is a valid system-generated document and does not require a physical signature.', 50, currentY, { width: 500 });
     
     currentY += 10;
@@ -443,12 +442,12 @@ console.log(req.body,'req.body');
     currentY += 20;
 
     // Footer
-    doc.fontSize(8)
+    doc.fontSize(9)
       .font('Helvetica-Bold')
       .fillColor('#111827')
       .text('Thank you for shopping', 250, currentY, { align: 'center', width: 100 });
     
-    doc.fontSize(6)
+    doc.fontSize(7.5)
       .font('Helvetica')
       .fillColor('#9CA3AF')
       .text('info@upleex.com', 250, currentY + 12, { align: 'center', width: 100 });

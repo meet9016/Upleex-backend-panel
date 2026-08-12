@@ -166,22 +166,27 @@ const updateOrderStatus = {
       throw new ApiError(httpStatus.NOT_FOUND, 'Order not found');
     }
     
+    let normalizedStatus = (status || '').toLowerCase().trim();
+    if (normalizedStatus === 'approve' || normalizedStatus === 'approved') {
+      normalizedStatus = 'accepted';
+    }
+    
     const validStatuses = ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery', 'delivered', 'cancelled', 'completed'];
     
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(normalizedStatus)) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
     }
     
     // Validate based on delivery type
     if (order.delivery_type === 'shipping') {
       const allowedStatuses = ['pending', 'accepted', 'completed'];
-      if (!allowedStatuses.includes(status)) {
+      if (!allowedStatuses.includes(normalizedStatus)) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'This status is not allowed for shipping orders. Only pending, accepted, and completed are allowed.');
       }
     }
     
     const oldStatus = order.vendor_status;
-    order.vendor_status = status;
+    order.vendor_status = normalizedStatus;
     
     // Create payment record when order is delivered or completed (only if not already created)
     if (status === 'delivered' || status === 'completed') {
@@ -275,6 +280,28 @@ const updateOrderStatus = {
         statusMessages[status] || `Your order status is now ${status}`,
         { orderId: order._id.toString(), status: status }
       );
+    }
+
+    // Send email to user on order status change
+    try {
+      const { sendOrderStatusUpdateEmail } = require('../services/email.service');
+      let userEmail = order.user_email;
+      if (!userEmail || !userEmail.includes('@')) {
+        const User = require('../models/user.model');
+        const userDoc = await User.findById(order.user_id).lean();
+        if (userDoc && userDoc.email) {
+          userEmail = userDoc.email;
+          order.user_email = userEmail;
+          await order.save().catch(e => console.error('Error saving updated order user_email:', e));
+        }
+      }
+      if (userEmail && userEmail.includes('@')) {
+        await sendOrderStatusUpdateEmail(userEmail, order, normalizedStatus, notes).catch(e => console.error('Order status update email error:', e));
+      } else {
+        console.warn(`No valid email found for user ID: ${order.user_id} to send status update email.`);
+      }
+    } catch (emailErr) {
+      console.error('Failed to trigger order status update email:', emailErr);
     }
     
     res.status(httpStatus.OK).json({
@@ -420,12 +447,13 @@ const bulkUpdateOrderStatus = {
       'items.vendor_id': vendorId
     });
     
-    if (orders.length !== orderIds.length) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Some orders not found or not accessible');
+    let normalizedStatus = (status || '').toLowerCase().trim();
+    if (normalizedStatus === 'approve' || normalizedStatus === 'approved') {
+      normalizedStatus = 'accepted';
     }
     
     const updatePromises = orders.map(async (order) => {
-      order.vendor_status = status;
+      order.vendor_status = normalizedStatus;
       
       // Create payment record when order is delivered or completed (only if not already created)
       if (status === 'delivered' || status === 'completed') {
@@ -481,6 +509,29 @@ const bulkUpdateOrderStatus = {
     });
     
     await Promise.all(updatePromises);
+
+    // Send email to users for bulk updated orders
+    try {
+      const { sendOrderStatusUpdateEmail } = require('../services/email.service');
+      const User = require('../models/user.model');
+
+      for (const order of orders) {
+        let userEmail = order.user_email;
+        if (!userEmail || !userEmail.includes('@')) {
+          const userDoc = await User.findById(order.user_id).lean();
+          if (userDoc && userDoc.email) {
+            userEmail = userDoc.email;
+            order.user_email = userEmail;
+            await order.save().catch(e => console.error('Error updating bulk order user_email:', e));
+          }
+        }
+        if (userEmail && userEmail.includes('@')) {
+          await sendOrderStatusUpdateEmail(userEmail, order, normalizedStatus, notes).catch(e => console.error('Bulk order update email error:', e));
+        }
+      }
+    } catch (emailErr) {
+      console.error('Failed to trigger bulk order update emails:', emailErr);
+    }
     
     res.status(httpStatus.OK).json({
       status: 200,

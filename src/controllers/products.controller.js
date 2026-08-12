@@ -900,7 +900,7 @@ const getAllProducts = {
           category_name: p.category_name || catMap[p.category_id] || '',
           sub_category_name: p.sub_category_name || sub.name || '',
           sub_category_slug: sub.slug || '',
-          url: frontendUrl + productUrl,
+          url: productUrl,
           vendor: {
             vendor_id: p.vendor_id,
             vendor_name: p.vendor_name || v.vendor_name || '',
@@ -1199,7 +1199,7 @@ const getVendorProducts = {
           category_slug: cat.slug || '',
           sub_category_name: p.sub_category_name || sub.name || '',
           sub_category_slug: sub.slug || '',
-          url: frontendUrl + productUrl,
+          url: productUrl,
           is_wishlist: userWishlistSet.has(p._id.toString()),
         };
       });
@@ -2076,7 +2076,7 @@ const webSearchProductList = {
         category_name: p.category_name || catMap[p.category_id] || '',
         sub_category_name: p.sub_category_name || sub.name || '',
         sub_category_slug: sub.slug || '',
-        url: frontendUrl + productUrl,
+        url: productUrl,
         is_wishlist: userWishlistSet.has(p._id.toString()),
       };
     });
@@ -2513,7 +2513,7 @@ const getRelatedProducts = {
           const productUrl = urlSlug && subCatSlug ? `/${subCatSlug}/${urlSlug}` : '';
           return {
             ...p,
-            url: frontendUrl + productUrl,
+            url: productUrl,
             is_wishlist: userWishlistSet.has(p._id.toString())
           };
         })

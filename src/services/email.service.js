@@ -1033,6 +1033,166 @@ const sendProductApprovalEmail = async (to, vendorName, productName, status, rea
   }
 };
 
+// Email when vendor/system updates status of a Product Sell order
+const sendOrderStatusUpdateEmail = async (to, orderData, newStatus, notes = '') => {
+  if (!to || typeof to !== 'string' || !to.includes('@')) {
+    console.error('[sendOrderStatusUpdateEmail] Invalid recipient email address:', to);
+    return;
+  }
+
+  const statusLower = (newStatus || '').toLowerCase();
+  
+  let headerBg = '#4F46E5';
+  let headerTitle = `Order Update: ${newStatus.toUpperCase()}`;
+  let statusMessage = `Your order status has been updated to <strong>${newStatus.toUpperCase()}</strong>.`;
+  let badgeBg = '#e0e7ff';
+  let badgeColor = '#3730a3';
+
+  if (['accepted', 'confirmed', 'approve', 'approved'].includes(statusLower)) {
+    headerBg = '#059669';
+    headerTitle = 'Order Accepted! 🎉';
+    statusMessage = 'Great news! The vendor has approved/accepted your order and is now processing it.';
+    badgeBg = '#dcfce7';
+    badgeColor = '#166534';
+  } else if (['preparing', 'ready_for_pickup'].includes(statusLower)) {
+    headerBg = '#2563EB';
+    headerTitle = 'Order Being Prepared 📦';
+    statusMessage = 'Your order is currently being packed and prepared for shipping/delivery.';
+    badgeBg = '#dbeafe';
+    badgeColor = '#1e40af';
+  } else if (['out_for_delivery', 'delivery', 'picked_up'].includes(statusLower)) {
+    headerBg = '#0284C7';
+    headerTitle = 'Order Out for Delivery! 🚚';
+    statusMessage = 'Exciting news! Your order is out for delivery and will reach you soon.';
+    badgeBg = '#e0f2fe';
+    badgeColor = '#075985';
+  } else if (['delivered', 'completed', 'complete', 'successful'].includes(statusLower)) {
+    headerBg = '#16A34A';
+    headerTitle = 'Order Delivered! ✅';
+    statusMessage = 'Your order has been delivered successfully. Thank you for shopping with Upleex!';
+    badgeBg = '#dcfce7';
+    badgeColor = '#15803d';
+  } else if (['cancelled', 'rejected', 'reject'].includes(statusLower)) {
+    headerBg = '#DC2626';
+    headerTitle = 'Order Cancelled ⚠️';
+    statusMessage = 'Your order has been cancelled by the vendor.';
+    badgeBg = '#fee2e2';
+    badgeColor = '#991b1b';
+  }
+
+  const subject = `${headerTitle} - Order #${orderData.order_id}`;
+  const userName = orderData.user_name || orderData.user_id?.name || 'Customer';
+
+  const itemsHtml = (orderData.items || [])
+    .map(
+      (item) => `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #eee;">
+        <div style="display: flex; align-items: center;">
+          ${item.product_image ? `<img src="${item.product_image}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; margin-right: 10px;" />` : ''}
+          <div>
+            <p style="margin: 0; font-weight: bold; color: #232323;">${item.product_name}</p>
+            <p style="margin: 2px 0; font-size: 14px; color: #666;">Qty: ${item.quantity || item.qty || 1} × ₹${(item.price || 0).toLocaleString('en-IN')}</p>
+            ${item.vendor_name ? `<p style="margin: 4px 0 2px; font-size: 13px; color: #4F46E5;"><strong>Sold by:</strong> ${item.vendor_name}</p>` : ''}
+          </div>
+        </div>
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">₹${(item.final_amount || item.subtotal || item.price || 0).toLocaleString('en-IN')}</td>
+    </tr>
+  `
+    )
+    .join("");
+
+  const mailOptions = {
+    from: `"Upleex" <${process.env.EMAIL_FROM || process.env.SMTP_USERNAME}>`,
+    to,
+    subject,
+    html: `
+<div style="margin:0; padding:0; background-color:#f4f4f4; font-family:Arial, Helvetica, sans-serif;">
+  <table width="100%" cellspacing="0" cellpadding="0" style="max-width:620px; margin:20px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    
+    <!-- Header -->
+    <tr>
+      <td style="background:${headerBg}; text-align:center; padding:35px 20px;">
+        <h1 style="color:#fff; margin:0; font-size:26px; font-weight:bold;">
+          ${headerTitle}
+        </h1>
+        <p style="color:#fff; opacity:0.9; margin:10px 0 0; font-size:15px;">Order ID: <strong>#${orderData.order_id}</strong></p>
+      </td>
+    </tr>
+
+    <!-- Body -->
+    <tr>
+      <td style="padding:35px 30px; color:#333; font-size:15px; line-height:1.7;">
+        <h2 style="margin:0 0 20px; color:#232323;">Hi ${userName}, 👋</h2>
+        
+        <p>${statusMessage}</p>
+        
+        ${notes ? `
+        <div style="margin:20px 0; padding:15px; background:#f8fafc; border-left:4px solid ${headerBg}; border-radius:4px;">
+          <p style="margin:0; color:#475569; font-size:14px;"><strong>Note from Vendor:</strong> ${notes}</p>
+        </div>
+        ` : ''}
+
+        <!-- Order Items -->
+        <div style="margin:30px 0; padding:20px; background:#f8fafc; border-radius:8px; border: 1px solid #e2e8f0;">
+          <h3 style="margin:0 0 15px; color:${headerBg};">📦 Items in this Order</h3>
+          
+          <table width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 15px;">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th style="padding: 10px; text-align: left; font-size: 14px; color: #64748b;">Item</th>
+                <th style="padding: 10px; text-align: right; font-size: 14px; color: #64748b;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          
+          ${orderData.total_amount ? `
+          <div style="border-top: 2px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
+            <table width="100%" cellspacing="0" cellpadding="0">
+              <tr style="border-top: 1px solid #e2e8f0;">
+                <td style="padding: 10px 0; font-weight: bold; font-size: 16px; color: #232323;">Total Amount:</td>
+                <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 16px; color: #059669;">₹${Number(orderData.total_amount).toLocaleString('en-IN')}</td>
+              </tr>
+            </table>
+          </div>
+          ` : ''}
+        </div>
+
+        <div style="margin:20px 0; padding:15px; background:${badgeBg}; border-radius:6px;">
+          <p style="margin:0; color:${badgeColor}; font-size:14px; font-weight:bold;">
+            Current Status: ${newStatus.toUpperCase()}
+          </p>
+        </div>
+
+        <p style="margin:30px 0 10px;">
+          You can track your order status and view your invoice anytime in your account.
+        </p>
+
+        <p style="margin-top:35px;">
+          Thank you for choosing Upleex!<br>
+          <strong>The Upleex Team</strong>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background:${headerBg}; padding:20px; text-align:center; color:#fff; font-size:13px;">
+        © ${new Date().getFullYear()} Upleex. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 module.exports = {
   sendWelcomeEmail,
   transport,
@@ -1048,5 +1208,7 @@ module.exports = {
   sendCombinedPurchaseEmail,
   sendOrderConfirmationEmail,
   sendProductApprovalEmail,
+  sendOrderStatusUpdateEmail,
   ...kycEmailService,
 };
+
