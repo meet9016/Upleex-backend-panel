@@ -28,11 +28,14 @@ const getVendorPayments = {
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
-      .populate('order_id', 'order_id total_amount user_name vendor_status')
+      .populate('order_id', 'order_id total_amount user_name vendor_status items')
       .populate({
         path: 'quote_id',
-        select: 'calculated_price user_id status',
-        populate: { path: 'user_id', select: 'name email first_name' }
+        select: 'calculated_price user_id status product_id price_details',
+        populate: [
+          { path: 'user_id', select: 'name email first_name' },
+          { path: 'product_id', select: 'gst price' }
+        ]
       })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -95,11 +98,14 @@ const getAllVendorPayments = {
     const skip = (page - 1) * limit;
     
     const payments = await VendorPayment.find(filter)
-      .populate('order_id', 'order_id total_amount user_name vendor_status')
+      .populate('order_id', 'order_id total_amount user_name vendor_status items')
       .populate({
         path: 'quote_id',
-        select: 'calculated_price user_id status',
-        populate: { path: 'user_id', select: 'name email first_name' }
+        select: 'calculated_price user_id status product_id price_details',
+        populate: [
+          { path: 'user_id', select: 'name email first_name' },
+          { path: 'product_id', select: 'gst price' }
+        ]
       })
       .sort({ createdAt: -1 })
       .skip(skip)
