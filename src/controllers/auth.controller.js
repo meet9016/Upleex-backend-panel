@@ -96,6 +96,7 @@ const register = {
           email: newUser.email,
           phone: newUser.phone,
           profile_photo: newUser.profile_photo,
+          gst_number: newUser.gst_number || '',
         },
         token: token.access,
       });
@@ -146,7 +147,8 @@ const login = {
         profile_photo: user.profile_photo,
         platform: user.platform,
         city_id: user.city_id,
-        city_name: user.city_name
+        city_name: user.city_name,
+        gst_number: user.gst_number || ''
       }
     });
   }
@@ -236,6 +238,9 @@ const updateUserProfile = {
       gender: Joi.string().valid('male', 'female', 'other').optional(),
       city_id: Joi.string().optional().allow(''),
       city_name: Joi.string().optional().allow(''),
+      gst_number: Joi.string().trim().uppercase().max(15).pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).optional().allow('').messages({
+        'string.pattern.base': 'GST number must be a valid 15-character GSTIN',
+      }),
     }),
   },
   handler: async (req, res) => {
@@ -245,14 +250,14 @@ const updateUserProfile = {
       }
 
       const userId = req.user.id || req.user._id;
-      const { first_name, last_name, mobile, gender, city_id, city_name } = req.body;
-
+      const { first_name, last_name, mobile, gender, city_id, city_name, gst_number } = req.body;
+ 
       // Find user
       const user = await User.findById(userId);
       if (!user) {
         throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
       }
-
+ 
       // Update fields
       if (first_name) user.first_name = first_name;
       if (last_name) user.last_name = last_name;
@@ -260,15 +265,16 @@ const updateUserProfile = {
       if (gender) user.gender = gender;
       if (city_id !== undefined) user.city_id = city_id;
       if (city_name !== undefined) user.city_name = city_name;
-
+      if (gst_number !== undefined) user.gst_number = gst_number;
+ 
       // Update full_name
       if (first_name || last_name) {
         user.full_name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
       }
-
+ 
       // Save user
       await user.save();
-
+ 
       return res.status(httpStatus.OK).send({
         success: true,
         message: 'Profile updated successfully',
@@ -284,6 +290,7 @@ const updateUserProfile = {
           profile_photo: user.profile_photo,
           city_id: user.city_id,
           city_name: user.city_name,
+          gst_number: user.gst_number,
         }
       });
 
@@ -336,6 +343,9 @@ const webLoginRegister = {
       otp: Joi.string().optional(),
       name: Joi.string().optional(),
       email: Joi.string().optional(),
+      gst_number: Joi.string().trim().uppercase().max(15).pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).allow('').optional().messages({
+        'string.pattern.base': 'GST number must be a valid 15-character GSTIN',
+      }),
       url: Joi.string().optional(),
       platform: Joi.string().valid('web', 'ios', 'android').optional(),
       rememberMe: Joi.boolean().optional(),
@@ -343,7 +353,7 @@ const webLoginRegister = {
   },
   handler: async (req, res) => {
     try {
-      const { number, country_id, otp, name, email, url, platform: manualPlatform, rememberMe } = req.body;
+      const { number, country_id, otp, name, email, gst_number, url, platform: manualPlatform, rememberMe } = req.body;
 
       const user = await User.findOne({ phone: number });
 
@@ -494,6 +504,7 @@ const webLoginRegister = {
           phone: number,
           name: name,
           email,
+          gst_number: gst_number || '',
           password: 'otp_user_no_password',
           platform: detectedPlatform || 'web'
         });
@@ -513,7 +524,8 @@ const webLoginRegister = {
               phone: newUser.phone,
               platform: newUser.platform,
               city_id: newUser.city_id,
-              city_name: newUser.city_name
+              city_name: newUser.city_name,
+              gst_number: newUser.gst_number || ''
             }
           }
         });
@@ -522,8 +534,9 @@ const webLoginRegister = {
       // ===============================
       // EXISTING USER LOGIN
       // ===============================
-      if (detectedPlatform) {
-        user.platform = detectedPlatform;
+      if (detectedPlatform || gst_number !== undefined) {
+        if (detectedPlatform) user.platform = detectedPlatform;
+        if (gst_number !== undefined) user.gst_number = gst_number || '';
         await user.save();
       }
 
@@ -542,7 +555,8 @@ const webLoginRegister = {
             phone: user.phone,
             platform: user.platform,
             city_id: user.city_id,
-            city_name: user.city_name
+            city_name: user.city_name,
+            gst_number: user.gst_number || ''
           }
         }
       });

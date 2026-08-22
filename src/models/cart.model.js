@@ -19,10 +19,20 @@ const cartSchema = new mongoose.Schema(
       min: 1,
       default: 1,
     },
+    selected_size: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['active', 'ordered', 'deleted'],
       default: 'active',
+    },
+    note: {
+      type: String,
+      trim: true,
+      default: '',
     },
   },
   {

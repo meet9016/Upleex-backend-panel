@@ -109,7 +109,7 @@ const businessRegister = catchAsync(async (req, res) => {
 });
 
 const vendorLogin = catchAsync(async (req, res) => {
-  const { number, otp, url } = req.body;
+  const { number, otp, url, gst_number } = req.body;
 
   if (!number) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Mobile number is required');
@@ -173,6 +173,18 @@ const vendorLogin = catchAsync(async (req, res) => {
   await Otp.deleteOne({ _id: otpRecord._id });
 
   const token = await generateAuthTokens(vendor, 'vendor');
+
+  if (gst_number) {
+    const VendorKyc = require('../../models/vendor/vendorKyc.model');
+    await VendorKyc.findOneAndUpdate(
+      { 'ContactDetails.vendor_id': String(vendor._id) },
+      {
+        $set: { 'Identity.gst_number': gst_number.trim().toUpperCase() },
+        $setOnInsert: { 'ContactDetails.vendor_id': String(vendor._id) },
+      },
+      { new: true, upsert: true }
+    );
+  }
 
   return res.status(httpStatus.OK).json({
     status: 200,

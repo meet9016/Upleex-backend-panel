@@ -225,6 +225,24 @@ const productSchema = new mongoose.Schema(
       min: 1,
       comment: 'Height in cm',
     },
+    hashtags: [{
+      type: String,
+      trim: true,
+    }],
+    fashion_item_type: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    gender: {
+      type: String,
+      enum: ['Men', 'Women', 'Girls/Women', 'Unisex', ''],
+      default: '',
+    },
+    sizes: [{
+      type: String,
+      trim: true,
+    }],
   },
   {
     timestamps: true,

@@ -71,7 +71,7 @@ const numberToWords = (num) => {
  */
 const generateInvoicePDF = async (req, res) => {
   try {
-    const { data: rawData, vendorProfile, type = 'order' } = req.body;
+    const { data: rawData, vendorProfile: requestedVendorProfile, type = 'order' } = req.body;
 console.log(req.body,'req.body');
     if (!rawData) {
       console.error('No data provided in request');
@@ -79,7 +79,26 @@ console.log(req.body,'req.body');
     }
     
     if (type === 'plan') {
-      return generatePlanInvoicePDF(req, res, rawData, vendorProfile);
+      return generatePlanInvoicePDF(req, res, rawData, requestedVendorProfile);
+    }
+
+    let vendorProfile = requestedVendorProfile || {};
+    const invoiceSource = rawData.order || rawData.quote || rawData.data || rawData;
+    const vendorId = invoiceSource?.items?.find((item) => item.vendor_id)?.vendor_id
+      || invoiceSource?.product_id?.vendor_id;
+
+    // KYC is the source of truth so invoices always use the GST saved by the vendor.
+    if (vendorId) {
+      try {
+        const VendorKyc = require('../models/vendor/vendorKyc.model');
+        const vendorKyc = await VendorKyc.findOne({ 'ContactDetails.vendor_id': String(vendorId) }).lean();
+        const gstNumber = vendorKyc?.Identity?.gst_number || '';
+        if (gstNumber) {
+          vendorProfile = { ...vendorProfile, gstNumber };
+        }
+      } catch (error) {
+        console.error('Unable to load vendor GST for invoice:', error.message);
+      }
     }
     
     // Normalize _id → id, then convert all keys to camelCase
@@ -282,6 +301,15 @@ console.log(req.body,'req.body');
       buyerY += 12;
     }
     
+    const customerGstNumber = data.gstNumber || data.gst_number;
+    if (customerGstNumber) {
+      doc.fontSize(8.5)
+        .font('Helvetica')
+        .fillColor('#374151')
+        .text(`GSTIN: ${customerGstNumber}`, buyerX, buyerY, { align: 'right', width: 200 });
+      buyerY += 12;
+    }
+
     if (data.shippingAddress) {
       doc.fontSize(9)
         .font('Helvetica')
@@ -328,6 +356,7 @@ console.log(req.body,'req.body');
       const rowTotal = isQuote ? (item.totalPrice || item.calculatedPrice) : (item.price * (item.quantity || 1));
 
       const hsn = item.hsnCode || item.hsn_code || product.hsnCode || product.hsn_code || 'N/A';
+      const selectedSize = item.selectedSize || item.selected_size;
 
       // Alternate row background
       if (index % 2 === 0) {
@@ -343,6 +372,13 @@ console.log(req.body,'req.body');
         .font('Helvetica')
         .fillColor('#9CA3AF')
         .text(`SKU: ${sku}`, 55, currentY + 14, { width: 170 });
+
+      if (selectedSize) {
+        doc.fontSize(8)
+          .font('Helvetica')
+          .fillColor('#2563EB')
+          .text(`Size: ${selectedSize}`, 55, currentY + 26, { width: 170 });
+      }
 
       doc.fontSize(8.5)
         .font('Helvetica')

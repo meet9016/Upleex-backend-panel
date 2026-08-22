@@ -37,6 +37,11 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+    selected_size: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     subtotal: {
       type: Number,
       required: true,
@@ -48,6 +53,10 @@ const orderItemSchema = new mongoose.Schema(
     final_amount: {
       type: Number,
       required: true,
+    },
+    note: {
+      type: String,
+      default: '',
     },
   },
   { _id: false }
@@ -247,6 +256,10 @@ const orderSchema = new mongoose.Schema(
         timestamp: Date,
       }],
     }],
+    gst_number: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

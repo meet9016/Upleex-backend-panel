@@ -126,6 +126,8 @@ const createOrder = catchAsync(async (req, res) => {
       gst_amount: itemGst,
       final_amount: itemFinalAmount,
       sku: product.sku || '',
+      note: cartItem.note || '',
+      selected_size: cartItem.selected_size || '',
     };
 
     orderItems.push(orderItem);
@@ -214,6 +216,7 @@ const createOrder = catchAsync(async (req, res) => {
       razorpay_order_id: razorpayOrder.id,
       order_notes: order_notes || '',
       vendor_payments: Object.values(vendorGroups),
+      gst_number: req.body.gst_number || '',
     });
 
     res.status(httpStatus.OK).send({

@@ -25,7 +25,7 @@ const resolveProduct = async (productIdentifier) => {
 };
 
 const addToCart = catchAsync(async (req, res) => {
-  const { product_id, qty } = req.body;
+  const { product_id, qty, note, selected_size } = req.body;
   
   if (!req.user) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to add items to cart');
@@ -42,18 +42,24 @@ const addToCart = catchAsync(async (req, res) => {
   let cartItem = await Cart.findOne({
     user_id: req.user.id,
     product_id: actualProductId,
+    selected_size: selected_size || '',
     status: 'active'
   });
 
   if (cartItem) {
     cartItem.qty += parseInt(qty) || 1;
+    if (note !== undefined) {
+      cartItem.note = note;
+    }
     await cartItem.save();
   } else {
     cartItem = await Cart.create({
       user_id: req.user.id,
       product_id: actualProductId,
       qty: parseInt(qty) || 1,
-      status: 'active'
+      selected_size: selected_size || '',
+      status: 'active',
+      note: note || ''
     });
   }
 
@@ -95,6 +101,9 @@ const listCart = catchAsync(async (req, res) => {
       final_amount: finalAmount.toFixed(2),
       image: p?.product_main_image || '',
       cart_id: item.id,
+      note: item.note || '',
+      selected_size: item.selected_size || '',
+      available_sizes: p?.sizes || [],
       // Add stock information for frontend validation
       product_type_name: p?.product_type_name || '',
       available_quantity: p?.available_quantity || 0,
@@ -132,7 +141,7 @@ const updateCartItem = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate to modify cart');
   }
   
-  const { cart_id, qty } = req.body;
+  const { cart_id, qty, note } = req.body;
   
   if (!cart_id) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'cart_id is required');
@@ -153,8 +162,11 @@ const updateCartItem = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Cart item not found');
   }
 
-  // Update quantity
+  // Update quantity and note
   cartItem.qty = parseInt(qty);
+  if (note !== undefined) {
+    cartItem.note = note;
+  }
   await cartItem.save();
 
   // Recalculate with fresh data
@@ -177,6 +189,9 @@ const updateCartItem = catchAsync(async (req, res) => {
     final_amount: finalAmount.toFixed(2),
     image: p?.product_main_image || '',
     cart_id: cartItem.id,
+    note: cartItem.note || '',
+    selected_size: cartItem.selected_size || '',
+    available_sizes: p?.sizes || [],
     product_type_name: p?.product_type_name || '',
     available_quantity: p?.available_quantity || 0,
     is_out_of_stock: p?.is_out_of_stock || false,
@@ -210,6 +225,9 @@ const updateCartItem = catchAsync(async (req, res) => {
       final_amount: final.toFixed(2),
       image: prod?.product_main_image || '',
       cart_id: item.id,
+      note: item.note || '',
+      selected_size: item.selected_size || '',
+      available_sizes: prod?.sizes || [],
       product_type_name: prod?.product_type_name || '',
       available_quantity: prod?.available_quantity || 0,
       is_out_of_stock: prod?.is_out_of_stock || false,

@@ -1686,6 +1686,9 @@ const getUserDashboardData = {
         return sum + (isNaN(val) ? 0 : val);
       }, 0);
 
+      // Fetch user detail for GSTIN display on dashboard
+      const userDoc = await require('../models/user.model').findById(user_id).select('gst_number').lean();
+
       res.status(httpStatus.OK).json({
         success: true,
         data: {
@@ -1694,6 +1697,7 @@ const getUserDashboardData = {
           purchases,
           cancellations,
           purchases_total_amount,
+          gst_number: userDoc?.gst_number || '',
           counts: {
             currentRentals: currentRentals.length,
             pastRentals: pastRentals.length,

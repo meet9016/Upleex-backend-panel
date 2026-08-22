@@ -103,6 +103,17 @@ const saveKyc = {
       const documents = extract('Documents');
       const pickupAddress = extract('PickupAddress');
 
+      if (identity?.gst_number) {
+        identity.gst_number = String(identity.gst_number).trim().toUpperCase();
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(identity.gst_number)) {
+          return res.status(httpStatus.BAD_REQUEST).json({
+            status: 400,
+            success: false,
+            message: 'GST number must be a valid 15-character GSTIN',
+          });
+        }
+      }
+
       // FIX: Extract Declaration data
       let declaration = null;
       if (body.terms_conditions !== undefined) {

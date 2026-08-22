@@ -58,6 +58,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true,
     }],
+    gst_number: {
+        type: String,
+        trim: true,
+        default: '',
+    },
 }, {
     timestamps: true, // This automatically adds createdAt and updatedAt
 });

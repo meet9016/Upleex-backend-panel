@@ -25,6 +25,15 @@ const ListingPlanPurchase = require('../models/listingPlanPurchase.model');
 const ListingPlan = require('../models/listingPlan.model');
 const PriorityPlanPurchase = require('../models/priorityPlanPurchase.model');
 const walletService = require('../services/wallet.service');
+
+const normalizeHashtags = (value) => {
+  const tags = Array.isArray(value) ? value : String(value).split(',');
+  return tags
+    .map(tag => String(tag).trim())
+    .filter(Boolean)
+    .map(tag => tag.startsWith('#') ? tag : `#${tag}`);
+};
+
 const generateSKU = (categoryName, businessName, counter) => {
   const categoryCode = categoryName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
     const businessCode = businessName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
@@ -218,12 +227,44 @@ const createProduct = {
       available_quantity: Joi.number().integer().min(0).default(1),
       pricing_type: Joi.string().valid('free', 'paid').default('free'),
       is_visible: Joi.boolean().default(true),
+      hashtags: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
+      fashion_item_type: Joi.string().allow('').optional(),
+      gender: Joi.string().allow('').optional(),
+      sizes: Joi.alternatives().try(
+        Joi.array().items(Joi.string().allow('')),
+        Joi.string().allow('')
+      ).default([]),
     }).prefs({ convert: true }),
   },
   handler: async (req, res) => {
     try {
       const data = req.body;
+ 
+      // Parse hashtags if passed as comma separated string or array
+      if (data.hashtags) {
+        if (typeof data.hashtags === 'string') {
+          data.hashtags = normalizeHashtags(data.hashtags);
+        } else if (Array.isArray(data.hashtags)) {
+          data.hashtags = normalizeHashtags(data.hashtags);
+        }
+      } else {
+        data.hashtags = [];
+      }
 
+      // Parse sizes if passed as comma separated string or array
+      if (data.sizes) {
+        if (typeof data.sizes === 'string') {
+          data.sizes = data.sizes.split(',').map(size => size.trim()).filter(Boolean);
+        } else if (Array.isArray(data.sizes)) {
+          data.sizes = data.sizes.map(size => size.trim()).filter(Boolean);
+        }
+      } else {
+        data.sizes = [];
+      }
+ 
       // Automatically add vendor info from the authenticated user token
       if (req.user) {
         data.vendor_id = req.user.id || req.user._id || '';
@@ -1422,6 +1463,16 @@ const updateProduct = {
           Joi.array().items(Joi.string().allow('')),
           Joi.string().allow('')
         ).default([]),
+        hashtags: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
+        fashion_item_type: Joi.string().allow('').optional(),
+        gender: Joi.string().allow('').optional(),
+        sizes: Joi.alternatives().try(
+          Joi.array().items(Joi.string().allow('')),
+          Joi.string().allow('')
+        ).default([]),
       })
       .prefs({ convert: true }),
   },
@@ -1447,6 +1498,24 @@ const updateProduct = {
       }
 
       const body = req.body;
+ 
+      // Parse hashtags if passed as comma separated string or array
+      if (body.hashtags !== undefined) {
+        if (typeof body.hashtags === 'string') {
+          body.hashtags = normalizeHashtags(body.hashtags);
+        } else if (Array.isArray(body.hashtags)) {
+          body.hashtags = normalizeHashtags(body.hashtags);
+        }
+      }
+
+      // Parse sizes if passed as comma separated string or array
+      if (body.sizes !== undefined) {
+        if (typeof body.sizes === 'string') {
+          body.sizes = body.sizes.split(',').map(size => size.trim()).filter(Boolean);
+        } else if (Array.isArray(body.sizes)) {
+          body.sizes = body.sizes.map(size => size.trim()).filter(Boolean);
+        }
+      }
 
       // Prevent changing vendor info via update
       delete body.vendor_id;
@@ -1934,7 +2003,7 @@ const webProductSuggestionList = {
     const page = parseInt(req.body.page) || 1;
     const limit = req.body.limit ? parseInt(req.body.limit) : 10;
     const skip = (page - 1) * limit;
-    const searchRegex = new RegExp(String(search).trim(), 'i');
+    const searchRegex = new RegExp(String(search).trim().replace(/^#/, ''), 'i');
     let vendorFilterIds = null;
     if (city && String(city).trim() !== '') {
       const raw = String(city).trim();
@@ -1956,16 +2025,17 @@ const webProductSuggestionList = {
         return res.status(200).json({ status: 200, data: [] });
       }
     }
-    const query = vendorFilterIds && vendorFilterIds.length ? { 
-      vendor_id: { $in: vendorFilterIds }, 
-      product_name: searchRegex,
+    const productSearch = {
+      $or: [
+        { product_name: searchRegex },
+        { hashtags: searchRegex },
+      ],
       approval_status: 'approved',
-      is_visible: true
-    } : { 
-      product_name: searchRegex,
-      approval_status: 'approved',
-      is_visible: true
+      is_visible: true,
     };
+    const query = vendorFilterIds && vendorFilterIds.length
+      ? { ...productSearch, vendor_id: { $in: vendorFilterIds } }
+      : productSearch;
     const products = await Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
     const suggestions = products.map(p => ({ id: p._id.toString(), product_name: p.product_name })).filter((s, idx, arr) => arr.findIndex(x => x.product_name === s.product_name) === idx);
     return res.status(200).json({ status: 200, data: suggestions });
@@ -1986,7 +2056,7 @@ const webSearchProductList = {
     const page = parseInt(req.body.page) || 1;
     const limit = req.body.limit ? parseInt(req.body.limit) : 12;
     const skip = (page - 1) * limit;
-    const searchRegex = new RegExp(String(search).trim(), 'i');
+    const searchRegex = new RegExp(String(search).trim().replace(/^#/, ''), 'i');
     let vendorFilterIds = null;
     if (city && String(city).trim() !== '') {
       const raw = String(city).trim();
@@ -2022,6 +2092,8 @@ const webSearchProductList = {
       { product_type_name: searchRegex },
       { category_name: searchRegex },
       { sub_category_name: searchRegex },
+      { hashtags: { $in: [searchRegex] } },
+      { hashtags: searchRegex },
     ];
     
     // Only show approved and visible products for search
