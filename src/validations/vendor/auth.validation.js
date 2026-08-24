@@ -24,9 +24,6 @@ const vendorLogin = {
     number: Joi.string().pattern(/^[0-9]{10,15}$/).required(),
     otp: Joi.string().optional(),
     url: Joi.string().optional(),
-    gst_number: Joi.string().trim().uppercase().max(15).pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).allow('').optional().messages({
-      'string.pattern.base': 'GST number must be a valid 15-character GSTIN',
-    }),
   }),
 };
 
