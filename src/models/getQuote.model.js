@@ -108,6 +108,15 @@ const getQuoteSchema = new mongoose.Schema(
       enum: ['pending', 'paid', 'failed'],
       default: 'pending',
     },
+    deposit_amount: {
+      type: Number,
+      default: 0,
+    },
+    deposit_status: {
+      type: String,
+      enum: ['pending', 'paid', 'refunded', 'returned', 'not_applicable'],
+      default: 'pending',
+    },
     isNew: {
       type: Boolean,
       default: true,

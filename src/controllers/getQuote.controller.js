@@ -95,6 +95,8 @@ const createGetQuote = {
       end_date: Joi.date().optional(),
       start_time: Joi.string().allow('').optional(),
       end_time: Joi.string().allow('').optional(),
+      deposit_amount: Joi.number().optional(),
+      deposit_status: Joi.string().valid('pending', 'paid', 'refunded', 'returned', 'not_applicable').optional(),
     }),
   },
 
@@ -162,11 +164,16 @@ const createGetQuote = {
         endTime = `${hours}:${minutes}`;
       }
 
+      const depositAmount = data.deposit_amount !== undefined ? Number(data.deposit_amount) : Number(product.deposit_amount || 0);
+      const depositStatus = data.deposit_status || (depositAmount > 0 ? 'pending' : 'not_applicable');
+
       const quote = await GetQuote.create({
         ...data,
         user_id,
         calculated_price: calculatedPrice,
         price_details: priceDetails,
+        deposit_amount: depositAmount,
+        deposit_status: depositStatus,
         status: data.status || 'pending',
         start_time: startTime,
         end_time: endTime,
@@ -329,11 +336,9 @@ const getAllQuotes = {
         }
       }
 
-      // Search by note, status, or product name
       if (search && search.trim() !== '') {
         const searchRegex = new RegExp(search.trim(), 'i');
 
-        // Find matching products within current user scope
         const productSearchQuery = { product_name: searchRegex };
         if (user.userType === 'vendor') {
           productSearchQuery.vendor_id = user._id;
@@ -674,10 +679,12 @@ const getAllQuotesForAdmin = {
 
       // If we have product-related filters, we need to handle differently
       if (product_type || listing_type) {
-        // Get all quotes matching basic criteria with populated product only
+        // Get all quotes matching basic criteria with populated product and user
         let quotesQuery = GetQuote.find(query)
+          .populate('product_id')
           .populate({
-            path: 'product_id',
+            path: 'user_id',
+            select: 'name full_name first_name last_name mobile phone email'
           })
           .lean();
 
@@ -731,8 +738,11 @@ const getAllQuotesForAdmin = {
 
       // No product filters, use handlePagination
       else {
-        // Use handlePagination directly without overriding res.json
-        await handlePagination(GetQuote, req, res, query, { createdAt: -1 }, 'product_id');
+        // Use handlePagination directly with product_id and user_id populated
+        await handlePagination(GetQuote, req, res, query, { createdAt: -1 }, [
+          { path: 'product_id' },
+          { path: 'user_id', select: 'name full_name first_name last_name mobile phone email' }
+        ]);
       }
 
     } catch (error) {
@@ -755,7 +765,7 @@ const getQuoteById = {
       // Use populate to get all product details and user details
       const quote = await GetQuote.findById(_id)
         .populate('product_id')
-        .populate('user_id', 'name email phone avatar')
+        .populate('user_id', 'name full_name first_name last_name email mobile phone avatar')
         .lean();
 
       if (!quote) {
@@ -833,6 +843,8 @@ const updateQuote = {
       end_date: Joi.date().optional(),
       start_time: Joi.string().allow('').optional(),
       end_time: Joi.string().allow('').optional(),
+      deposit_amount: Joi.number().optional(),
+      deposit_status: Joi.string().valid('pending', 'paid', 'refunded', 'returned', 'not_applicable').optional(),
     }),
   },
   handler: async (req, res) => {
@@ -982,16 +994,18 @@ const statusDropdown = {
 const changeStatus = {
   validation: {
     body: Joi.object().keys({
-      quote_id: Joi.string().required(),
+      quote_id: Joi.string().optional(),
+      id: Joi.string().optional(),
       status: Joi.string().required(), // status id or name
-    }),
+    }).or('quote_id', 'id'),
   },
   handler: async (req, res) => {
     try {
-      const { quote_id, status } = req.body;
+      const quote_id = req.body.quote_id || req.body.id;
+      const { status } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(quote_id)) {
-        return res.status(httpStatus.BAD_REQUEST).json({ status: 400, message: 'Invalid quote id' });
+        return res.status(httpStatus.BAD_REQUEST).json({ status: 400, success: false, message: 'Invalid quote id' });
       }
 
       // Resolve provided status to internal enum
@@ -1003,14 +1017,15 @@ const changeStatus = {
       const s = (statusName || '').toLowerCase();
       let internal = 'pending';
       if (s.includes('active')) internal = 'active';
-      else if (s.includes('approve')) internal = 'approval';
+      else if (s.includes('approve') || s.includes('approval')) internal = 'approval';
       else if (s.includes('reject')) internal = 'reject';
       else if (s.includes('complete')) internal = 'complete';
       else if (s.includes('deliver')) internal = 'delivery';
+      else internal = s;
 
       const existingQuote = await GetQuote.findById(quote_id).lean();
       if (!existingQuote) {
-        return res.status(httpStatus.NOT_FOUND).json({ status: 404, message: 'Quote not found' });
+        return res.status(httpStatus.NOT_FOUND).json({ status: 404, success: false, message: 'Quote not found' });
       }
 
       // Validation: Prevent delivery status if payment is not paid
@@ -1716,6 +1731,55 @@ const getUserDashboardData = {
   }
 };
 
+const updateDepositStatus = {
+  validation: {
+    body: Joi.object().keys({
+      quote_id: Joi.string().optional(),
+      id: Joi.string().optional(),
+      deposit_status: Joi.string().required(),
+      deposit_amount: Joi.number().optional(),
+    }).or('quote_id', 'id'),
+  },
+  handler: async (req, res) => {
+    try {
+      const quote_id = req.body.quote_id || req.body.id;
+      const { deposit_status, deposit_amount } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(quote_id)) {
+        return res.status(httpStatus.BAD_REQUEST).json({ success: false, status: 400, message: 'Invalid quote id' });
+      }
+
+      const updateData = { deposit_status: String(deposit_status || '').toLowerCase() };
+      if (deposit_amount !== undefined) {
+        updateData.deposit_amount = Number(deposit_amount);
+      }
+
+      const updatedQuote = await GetQuote.findByIdAndUpdate(
+        quote_id,
+        updateData,
+        { new: true }
+      ).populate('product_id').populate('user_id');
+
+      if (!updatedQuote) {
+        return res.status(httpStatus.NOT_FOUND).json({ success: false, status: 404, message: 'Quote not found' });
+      }
+
+      return res.status(httpStatus.OK).json({
+        success: true,
+        status: 200,
+        message: 'Deposit status updated successfully',
+        data: updatedQuote,
+      });
+    } catch (error) {
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        status: 500,
+        message: error.message,
+      });
+    }
+  },
+};
+
 module.exports = {
   createGetQuote,
   getAllQuotes,
@@ -1724,6 +1788,7 @@ module.exports = {
   deleteQuote,
   statusDropdown,
   changeStatus,
+  updateDepositStatus,
   getAllQuotesForAdmin,
   createQuoteOrder,
   verifyQuotePayment,

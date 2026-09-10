@@ -116,8 +116,8 @@ const listCart = catchAsync(async (req, res) => {
   const totalSubtotal = mapped.reduce((sum, item) => sum + parseFloat(item.sub_total), 0);
   const totalGst = mapped.reduce((sum, item) => sum + parseFloat(item.gst_amount), 0);
   const totalFinalAmount = mapped.reduce((sum, item) => sum + parseFloat(item.final_amount), 0);
-  const deliveryCharges = 0; // Can be dynamic based on address
-  const installationCharges = 0; // Can be dynamic
+  const deliveryCharges = 0;
+  const installationCharges = 0; 
   const grandTotal = totalFinalAmount + deliveryCharges + installationCharges;
 
   res.status(httpStatus.OK).send({

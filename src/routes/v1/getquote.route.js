@@ -56,10 +56,18 @@ router.post(
 
 router.post(
   '/change-status',
-  auth(),
+  auth(true),
   upload.none(),
   validate(getQuoteController.changeStatus.validation),
   catchAsync(getQuoteController.changeStatus.handler)
+);
+
+router.post(
+  '/update-deposit-status',
+  auth(true),
+  upload.none(),
+  validate(getQuoteController.updateDepositStatus.validation),
+  catchAsync(getQuoteController.updateDepositStatus.handler)
 );
 
 router.delete(
