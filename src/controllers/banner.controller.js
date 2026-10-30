@@ -9,7 +9,7 @@ const { uploadToExternalService, updateFileOnExternalService, deleteFileFromExte
 const createBanner = {
     validation: {
         body: Joi.object().keys({
-            title: Joi.string().trim().required(),
+            title: Joi.string().trim().allow('', null),
             subtitle: Joi.string().trim().allow(''),
             description: Joi.string().trim().allow(''),
             color: Joi.string().trim().allow(''),
@@ -90,7 +90,7 @@ const getBannerById = {
 const updateBanner = {
     validation: {
         body: Joi.object().keys({
-            title: Joi.string().trim(),
+            title: Joi.string().trim().allow('', null),
             subtitle: Joi.string().trim().allow(''),
             description: Joi.string().trim().allow(''),
             color: Joi.string().trim().allow(''),

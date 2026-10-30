@@ -5,7 +5,6 @@ const bannerSchema = mongoose.Schema(
   {
     title: {
       type: String,
-      required: true,
     },
     subtitle: {
       type: String,
@@ -19,7 +18,6 @@ const bannerSchema = mongoose.Schema(
     },
     color: {
       type: String,
-      default: 'bg-blue-900',
     },
     link: {
       type: String,
